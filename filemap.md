@@ -16,6 +16,7 @@
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files)
 - `server.test.js` — API access rules (Host, Origin, extension privileges), UTF-8 bodies and the Start with Windows shortcut, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
 - `ui.test.js` — batch links and the clipboard link check, by running `ui.html`'s helpers script in Node
+- `assets/logo.svg` — app logo source (teal download arrow); `logo.png` (512 px) and `logo.ico` (16–256 px) are rendered from it
 - `start.cmd` — Windows launcher (server + app window in Brave/Chrome/Edge, else the default browser)
 - `package.json` — `start` and `test` scripts; `"type": "module"`
 - `state.json` — runtime state and settings (gitignored, created on first run)
