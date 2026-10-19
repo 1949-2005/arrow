@@ -24,10 +24,15 @@ globalThis.chrome = {
     },
   },
   action: { setBadgeText: rec('setBadgeText', ({ tabId, text }) => { badges[tabId] = text; }) },
-  tabs: { onUpdated: event('tabs.onUpdated'), onRemoved: event('tabs.onRemoved') },
+  tabs: {
+    onUpdated: event('tabs.onUpdated'), onRemoved: event('tabs.onRemoved'),
+    query: rec('tabs.query', () => [{ id: 9, url: tabUrl, title: 'Tab' }]), create: rec('tabs.create'),
+  },
   webRequest: { onHeadersReceived: event('webRequest.onHeadersReceived') },
   cookies: { getAll: rec('cookies.getAll', () => [{ name: 'a', value: '1' }, { name: 'b', value: '2' }]) },
 };
+
+let tabUrl = 'https://x.com/';
 
 // Fake fetch: `app` is 'up', 'down' (connection refused) or 'error' (/api/add answers 500).
 let app = 'up';
@@ -40,6 +45,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 await import('./extension/background.js');
+const { isYouTubeVideo, send } = await import('./extension/common.js');
 
 function reset(mode = 'up') {
   calls.length = requests.length = 0;
@@ -199,4 +205,95 @@ test('extension files are syntactically valid and the manifest points at real fi
     assert.ok(fs.existsSync(new URL('./extension/' + f, import.meta.url)), f);
   }
   assert.match(fs.readFileSync(new URL('./extension/popup.html', import.meta.url), 'utf8'), /<script type="module" src="popup.js">/);
+});
+
+test('isYouTubeVideo accepts single-video URLs only, on the exact YouTube hosts', () => {
+  for (const u of [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtube.com/watch?v=dQw4w9WgXcQ&list=PL1&t=42',
+    'https://m.youtube.com/watch?v=a_b-c_d-e_f',
+    'https://music.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+    'https://www.youtube.com/live/dQw4w9WgXcQ?si=x',
+    'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    'https://youtu.be/dQw4w9WgXcQ?t=10',
+  ]) assert.ok(isYouTubeVideo(u), u);
+  for (const u of [
+    'https://www.youtube.com/@channel',
+    'https://www.youtube.com/channel/UC1234567890',
+    'https://www.youtube.com/playlist?list=PL123',
+    'https://www.youtube.com/',
+    'https://www.youtube.com/watch?v=short',
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ1',
+    'https://www.youtube.com/shorts/dQw4w9WgXcQ/extra',
+    'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
+    'https://evilyoutube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtu.be.evil.example/dQw4w9WgXcQ',
+    'https://vimeo.com/watch?v=dQw4w9WgXcQ',
+    'ftp://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'not a url', undefined,
+  ]) assert.ok(!isYouTubeVideo(u), String(u));
+});
+
+test('send() passes quality and keeps YouTube cookies in the browser', async () => {
+  reset();
+  assert.equal(await send({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', referrer: 'https://www.youtube.com/', quality: '720' }), true);
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: '720', headers: { referer: 'https://www.youtube.com/' } });
+  assert.equal(called('cookies.getAll').length, 0);
+
+  reset();
+  await send({ url: 'https://youtu.be/dQw4w9WgXcQ' });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://youtu.be/dQw4w9WgXcQ', headers: {} });
+  assert.equal(called('cookies.getAll').length, 0);
+
+  reset();
+  await send({ url: 'https://youtube.com.evil.example/f.zip' });
+  assert.equal(requests.at(-1).body.headers.cookie, 'a=1; b=2');
+});
+
+test('context menu on a YouTube link sends no cookies', async () => {
+  reset();
+  listeners['contextMenus.onClicked']({ menuItemId: 'fastdl', linkUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }, { url: 'https://www.youtube.com/' });
+  await until(() => requests.some(r => r.url.endsWith('/api/add')));
+  assert.deepEqual(requests.at(-1).body.headers, { referer: 'https://www.youtube.com/' });
+  assert.equal(called('cookies.getAll').length, 0);
+});
+
+// Minimal DOM: only what popup.js touches. A fresh module URL runs popup.js again for each popup.
+let popups = 0;
+async function openPopup(url) {
+  const el = () => ({ textContent: '', className: '', value: '', children: [], append(...c) { this.children.push(...c); } });
+  const els = {};
+  globalThis.document = { querySelector: s => (els[s] ??= el()), createElement: el };
+  tabUrl = url;
+  await import('./extension/popup.js?' + ++popups);
+  return els;
+}
+
+test('popup shows the YouTube section only on video pages', async () => {
+  reset();
+  assert.equal((await openPopup('https://www.youtube.com/watch?v=dQw4w9WgXcQ'))['#yt'].hidden, false);
+  assert.equal((await openPopup('https://www.youtube.com/@channel'))['#yt'].hidden, true);
+  assert.equal((await openPopup('https://x.com/'))['#yt'].hidden, true);
+});
+
+test('popup YouTube button sends url + quality, restores and saves the quality', async () => {
+  reset();
+  let els = await openPopup('https://www.youtube.com/shorts/dQw4w9WgXcQ');
+  assert.equal(els['#quality'].value, 'best');
+  els['#quality'].value = '480';
+  els['#quality'].onchange({ target: els['#quality'] });
+  assert.equal(local.quality, '480');
+  await els['#ytdl'].onclick();
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', quality: '480', headers: {} });
+  assert.equal(els['#ytdl'].textContent, 'Sent ✓');
+  assert.equal(els['#ytdl'].disabled, true);
+
+  els = await openPopup('https://youtu.be/dQw4w9WgXcQ');
+  assert.equal(els['#quality'].value, '480');
+
+  app = 'down';
+  await els['#ytdl'].onclick();
+  assert.equal(els['#ytdl'].textContent, 'Failed. Is FastDL running?');
+  assert.equal(els['#ytdl'].disabled, false);
 });
