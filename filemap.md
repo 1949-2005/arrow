@@ -28,5 +28,6 @@
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `installed.json` — made by `install.js` (gitignored)
 - `README.md` — user guide: install, start, quit, uninstall, name and icon, extension install, features, settings, limits, privacy
+- `docs/agents/` — settings for the Matt Pocock engineering skills: issue tracker (local `.scratch/`), triage labels, domain-doc rules
 - `docs/SPEC.md` — behaviour, data model, API, security model
 - `docs/PLAN.md` — task list and status

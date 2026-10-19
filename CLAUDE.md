@@ -22,3 +22,17 @@ IDM-style download manager: Node.js >= 20.3 (ESM), zero npm dependencies, local 
 - Child processes on Windows: console tools get `windowsHide: true` (the exe has no console to share), and anything that must outlive the app (the browser) gets `detached: true`; everything else ends with the app.
 
 Docs: `docs/SPEC.md` (behaviour and decisions), `docs/PLAN.md` (tasks), `filemap.md` (where things live).
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown files under `.scratch/<feature>/` (the repo has no remote). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root, created when first needed. See `docs/agents/domain.md`.
