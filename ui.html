@@ -128,6 +128,7 @@ function actions(cell, d) {
     const url = prompt('New link for the same file (when the old one expired):', d.url);
     if (url) act('url', { url });
   }));
+  if (d.status === 'done') list.push(button('Open', () => act('open')));
   if (d.file) list.push(button('Folder', () => act('folder')));
   list.push(button('Remove', () => {
     if (!confirm(`Remove "${shortName(d)}" from the list?`)) return;

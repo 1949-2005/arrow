@@ -7,7 +7,7 @@ import { Manager } from './engine.js';
 
 const PORT = Number(process.env.FASTDL_PORT) || 9614;
 const here = path.dirname(fileURLToPath(import.meta.url));
-const mgr = new Manager(path.join(here, 'state.json'));
+const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
 await mgr.load();
 const page = readFileSync(path.join(here, 'ui.html'));
 
@@ -16,20 +16,31 @@ function send(res, code, body, type = 'application/json') {
   res.end(type === 'application/json' ? JSON.stringify(body) : body);
 }
 
+// Always quoted ourselves: Node leaves space-free paths bare and explorer splits them at commas.
+// Windows names can't contain '"', and there is no shell, so nothing can break out.
+function explorer(arg) {
+  spawn('explorer.exe', [arg], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).on('error', () => {}).unref();
+}
+
 async function readJson(req) {
-  let s = '';
-  for await (const c of req) {
-    s += c;
-    if (s.length > 1e6) throw new Error('request too large');
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) { // Buffers, decoded once: a chunk can end mid-character
+    if ((size += c.length) > 1e6) throw new Error('request too large');
+    chunks.push(c);
   }
-  return JSON.parse(s || '{}');
+  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
 const server = http.createServer(async (req, res) => {
   // Only our own page and browser extensions may drive the app: blocks other websites and DNS rebinding.
   const { host, origin } = req.headers;
   if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: 'bad host' });
-  if (origin && origin !== `http://${host}` && !/^(chrome|moz)-extension:\/\//.test(origin)) return send(res, 403, { error: 'bad origin' });
+  const extension = /^(chrome|moz)-extension:\/\//.test(origin ?? '');
+  if (origin && origin !== `http://${host}` && !extension) return send(res, 403, { error: 'bad origin' });
+  // Any installed extension gets here, so it may only queue downloads: settings could aim the folder at Startup, "open" runs files.
+  const route = `${req.method} ${req.url}`;
+  if (extension && route !== 'GET /api/ping' && route !== 'POST /api/add') return send(res, 403, { error: 'not allowed from extensions' });
   try {
     if (req.method === 'GET' && req.url === '/') return send(res, 200, page, 'text/html; charset=utf-8');
     if (req.method === 'GET' && req.url === '/api/ping') return send(res, 200, { app: 'fastdl' });
@@ -41,8 +52,13 @@ const server = http.createServer(async (req, res) => {
     if (req.url === '/api/action' && body.op === 'folder') {
       const d = mgr.list.find(x => x.id === body.id);
       if (!d?.file) throw new Error('file not created yet');
-      const args = d.status === 'done' ? ['/select,', d.file] : [path.dirname(d.file)];
-      spawn('explorer.exe', args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+      explorer(d.status === 'done' ? `/select,"${d.file}"` : `"${path.dirname(d.file)}"`);
+      return send(res, 200, { ok: true });
+    }
+    if (req.url === '/api/action' && body.op === 'open') {
+      const d = mgr.list.find(x => x.id === body.id);
+      if (d?.status !== 'done') throw new Error('only finished downloads can be opened');
+      explorer(`"${d.file}"`);
       return send(res, 200, { ok: true });
     }
     if (req.url === '/api/action') { await mgr.act(body.id, body.op, body.url); return send(res, 200, { ok: true }); }

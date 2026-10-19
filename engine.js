@@ -39,6 +39,16 @@ export function nameFromUrl(u) {
   try { return decodeURIComponent(path.posix.basename(new URL(u).pathname)); } catch { return ''; }
 }
 
+// Mark-of-the-Web, as browsers write it, so SmartScreen and Office Protected View still check the file.
+export async function markOfTheWeb(d) {
+  if (process.platform !== 'win32') return;
+  const u = new URL(d.url);
+  u.username = u.password = '';
+  const referer = d.headers.referer?.replace(/[\r\n]/g, '');
+  const lines = ['[ZoneTransfer]', 'ZoneId=3', referer && `ReferrerUrl=${referer}`, `HostUrl=${u.href}`];
+  await fs.writeFile(d.file + ':Zone.Identifier', lines.filter(Boolean).join('\r\n') + '\r\n').catch(() => {}); // FAT/exFAT have no streams
+}
+
 // Global speed limit shared by every connection. Callers go into debt and sleep it off,
 // so chunks bigger than one second's budget still work.
 class Limiter {
@@ -227,15 +237,21 @@ export class Manager {
     let first = null;
     if (!d.segments || !d.resumable || !existsSync(d.tmp)) {
       // First request doubles as the probe and becomes connection #1, like IDM.
-      let res;
+      let res, range = 'bytes=0-';
       for (let t = 1; ; t++) {
+        let wait = 1000 * t;
         try {
-          res = await this.get(d.url, d, signal, 'bytes=0-');
-          if (res.status < 500) break;
+          res = await this.get(d.url, d, signal, range);
+          // zero-byte files can't satisfy any range: ask again without one
+          if (res.status === 416 && range) { res.body?.cancel().catch(() => {}); range = null; continue; }
+          if (res.status < 500 && res.status !== 429) break;
+          res.body?.cancel().catch(() => {});
+          const after = res.headers.get('retry-after');
+          if (/^\d+$/.test(after)) wait = Math.min(Number(after), 30) * 1000;
           throw new Error(`HTTP ${res.status}`);
         } catch (e) {
           if (signal.aborted || t >= 4) throw e;
-          await sleep(1000 * t);
+          await sleep(wait);
         }
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -246,7 +262,7 @@ export class Manager {
       }
       const total = /\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '')?.[1];
       const length = Number(res.headers.get('content-length')) || null;
-      d.resumable = (res.status === 206 && total != null) || (res.status === 200 && /bytes/i.test(res.headers.get('accept-ranges') ?? '') && !!length);
+      d.resumable = !!range && ((res.status === 206 && total != null) || (res.status === 200 && /bytes/i.test(res.headers.get('accept-ranges') ?? '') && !!length));
       d.size = total != null ? Number(total) : length;
       this.assignName(d, nameFromDisposition(res.headers.get('content-disposition') ?? '') || nameFromUrl(res.finalUrl));
       d.segments = [{ start: 0, end: d.size, pos: 0 }];
@@ -299,6 +315,8 @@ export class Manager {
     if (signal.aborted) return;
     if (d.segments.some(s => s.end == null || s.pos < s.end)) throw new Error('download incomplete');
     await fs.rename(d.tmp, d.file);
+    delete d.segments; // finished: keeps state.json from growing with history
+    await markOfTheWeb(d);
   }
 
   async worker(d, s, ctl, fh, res) {
@@ -390,7 +408,7 @@ export class Manager {
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
           resumable: d.resumable, kind: d.kind, hls: d.hls,
-          got: d.kind === 'hls' ? d.hls?.bytes ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
+          got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,
           segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos]),

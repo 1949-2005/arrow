@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Multi-connection download manager with resume, queue, scheduler, speed limit and a browser extension.",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=20.3" },
   "scripts": {
     "start": "node server.js",
     "test": "node --test"

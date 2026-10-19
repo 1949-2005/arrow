@@ -25,15 +25,16 @@ const SEGMENT = /\.(ts|m4s|aac)(\?|$)/i;
 let chain = Promise.resolve();
 
 chrome.webRequest.onHeadersReceived.addListener(info => {
-  if (info.tabId < 0) return;
+  // YouTube's split audio/video pieces and manifests are useless on their own
+  if (info.tabId < 0 || /googlevideo\.com/.test(info.url)) return;
   const h = {};
   for (const x of info.responseHeaders ?? []) h[x.name.toLowerCase()] = x.value;
   const type = (h['content-type'] ?? '').split(';')[0].trim().toLowerCase();
   const size = Number(h['content-range']?.split('/')[1] ?? h['content-length']) || 0;
   const hls = /mpegurl/.test(type) || /\.m3u8(\?|$)/i.test(info.url);
-  // skip stream fragments and YouTube's split audio/video pieces, which are useless on their own
+  // skip stream fragments, which are useless on their own
   const media = /^(video|audio)\//.test(type) && type !== 'video/mp2t' && !SEGMENT.test(info.url)
-    && !/googlevideo\.com/.test(info.url) && (size === 0 || size > 512 * 1024);
+    && (size === 0 || size > 512 * 1024);
   if (hls || media) remember(info.tabId, { url: info.url, type: hls ? 'HLS stream' : type, size });
 }, { urls: ['<all_urls>'], types: ['media', 'xmlhttprequest', 'other'] }, ['responseHeaders']);
 
@@ -48,9 +49,12 @@ function remember(tabId, item) {
   }).catch(() => {});
 }
 
+// queued on the same chain, so a remember() still in flight cannot re-add the old page's media
 function forget(tabId) {
-  chrome.storage.session.remove('tab' + tabId);
-  chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+  chain = chain.then(async () => {
+    await chrome.storage.session.remove('tab' + tabId);
+    await chrome.action.setBadgeText({ tabId, text: '' });
+  }).catch(() => {});
 }
 
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.url) forget(tabId); });

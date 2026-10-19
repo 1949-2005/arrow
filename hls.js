@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { markOfTheWeb } from './engine.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const attrs = s => Object.fromEntries([...s.matchAll(/([A-Z0-9-]+)=("[^"]*"|[^,]*)/g)].map(m => [m[1], m[2].replace(/^"|"$/g, '')]));
@@ -31,6 +32,7 @@ export async function parsePlaylist(mgr, d, signal) {
   const segs = [];
   for (let line of body.split(/\r?\n/)) {
     line = line.trim();
+    if (line.startsWith('#EXT-X-BYTERANGE')) throw new Error('byte-range HLS playlists are not supported');
     if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) seq = Number(line.slice(22)) || 0;
     else if (line.startsWith('#EXT-X-KEY:')) {
       const a = attrs(line.slice(11));
@@ -54,7 +56,14 @@ export async function downloadHls(d, ctl, mgr) {
   const get = async url => {
     const res = await mgr.get(url, d, signal);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
+    const chunks = [];
+    res.watch(); // chunk by chunk so the stall watchdog covers the body too
+    try {
+      for await (const c of res.body ?? []) { res.unwatch(); chunks.push(c); res.watch(); }
+    } finally {
+      res.unwatch();
+    }
+    return Buffer.concat(chunks);
   };
   const keys = new Map();
   const fetchSeg = async s => {
@@ -109,4 +118,5 @@ export async function downloadHls(d, ctl, mgr) {
   if (signal.aborted) return;
   d.size = d.hls.bytes;
   await fs.rename(d.tmp, d.file);
+  await markOfTheWeb(d);
 }

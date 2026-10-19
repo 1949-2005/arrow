@@ -23,10 +23,13 @@ function encrypt(buf, seq) {
 }
 
 let open = 0; // live connections to /limited.bin
-let stalledOnce = false;
+let stalledOnce = false, busyOnce = false, segStalledOnce = false;
 
 const server = http.createServer(async (req, res) => {
-  const u = req.url;
+  let u = req.url;
+  if (u === '/busy.bin' && !busyOnce) { busyOnce = true; res.writeHead(429, { 'retry-after': '0' }); return res.end(); }
+  if (u === '/busy.bin') u = '/file.bin';
+  if (u === '/empty.bin') { res.writeHead(req.headers.range ? 416 : 200, { 'content-length': 0 }); return res.end(); }
   if (u === '/limited.bin' && open >= 2) { res.writeHead(503); return res.end(); }
   if (u === '/limited.bin') { open++; res.on('close', () => open--); }
   if (u === '/file.bin' || u === '/slow.bin' || u === '/limited.bin' || u === '/stall.bin') {
@@ -50,6 +53,15 @@ const server = http.createServer(async (req, res) => {
       + parts.map((_, i) => `#EXTINF:4,\nseg${i}.ts\n`).join('') + '#EXT-X-ENDLIST\n');
   }
   if (u === '/key.bin') return res.end(key);
+  if (u === '/byterange.m3u8') return res.end('#EXTM3U\n#EXTINF:4,\n#EXT-X-BYTERANGE:1000@0\nall.ts\n#EXT-X-ENDLIST\n');
+  if (u === '/hstall/index.m3u8') return res.end('#EXTM3U\n' + parts.map((_, i) => `#EXTINF:4,\nseg${i}.ts\n`).join('') + '#EXT-X-ENDLIST\n');
+  const plain = /^\/hstall\/seg(\d)\.ts$/.exec(u);
+  if (plain) {
+    const p = parts[plain[1]];
+    res.writeHead(200, { 'content-length': p.length });
+    if (plain[1] === '0' && !segStalledOnce) { segStalledOnce = true; return res.write(p.subarray(0, 50000)); } // then hangs
+    return res.end(p);
+  }
   const seg = /^\/hi\/seg(\d)\.ts$/.exec(u);
   if (seg) return res.end(encrypt(parts[seg[1]], 7 + Number(seg[1])));
   res.writeHead(404).end();
@@ -77,16 +89,47 @@ async function finished(d) {
 const got = d => d.segments?.reduce((a, s) => a + s.pos - s.start, 0) ?? 0;
 
 test('splits into several connections and the file matches', async () => {
+  ranges.length = 0;
   const d = mgr.add({ url: base + '/file.bin' });
   assert.equal(sha(await finished(d)), sha(data));
-  assert.ok(d.segments.length > 1, 'should use several connections');
+  assert.ok(new Set(ranges).size > 1, 'should use several connections');
   assert.equal(d.name, 'file.bin');
+});
+
+test('zero-byte file whose server answers 416 to ranges', async () => {
+  const d = mgr.add({ url: base + '/empty.bin' });
+  assert.equal((await finished(d)).length, 0);
+  assert.equal(d.resumable, false);
+});
+
+test('429 on the probe is retried after Retry-After', async () => {
+  const d = mgr.add({ url: base + '/busy.bin' });
+  assert.equal(sha(await finished(d)), sha(data));
+  assert.ok(busyOnce);
 });
 
 test('a second download with the same name gets a numbered copy', async () => {
   const d = mgr.add({ url: base + '/file.bin' });
   await finished(d);
   assert.equal(d.name, 'file (1).bin');
+});
+
+test('a finished download drops its segments and reports got = size', async () => {
+  const d = mgr.add({ url: base + '/file.bin' });
+  await finished(d);
+  assert.equal(d.segments, undefined);
+  const v = mgr.view().downloads.find(x => x.id === d.id);
+  assert.equal(v.got, data.length);
+  assert.equal(v.got, v.size);
+});
+
+test('finished files get the Mark-of-the-Web', { skip: process.platform !== 'win32' }, async () => {
+  const d = mgr.add({ url: base + '/file.bin', headers: { referer: 'https://example.com/page' } });
+  await finished(d);
+  const zone = await fs.readFile(d.file + ':Zone.Identifier', 'utf8');
+  assert.match(zone, /ZoneId=3\r\n/);
+  assert.match(zone, /ReferrerUrl=https:\/\/example\.com\/page\r\n/);
+  assert.ok(zone.includes(`HostUrl=${base}/file.bin`), zone);
 });
 
 test('pause, restart the app, resume: continues where it stopped', async () => {
@@ -133,6 +176,24 @@ test('HLS: picks best quality, decrypts AES-128, joins segments, files it under 
   assert.equal(sha(await finished(d)), sha(Buffer.concat(parts)));
   assert.equal(d.name, 'My Video.ts');
   assert.equal(path.basename(path.dirname(d.file)), 'Video');
+});
+
+test('HLS: byte-range playlists are refused', async () => {
+  const d = mgr.add({ url: base + '/byterange.m3u8' });
+  await until(() => ['done', 'error'].includes(d.status));
+  assert.equal(d.status, 'error');
+  assert.equal(d.error, 'byte-range HLS playlists are not supported');
+});
+
+test('HLS: a segment that goes silent mid-body is cut off and retried', async () => {
+  mgr.stallMs = 300;
+  try {
+    const d = mgr.add({ url: base + '/hstall/index.m3u8' });
+    assert.equal(sha(await finished(d)), sha(Buffer.concat(parts)));
+    assert.ok(segStalledOnce);
+  } finally {
+    mgr.stallMs = 30000;
+  }
 });
 
 test('browser cookies are not passed on to another host after a redirect', async () => {

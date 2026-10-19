@@ -10,6 +10,8 @@
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge
   - `popup.html`, `popup.js` — media found on the current tab, takeover toggle
 - `engine.test.js` — engine tests against a local test server
+- `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks
+- `server.test.js` — API access rules (Host, Origin, extension privileges) and UTF-8 bodies, against `server.js` spawned on a free port with a temp `FASTDL_STATE`
 - `start.cmd` — Windows launcher (server + Edge app window)
 - `package.json` — `start` and `test` scripts; `"type": "module"`
 - `state.json` — runtime state and settings (gitignored, created on first run)
