@@ -3,7 +3,7 @@
 Personal download manager modelled on how Internet Download Manager works (from public knowledge; no reverse engineering, no license bypass).
 
 ## Non-goals
-YouTube/DASH audio+video merging, DRM, torrents, FTP, site grabber, tray icon, proxy settings, clipboard monitoring.
+DASH audio+video merging for sites other than YouTube, DRM, torrents, FTP, site grabber, tray icon, proxy settings, clipboard monitoring.
 
 ## Download engine (`engine.js`)
 - **Probe = first connection.** `GET` with `Range: bytes=0-`. 206 + `Content-Range` total, or 200 + `Accept-Ranges: bytes` + length → resumable. The probe's body keeps streaming as segment #1. 416 → asked again without `Range` and downloaded as not resumable (zero-byte files). 5xx and 429 are retried up to 4 times; a numeric `Retry-After` (capped at 30 s) replaces the default backoff.
@@ -19,12 +19,21 @@ YouTube/DASH audio+video merging, DRM, torrents, FTP, site grabber, tray icon, p
 ## HLS (`hls.js`)
 Master playlist → highest `BANDWIDTH`. AES-128 with explicit IV or media-sequence IV; other methods are refused as DRM. `#EXT-X-BYTERANGE` playlists are refused. Segment bodies are read chunk by chunk under the stall watchdog. `#EXT-X-MAP` → `.mp4` output, else `.ts`. Segments fetched `connections` at a time, written in order; resume continues at the first unwritten segment.
 
+## Video sites (`ytdlp.js`)
+- **URLs.** `youtube.com`, `www.`/`m.`/`music.youtube.com` with `/watch?v=`, `/shorts/`, `/live/`, `/embed/`, and `youtu.be/<id>`. The 11-char ID is required; channels and playlists are refused. Stored as `https://www.youtube.com/watch?v=<id>`, kind `video`, no headers or cookies.
+- **Quality → args.** `best|1080|720|480|mp3` (default `best`; anything else is refused in `add()`). Video: `-f bv*+ba/b -S res[:N],vcodec:h264,ext:mp4:m4a --merge-output-format mp4` (H.264 preferred at equal resolution). MP3: `-f ba/b -x --audio-format mp3 --audio-quality 0`. Always `--ignore-config` (a user config could add cookies or change output names), `--no-playlist`, `--match-filter !is_live`; `--limit-rate` from `speedLimitKB`, fixed per run.
+- **Files.** yt-dlp writes into `<dir>\.fastdl\<id>` as `media.<ext>`. On success the file is moved to its final name (`assignName()` with the title, unique ` (n)` names, categories → Video/Music), the temp folder is removed (and `.fastdl` once empty), and Mark-of-the-Web is set.
+- **Progress.** Parsed from yt-dlp's stdout/stderr lines: `FDLINFO` (format ids, expected size, title), `FDLP` (per-stream bytes; `streams` keeps `{got,size}` per format so the bar does not restart), `FDLPP` (post-processor), `FDLFILE` (final path). `phase`: `video`, `audio`, `merging` (Merger), `converting` (ExtractAudio).
+- **Pause/resume.** Pause kills the whole process tree (`taskkill /T /F` on Windows, process group elsewhere: yt-dlp.exe is a launcher and ffmpeg may run). Resume re-runs yt-dlp, which continues its `.part` files.
+- **Tools.** yt-dlp: `FASTDL_YTDLP`, PATH, `%LOCALAPPDATA%\Microsoft\WinGet\Links`, WinGet `Packages\yt-dlp.yt-dlp_*`. ffmpeg: `FASTDL_FFMPEG`, PATH, WinGet `Packages\yt-dlp.FFmpeg_*\ffmpeg-*\bin`. Missing tool → error with the `winget install` command.
+- **Errors.** First `ERROR:` line, non-zero exit or no file → error plus the hint `winget upgrade yt-dlp.yt-dlp`. Live streams → "Live streams are not supported". Cookies are never passed to yt-dlp.
+
 ## Data model
-Download: `id, url, name, title, headers{cookie,referer,user-agent}, cookieHost, kind(http|hls), status(queued|downloading|paused|done|error|scheduled|removed), file, tmp, size, resumable, segments[{start,end,pos}], hls{done,bytes,total}, error, added, finished`.
+Download: `id, url, name, title, headers{cookie,referer,user-agent}, cookieHost, kind(http|hls|video), status(queued|downloading|paused|done|error|scheduled|removed), file, tmp, size, resumable, segments[{start,end,pos}], hls{done,bytes,total}, error, added, finished`; video only: `quality, phase, got, streams{format_id:{got,size}}, tmpDir`.
 Settings: `dir, connections(1–32), maxActive(1–20), speedLimitKB(0 = off), scheduleAt("HH:MM" or ""), categories(bool)`.
 
 ## HTTP API (`server.js`, 127.0.0.1:9614)
-`GET /` (UI) · `GET /api/ping` · `GET /api/state` · `POST /api/add {url, name?, title?, headers?, scheduled?}` · `POST /api/settings {...}` · `POST /api/action {id, op: pause|resume|url|remove|removeFile|folder|open, url?}` (`open` runs a finished file with its default app)
+`GET /` (UI) · `GET /api/ping` · `GET /api/state` · `POST /api/add {url, name?, title?, headers?, scheduled?, quality?}` (`quality` only for YouTube links) · `POST /api/settings {...}` · `POST /api/action {id, op: pause|resume|url|remove|removeFile|folder|open, url?}` (`open` runs a finished file with its default app)
 
 ## Security model
 - Binds 127.0.0.1 only. `Host` must be `127.0.0.1:PORT` or `localhost:PORT` (DNS rebinding).
@@ -36,7 +45,7 @@ Settings: `dir, connections(1–32), maxActive(1–20), speedLimitKB(0 = off), s
 - File names can't leave the download folder (`sanitize()`).
 
 ## UI (`ui.html`)
-Single table: name, size, progress (one bar per connection), speed + connection count, time left, status, actions (Pause/Resume/Start now, Change link, Open, Folder, Remove). Settings dialog. Drop links on the window. Desktop notification on completion. Light/dark via `prefers-color-scheme`.
+Single table: name, size, progress (one bar per connection), speed + connection count, time left, status, actions (Pause/Resume/Start now, Change link, Open, Folder, Remove). Settings dialog. Drop links on the window. Desktop notification on completion. Light/dark via `prefers-color-scheme`. A quality picker appears next to the link box when it holds a YouTube link; video rows show the phase as status (Downloading video/audio, Merging, Converting to MP3).
 
 ## Extension (`extension/`)
-Takes over browser downloads when the app is running (toggle in popup), "Download with FastDL" context menu, media grabber (video/audio responses > 512 KB and HLS playlists per tab, badge count), sends cookies + referrer, never the browser UA.
+Takes over browser downloads when the app is running (toggle in popup), "Download with FastDL" context menu, media grabber (video/audio responses > 512 KB and HLS playlists per tab, badge count), sends cookies + referrer, never the browser UA. On a YouTube video page the popup shows a quality picker (remembered) and **Download this video**. YouTube cookies are never sent to the app.

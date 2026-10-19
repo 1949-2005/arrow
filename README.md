@@ -29,6 +29,28 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
   - Right-click a link or a video and choose "Download with FastDL".
   - Play a video, then click the extension icon. It shows the media it found (the number on the icon tells how many). Click Download.
 
+## YouTube videos
+
+- FastDL needs two free tools for this: yt-dlp and ffmpeg. Install them once, in a command window:
+  - `winget install yt-dlp.yt-dlp`
+  - `winget install yt-dlp.FFmpeg`
+  - If one is already installed, winget tells you so.
+- Three ways to start:
+  - In Brave, open a YouTube video page. Click the FastDL icon, choose the quality, and click **Download this video**.
+  - Paste the link in FastDL. A quality picker appears next to the box.
+  - Right-click a YouTube link and choose "Download with FastDL". This uses the best quality.
+- Qualities: Best quality, 1080p, 720p, 480p, MP3 (audio only).
+- Videos are saved as MP4 in the `Video` folder. MP3 files go to the `Music` folder.
+- FastDL prefers H.264 video. It plays everywhere. Very high resolutions (like 4K) may use VP9 or AV1. VLC plays them.
+- Pause and Resume work. One progress bar covers video and sound. "Merging" is the last step.
+- If YouTube downloads start to fail, run `winget upgrade yt-dlp.yt-dlp`.
+- Limits:
+  - One video per link. No playlists or channels.
+  - No live streams.
+  - No private, members-only or age-restricted videos. FastDL never sends your YouTube login.
+  - The speed limit applies to each video. A new limit takes effect when a video starts.
+- YouTube's terms only allow saving videos through YouTube's own app. Download your own videos, or videos you are allowed to save.
+
 ## Features
 
 - Several connections per file, with dynamic splitting like IDM.
@@ -45,6 +67,7 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - "Change link" for links that have expired.
 - Open and Folder buttons for finished files.
 - A desktop notification when a download finishes.
+- YouTube videos and MP3 audio, with a quality choice (needs yt-dlp and ffmpeg).
 - Browser cookies are passed along, so downloads that need a login work.
 
 ## Settings
@@ -60,7 +83,7 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 
 ## Limits
 
-- No YouTube, and no other sites that send audio and video separately (DASH).
+- No sites other than YouTube that send audio and video separately (DASH).
 - No DRM-protected video.
 - No torrents and no FTP.
 - No proxy settings.
@@ -73,6 +96,7 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - FastDL runs only on your computer (127.0.0.1). Other websites cannot control it.
 - The browser extension can only add downloads. It cannot change settings or open files.
 - Browser cookies are only sent to the site they belong to.
+- Your YouTube login cookies are never sent to FastDL or yt-dlp.
 - Finished files are marked as "downloaded from the internet", so Windows SmartScreen still checks programs before they run.
 - The download list and settings are saved in `state.json` next to the app. This file holds the links and login cookies of unfinished downloads. Do not share it.
 

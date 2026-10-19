@@ -4,6 +4,7 @@
 - Engine: segmentation, resume, retries, connection-limit tolerance, stall watchdog, speed limit, queue, scheduler, categories, state persistence (engine.test.js: 10 tests)
 - HLS with AES-128
 - Server + web UI
+- YouTube downloads (yt-dlp + ffmpeg)
 - MV3 extension, logic tested with fake browser APIs (not yet loaded in a real browser)
 
 ## Tasks

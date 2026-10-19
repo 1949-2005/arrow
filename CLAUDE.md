@@ -14,6 +14,7 @@ IDM-style download manager: Node.js >= 20.3 (ESM), zero npm dependencies, local 
 - Treat anything from servers or the extension (file names, headers, URLs, playlists) as untrusted: names go through `sanitize()`, headers through the allowlist in `add()`.
 - The User-Agent stays honest (`FastDL`). Never spoof a browser.
 - `state.json` is user data: write it atomically (tmp + rename), and never overwrite one that failed to parse.
+- yt-dlp and ffmpeg are external tools from winget. Tests never run the real yt-dlp: they use `fixtures/fake-ytdlp.mjs` through `mgr.ytdlp`.
 - New logic gets a test in `*.test.js`. Tests must not touch the network or the user's Downloads folder.
 - Update `filemap.md` when you add or move files.
 

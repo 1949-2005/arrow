@@ -2,6 +2,7 @@
 
 - `engine.js` — core: queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, `state.json` persistence, `view()` for the UI
 - `hls.js` — HLS (.m3u8): best-variant pick, AES-128 decryption, parallel segment fetch written in order
+- `ytdlp.js` — YouTube via yt-dlp + ffmpeg: URL check, quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
 - `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html`; Host/Origin checks live here
 - `ui.html` — the whole web UI (HTML + CSS + JS); polls `/api/state` every 700 ms
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
@@ -11,6 +12,8 @@
   - `popup.html`, `popup.js` — media found on the current tab, takeover toggle
 - `engine.test.js` — engine tests against a local test server
 - `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks
+- `ytdlp.test.js` — YouTube URLs, args, progress, pause/resume, errors, using the fake yt-dlp
+- `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files)
 - `server.test.js` — API access rules (Host, Origin, extension privileges) and UTF-8 bodies, against `server.js` spawned on a free port with a temp `FASTDL_STATE`
 - `start.cmd` — Windows launcher (server + app window in Brave/Chrome/Edge, else the default browser)
 - `package.json` — `start` and `test` scripts; `"type": "module"`
