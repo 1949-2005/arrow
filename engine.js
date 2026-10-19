@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { downloadHls } from './hls.js';
+import { downloadVideo, youtubeId, removeTmp, QUALITIES } from './ytdlp.js';
 
 const MIN_SPLIT = 512 * 1024; // a connection is only split off when each half keeps at least this much
 // Honest name on purpose: some servers drop clients that claim to be Chrome but don't look like it.
@@ -103,19 +104,22 @@ export class Manager {
     this.pump();
   }
 
-  add({ url, name, title, headers, scheduled }) {
+  add({ url, name, title, headers, scheduled, quality }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
+    const yt = youtubeId(u);
+    if (yt && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
     const d = {
       id: crypto.randomUUID(),
-      url: u.href,
+      url: yt ? `https://www.youtube.com/watch?v=${yt}` : u.href,
       name: name ? sanitize(name) : null,
       title: title ? sanitize(title) : null,
-      headers: Object.fromEntries(Object.entries(headers ?? {})
+      headers: yt ? {} : Object.fromEntries(Object.entries(headers ?? {}) // never cookies for yt-dlp
         .map(([k, v]) => [k.toLowerCase(), v])
         .filter(([k, v]) => HEADERS_ALLOWED.includes(k) && typeof v === 'string')),
       cookieHost: u.hostname,
-      kind: /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
+      kind: yt ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
+      ...(yt && { quality }),
       status: scheduled ? 'scheduled' : 'queued',
       added: Date.now(),
     };
@@ -136,6 +140,7 @@ export class Manager {
       if (['paused', 'error', 'scheduled'].includes(d.status)) d.status = 'queued';
     } else if (op === 'url') { // "refresh download address" for expired links
       if (ctl) throw new Error('pause the download first');
+      if (d.kind === 'video') throw new Error('YouTube downloads keep their link');
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
       d.url = u.href;
@@ -144,6 +149,7 @@ export class Manager {
       if (ctl) { d.status = 'removed'; ctl.ac.abort(); await ctl.done; }
       this.list.splice(this.list.indexOf(d), 1);
       if (d.tmp) await fs.rm(d.tmp, { force: true });
+      await removeTmp(d);
       if (op === 'removeFile' && wasDone) await fs.rm(d.file, { force: true });
     } else throw new Error('unknown action');
     this.dirty = true;
@@ -153,7 +159,7 @@ export class Manager {
   pump() {
     for (const d of this.list) {
       if (this.running.size >= this.settings.maxActive) break;
-      if (d.status === 'queued') this.start(d);
+      if (d.status === 'queued' && !this.running.has(d.id)) this.start(d); // a paused run may still be stopping
     }
   }
 
@@ -164,7 +170,7 @@ export class Manager {
     d.error = null;
     ctl.done = (async () => {
       try {
-        await (d.kind === 'hls' ? downloadHls(d, ctl, this) : this.runHttp(d, ctl));
+        await (d.kind === 'hls' ? downloadHls(d, ctl, this) : d.kind === 'video' ? downloadVideo(d, ctl, this) : this.runHttp(d, ctl));
         if (!ctl.ac.signal.aborted) {
           d.status = 'done';
           d.finished = Date.now();
@@ -411,8 +417,8 @@ export class Manager {
         const ctl = this.running.get(d.id);
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
-          resumable: d.resumable, kind: d.kind, hls: d.hls,
-          got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
+          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality,
+          got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,
           segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos]),
