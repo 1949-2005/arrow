@@ -1,7 +1,7 @@
 import { send, appAlive } from './common.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({ id: 'fastdl', title: 'Download with FastDL', contexts: ['link', 'video', 'audio', 'image'] });
+  chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {

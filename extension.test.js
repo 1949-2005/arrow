@@ -207,6 +207,15 @@ test('extension files are syntactically valid and the manifest points at real fi
   assert.match(fs.readFileSync(new URL('./extension/popup.html', import.meta.url), 'utf8'), /<script type="module" src="popup.js">/);
 });
 
+test('the extension shows the app name from brand.json', () => {
+  const read = f => fs.readFileSync(new URL(f, import.meta.url), 'utf8');
+  const { name } = JSON.parse(read('./brand.json'));
+  const m = JSON.parse(read('./extension/manifest.json'));
+  assert.deepEqual([m.name, m.action.default_title], [name, name]);
+  const files = ['popup.html', 'popup.js', 'background.js'].map(f => read('./extension/' + f)).join('\n');
+  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`]) assert.ok(files.includes(text), text);
+});
+
 test('isYouTubeVideo accepts single-video URLs only, on the exact YouTube hosts', () => {
   for (const u of [
     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -294,6 +303,6 @@ test('popup YouTube button sends url + quality, restores and saves the quality',
 
   app = 'down';
   await els['#ytdl'].onclick();
-  assert.equal(els['#ytdl'].textContent, 'Failed. Is FastDL running?');
+  assert.equal(els['#ytdl'].textContent, 'Failed. Is Arrow running?');
   assert.equal(els['#ytdl'].disabled, false);
 });

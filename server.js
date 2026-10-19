@@ -64,8 +64,8 @@ const server = http.createServer(async (req, res) => {
   if (extension && route !== 'GET /api/ping' && route !== 'POST /api/add') return send(res, 403, { error: 'not allowed from extensions' });
   try {
     if (req.method === 'GET' && req.url === '/') return send(res, 200, page, 'text/html; charset=utf-8');
-    if (req.method === 'GET' && req.url === '/favicon.ico') { // the logo, so the app window and its taskbar button show it
-      return readFile(path.join(here, brand.logo)).then(b => send(res, 200, b, 'image/png'), () => send(res, 404, { error: 'not found' }));
+    if (req.method === 'GET' && req.url === '/favicon.ico') { // the brand icon, so the app window and its taskbar button show it
+      return readFile(path.join(here, brand.icon)).then(b => send(res, 200, b, 'image/x-icon'), () => send(res, 404, { error: 'not found' }));
     }
     if (req.method === 'GET' && req.url === '/api/ping') return send(res, 200, { app: 'fastdl' });
     if (req.method === 'GET' && req.url === '/api/state') {

@@ -81,11 +81,11 @@ test('Start with Windows: the app page creates and removes a shortcut that start
   assert.ok(!existsSync(link));
 });
 
-test('the page and its icon carry the name and logo from brand.json', async () => {
+test('the page and its icon carry the name and icon from brand.json', async () => {
   assert.ok((await (await call('/')).text()).includes(`<title>${brand.name}</title>`));
   const icon = await call('/favicon.ico');
-  assert.equal(icon.headers.get('content-type'), 'image/png');
-  assert.deepEqual(Buffer.from(await icon.arrayBuffer()), readFileSync(path.join(app, brand.logo)));
+  assert.equal(icon.headers.get('content-type'), 'image/x-icon');
+  assert.deepEqual(Buffer.from(await icon.arrayBuffer()), readFileSync(path.join(app, brand.icon)));
 });
 
 test('tray: Pause all pauses running downloads; scheduled ones keep their time', async () => {

@@ -6,29 +6,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dib, icoFile, iconGroup, versionInfo, pe, resources, unsign, finish, install, uninstall } from './install.js';
+import { iconResources, versionInfo, pe, resources, unsign, finish, install, uninstall } from './install.js';
 
 const win = { skip: process.platform !== 'win32' };
 const repo = path.dirname(fileURLToPath(import.meta.url));
+const brandIcon = path.join(repo, JSON.parse(readFileSync(path.join(repo, 'brand.json'), 'utf8')).icon);
 
-test('icon images are 32-bit BMPs, bottom row first, with a mask for transparent pixels', () => {
-  const px = Buffer.from([1, 2, 3, 255, 0, 0, 0, 0, 5, 6, 7, 128, 9, 9, 9, 255]); // 2x2 BGRA; top row: opaque, transparent
-  const img = dib(px);
-  assert.deepEqual([img.readUInt32LE(0), img.readInt32LE(4), img.readInt32LE(8), img.readUInt16LE(14)], [40, 2, 4, 32]); // height counts the mask
-  assert.deepEqual(img.subarray(40, 56), Buffer.concat([px.subarray(8), px.subarray(0, 8)]));
-  assert.deepEqual(img.subarray(56), Buffer.from([0, 0, 0, 0, 0x40, 0, 0, 0])); // one 4-byte mask row each: only the top-right pixel
-});
-
-test('.ico file and icon group: one entry per size, 256 written as 0', () => {
-  const small = dib(Buffer.alloc(16 * 16 * 4)), big = dib(Buffer.alloc(256 * 256 * 4));
-  const ico = icoFile([small, big]);
-  assert.deepEqual([...ico.subarray(0, 6)], [0, 0, 1, 0, 2, 0]);
-  assert.deepEqual([ico[6], ico[22]], [16, 0]);
-  assert.deepEqual([ico.readUInt32LE(6 + 12), ico.readUInt32LE(22 + 12)], [38, 38 + small.length]); // images follow the directory
-  assert.deepEqual(ico.subarray(38 + small.length), big);
-  const group = iconGroup([small, big]);
-  assert.equal(group.length, 6 + 2 * 14);
-  assert.deepEqual([group.readUInt32LE(6 + 8), group.readUInt16LE(6 + 12), group.readUInt16LE(20 + 12)], [small.length, 1, 2]); // size, resource ids
+test('the brand .ico becomes one RT_ICON per image and an RT_GROUP_ICON pointing at them', () => {
+  const ico = readFileSync(brandIcon), n = ico.readUInt16LE(4);
+  const [group, ...icons] = iconResources(ico);
+  assert.deepEqual([group.type, group.name, group.data.length, icons.length], [14, 1, 6 + 14 * n, n]);
+  icons.forEach((icon, i) => {
+    const e = 6 + 16 * i, at = ico.readUInt32LE(e + 12);
+    assert.deepEqual(group.data.subarray(6 + 14 * i, 6 + 14 * i + 12), ico.subarray(e, e + 12)); // same size, colors, bits, length
+    assert.equal(group.data.readUInt16LE(6 + 14 * i + 12), icon.name);
+    assert.deepEqual([icon.type, icon.name, icon.data], [3, i + 1, ico.subarray(at, at + ico.readUInt32LE(e + 8))]);
+  });
+  assert.throws(() => iconResources(readFileSync(path.join(repo, 'assets', 'logo.png')), 'logo.png'), /logo\.png is not an \.ico file/);
 });
 
 test('version info holds the name and the version', () => {
@@ -51,14 +45,14 @@ test('exe edits on a copy of node.exe: signature dropped, embedded app on, no co
   assert.throws(() => finish(b), /cannot hold an app/);
 });
 
-test('install builds a working exe with the logo and shortcuts, after removing a renamed install; uninstall removes it all', win, async () => {
+test('install builds a working exe with the icon and shortcuts, after removing a renamed install; uninstall removes it all', win, async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-install-'));
   const dir = path.join(tmp, 'app'), where = { programs: path.join(tmp, 'programs'), desktop: path.join(tmp, 'desktop'), startup: path.join(tmp, 'startup') };
   const links = Object.values(where).map(d => path.join(d, 'TestDL.lnk'));
   try {
     for (const d of [dir, ...Object.values(where)]) await fs.mkdir(d);
-    await fs.copyFile(path.join(repo, JSON.parse(readFileSync(path.join(repo, 'brand.json'), 'utf8')).logo), path.join(dir, 'logo.png'));
-    await fs.writeFile(path.join(dir, 'brand.json'), JSON.stringify({ name: 'TestDL', logo: 'logo.png' }));
+    await fs.copyFile(brandIcon, path.join(dir, 'logo.ico'));
+    await fs.writeFile(path.join(dir, 'brand.json'), JSON.stringify({ name: 'TestDL', icon: 'logo.ico' }));
     // stands in for desktop.js and records how the exe called it
     await fs.writeFile(path.join(dir, 'desktop.js'), "import { writeFileSync } from 'node:fs';\nexport function start() { writeFileSync(new URL('./started.json', import.meta.url), JSON.stringify(process.argv.slice(2))); }\n");
     // an earlier install under another name, with Start with Windows on
@@ -67,7 +61,7 @@ test('install builds a working exe with the logo and shortcuts, after removing a
 
     await install(dir, where);
     const exe = path.join(dir, 'TestDL.exe');
-    assert.deepEqual((await fs.readdir(dir)).sort(), ['TestDL.exe', 'TestDL.ico', 'brand.json', 'desktop.js', 'installed.json', 'logo.png']);
+    assert.deepEqual((await fs.readdir(dir)).sort(), ['TestDL.exe', 'brand.json', 'desktop.js', 'installed.json', 'logo.ico']);
     for (const d of Object.values(where)) assert.deepEqual(await fs.readdir(d), ['TestDL.lnk']);
     const read = '[Console]::OutputEncoding = [Text.Encoding]::UTF8; $w = New-Object -ComObject WScript.Shell; $env:L -split "\\|" | % { $s = $w.CreateShortcut($_); "$($s.TargetPath)>$($s.Arguments)" }; $v = (Get-Item $env:E).VersionInfo; "$($v.FileDescription)>$($v.ProductName)>$($v.FileVersion)"';
     const lines = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', read], { env: { ...process.env, L: links.join('|'), E: exe } }).toString().trim().split(/\r?\n/);
@@ -76,13 +70,13 @@ test('install builds a working exe with the logo and shortcuts, after removing a
 
     const b = readFileSync(exe), res = resources(b);
     assert.equal(b.readUInt16LE(pe(b).subsystem), 2); // no console window
-    assert.equal(res.filter(r => r.type === 3).length, 8); // icon sizes 16 to 256
+    assert.equal(res.filter(r => r.type === 3).length, readFileSync(brandIcon).readUInt16LE(4)); // every size in the .ico
     assert.ok(res.some(r => r.type === 10 && r.name === 'NODE_SEA_BLOB'));
     execFileSync(exe, ['--tray']); // the embedded app loads desktop.js from the exe's folder
     assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'started.json'), 'utf8')), ['--tray']);
 
     await uninstall(dir, where);
-    assert.deepEqual((await fs.readdir(dir)).sort(), ['brand.json', 'desktop.js', 'logo.png', 'started.json']);
+    assert.deepEqual((await fs.readdir(dir)).sort(), ['brand.json', 'desktop.js', 'logo.ico', 'started.json']);
     for (const d of Object.values(where)) assert.deepEqual(await fs.readdir(d), []);
   } finally {
     await fs.rm(tmp, { recursive: true, force: true, maxRetries: 3 });

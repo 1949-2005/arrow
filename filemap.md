@@ -3,12 +3,12 @@
 - `engine.js` — core: queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, "when all downloads finish" countdown, `state.json` persistence, `view()` for the UI
 - `hls.js` — HLS (.m3u8): best-variant pick, AES-128 decryption, parallel segment fetch written in order
 - `ytdlp.js` — YouTube via yt-dlp + ffmpeg: URL check, quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
-- `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html` (with the brand name) and the logo as favicon; Host/Origin checks live here; tray routes (open, pause all, quit); Windows integration: Start with Windows shortcut, sleep/shutdown commands
+- `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html` (with the brand name) and the brand icon as favicon; Host/Origin checks live here; tray routes (open, pause all, quit); Windows integration: Start with Windows shortcut, sleep/shutdown commands
 - `desktop.js` — the Windows desktop app: `brand.json` reading, port/URL, `powershell()`, `shortcut()`, browser lookup and app window, `start()` (one instance, server, tray, window); `node desktop.js [--tray]`
 - `tray.ps1` — tray icon (PowerShell + WinForms): click opens the window; menu Open / Pause all / Quit call the local API
-- `install.js` — builds `<name>.exe` (Node single executable app: launcher, logo icons, version info, no console) and `<name>.ico`; install/uninstall shortcuts; pure PE/icon/version-info helpers for tests
+- `install.js` — builds `<name>.exe` (Node single executable app: launcher, brand icon, version info, no console); install/uninstall shortcuts; pure PE/icon/version-info helpers for tests
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
-- `brand.json` — the app's name and logo (PNG path): the one place to rename or rebrand
+- `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand (`extension.test.js` checks the extension's copies of the name)
 - `ui.html` — the whole web UI (HTML + CSS + JS); polls `/api/state` every 700 ms; DOM-free helpers (batch links, clipboard link check) in `<script id="helpers">`
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
@@ -16,17 +16,17 @@
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge
   - `popup.html`, `popup.js` — media found on the current tab, takeover toggle
 - `engine.test.js` — engine tests against a local test server
-- `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks
+- `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `ytdlp.test.js` — YouTube URLs, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files)
 - `server.test.js` — API access rules (Host, Origin, extension privileges), UTF-8 bodies, the Start with Windows shortcut, brand page and favicon, tray Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
 - `desktop.test.js` — browser order, brand name rules, second start and port conflict (`node desktop.js --tray` against a stand-in server), `tray.ps1` syntax
-- `install.test.js` — icon images, .ico, version info and PE edits; a real build + install + run + uninstall in a temp folder (Windows)
+- `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder (Windows)
 - `ui.test.js` — batch links and the clipboard link check, by running `ui.html`'s helpers script in Node
-- `assets/logo.svg` — app logo source (teal download arrow); `logo.png` (512 px) and `logo.ico` (16–256 px) are rendered from it. `brand.json` points at `logo.png`; the build makes its own `<name>.ico` from it
+- `assets/logo.svg` — app logo source (teal download arrow); `logo.png` (512 px) and `logo.ico` (16–256 px) are rendered from it. `brand.json` points at `logo.ico`, which goes into the exe and the tray as is
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
-- `<name>.exe`, `<name>.ico`, `installed.json` — made by `install.js` (gitignored)
-- `README.md` — user guide: install, start, quit, uninstall, name and logo, extension install, features, settings, limits, privacy
+- `<name>.exe`, `installed.json` — made by `install.js` (gitignored)
+- `README.md` — user guide: install, start, quit, uninstall, name and icon, extension install, features, settings, limits, privacy
 - `docs/SPEC.md` — behaviour, data model, API, security model
 - `docs/PLAN.md` — task list and status

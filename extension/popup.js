@@ -23,7 +23,7 @@ if (!$('#yt').hidden) {
     const b = $('#ytdl');
     b.disabled = true;
     const ok = await send({ url: tab.url, quality: $('#quality').value });
-    b.textContent = ok ? 'Sent ✓' : 'Failed. Is FastDL running?';
+    b.textContent = ok ? 'Sent ✓' : 'Failed. Is Arrow running?';
     b.disabled = ok;
   };
 }

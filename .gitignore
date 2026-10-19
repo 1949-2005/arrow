@@ -3,5 +3,4 @@ state.json.tmp
 node_modules/
 # built by install.js
 /*.exe
-/*.ico
 installed.json

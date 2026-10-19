@@ -18,7 +18,7 @@ IDM-style download manager: Node.js >= 20.3 (ESM), zero npm dependencies, local 
 - yt-dlp and ffmpeg are external tools from winget. Tests never run the real yt-dlp: they use `fixtures/fake-ytdlp.mjs` through `mgr.ytdlp`.
 - New logic gets a test in `*.test.js`. Tests must not touch the network or the user's Downloads folder.
 - Update `filemap.md` when you add or move files.
-- The app's name and logo come only from `brand.json`. Desktop texts use `brand.name`; `ui.html` may say "FastDL", which `server.js` replaces.
+- The app's name and icon come only from `brand.json`. Desktop texts use `brand.name`; `ui.html` may say "FastDL", which `server.js` replaces. The extension can't read it: its copies of the name are checked by `extension.test.js`.
 - Child processes on Windows: console tools get `windowsHide: true` (the exe has no console to share), and anything that must outlive the app (the browser) gets `detached: true`; everything else ends with the app.
 
 Docs: `docs/SPEC.md` (behaviour and decisions), `docs/PLAN.md` (tasks), `filemap.md` (where things live).

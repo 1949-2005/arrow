@@ -25,7 +25,7 @@ test('the window opens in Brave, else Chrome, else Edge, else the default browse
 
 test('brand.json: the name must be safe as a file name and as page text', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-brand-'));
-  const name = async n => { await fs.writeFile(path.join(dir, 'brand.json'), JSON.stringify({ name: n, logo: 'logo.png' })); return readBrand(dir).name; };
+  const name = async n => { await fs.writeFile(path.join(dir, 'brand.json'), JSON.stringify({ name: n, icon: 'logo.ico' })); return readBrand(dir).name; };
   try {
     for (const ok of ['FastDL', 'Téléchargeur Pro', 'Fast-DL (beta) 2']) assert.equal(await name(ok), ok);
     for (const bad of ['', ' Lead', 'Trail.', 'a/b', 'x"y', '<b>', "it's", 'x'.repeat(41), undefined]) await assert.rejects(name(bad), /brand\.json/, String(bad));

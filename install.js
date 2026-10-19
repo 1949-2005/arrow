@@ -1,9 +1,9 @@
 // Installs the desktop app in place (this folder):
-//   node install.js             (install.cmd)    build <name>.exe and <name>.ico here, add Start menu and desktop shortcuts
+//   node install.js             (install.cmd)    build <name>.exe here, add Start menu and desktop shortcuts
 //   node install.js uninstall   (uninstall.cmd)  remove them again; downloads and state.json stay
 // The exe is Node's own single executable application: a copy of node.exe whose embedded app loads desktop.js from
-// this folder (so code changes need no rebuild), with the logo, version info and no console window.
-// Only Windows parts do the work: System.Drawing scales the logo, kernel32's UpdateResource writes the resources.
+// this folder (so code changes need no rebuild), with the brand icon, version info and no console window.
+// No npm tools: kernel32's UpdateResource (through PowerShell) writes the resources.
 import { readFileSync, existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -14,54 +14,21 @@ import { fileURLToPath } from 'node:url';
 import { here, readBrand, url, startupDir, powershell, shortcut } from './desktop.js';
 
 const run = promisify(execFile);
-const SIZES = [16, 20, 24, 32, 40, 48, 64, 256];
 
-// The logo at each icon size, centered: raw 32-bit BGRA pixels, top row first.
-async function scale(png) {
-  const { stdout } = await powershell(`Add-Type -AssemblyName System.Drawing
-$src = [System.Drawing.Image]::FromFile($env:FDL_PNG)
-foreach ($n in ${SIZES.join(', ')}) {
-  $b = New-Object System.Drawing.Bitmap $n, $n, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-  $g = [System.Drawing.Graphics]::FromImage($b)
-  $g.InterpolationMode = 'HighQualityBicubic'; $g.PixelOffsetMode = 'HighQuality'; $g.CompositingQuality = 'HighQuality'
-  $k = [Math]::Min($n / $src.Width, $n / $src.Height); $w = [int]($src.Width * $k); $h = [int]($src.Height * $k)
-  $a = New-Object System.Drawing.Imaging.ImageAttributes; $a.SetWrapMode('TileFlipXY') # no dark fringe at the edges
-  $g.DrawImage($src, (New-Object System.Drawing.Rectangle ([int](($n - $w) / 2)), ([int](($n - $h) / 2)), $w, $h), 0, 0, $src.Width, $src.Height, 'Pixel', $a)
-  $d = $b.LockBits((New-Object System.Drawing.Rectangle 0, 0, $n, $n), 'ReadOnly', $b.PixelFormat)
-  $px = New-Object byte[] ($n * $n * 4); [Runtime.InteropServices.Marshal]::Copy($d.Scan0, $px, 0, $px.Length)
-  [Convert]::ToBase64String($px)
-}`, { FDL_PNG: png });
-  return stdout.trim().split(/\r?\n/).map(s => Buffer.from(s, 'base64'));
-}
-
-// One icon image: a 32-bit BMP and its transparency mask. PNG images would be smaller,
-// but .NET's Icon class (the tray icon) draws those as noise.
-export function dib(bgra) {
-  const n = Math.sqrt(bgra.length / 4), stride = Math.ceil(n / 32) * 4;
-  const head = Buffer.alloc(40), px = Buffer.alloc(bgra.length), mask = Buffer.alloc(stride * n);
-  head.writeUInt32LE(40, 0); head.writeInt32LE(n, 4); head.writeInt32LE(2 * n, 8); head.writeUInt16LE(1, 12); head.writeUInt16LE(32, 14); // height counts the mask
-  for (let y = 0; y < n; y++) { // BMP rows go bottom-up
-    const row = n - 1 - y;
-    bgra.copy(px, row * n * 4, y * n * 4, (y + 1) * n * 4);
-    for (let x = 0; x < n; x++) if (!bgra[(y * n + x) * 4 + 3]) mask[row * stride + (x >> 3)] |= 0x80 >> (x & 7);
+// An .ico file as exe resources: each image becomes an RT_ICON, and the directory an RT_GROUP_ICON
+// (the same 12-byte entries, with a resource id where the file has the image's offset).
+export function iconResources(ico, file = 'the icon') {
+  if (ico.readUInt16LE(0) !== 0 || ico.readUInt16LE(2) !== 1) throw new Error(`${file} is not an .ico file`);
+  const n = ico.readUInt16LE(4), group = Buffer.alloc(6 + 14 * n), icons = [];
+  ico.copy(group, 0, 0, 6);
+  for (let i = 0; i < n; i++) {
+    const e = 6 + 16 * i, at = ico.readUInt32LE(e + 12);
+    ico.copy(group, 6 + 14 * i, e, e + 12);
+    group.writeUInt16LE(i + 1, 6 + 14 * i + 12);
+    icons.push({ type: 3, name: i + 1, data: ico.subarray(at, at + ico.readUInt32LE(e + 8)) });
   }
-  return Buffer.concat([head, px, mask]);
+  return [{ type: 14, name: 1, data: group }, ...icons];
 }
-
-// The icon directory: the .ico file has file offsets after each entry, the RT_GROUP_ICON resource has resource ids.
-function iconDir(images, tail) {
-  return Buffer.concat([Buffer.from([0, 0, 1, 0, images.length, 0]), ...images.map((img, i) => {
-    const e = Buffer.alloc(12);
-    e[0] = e[1] = img.readInt32LE(4) & 255; // 0 means 256
-    e.writeUInt16LE(1, 4); e.writeUInt16LE(32, 6); e.writeUInt32LE(img.length, 8);
-    return Buffer.concat([e, tail(i)]);
-  })]);
-}
-export function icoFile(images) {
-  let at = 6 + 16 * images.length;
-  return Buffer.concat([iconDir(images, i => { const b = Buffer.alloc(4); b.writeUInt32LE(at); at += images[i].length; return b; }), ...images]);
-}
-export const iconGroup = images => iconDir(images, i => { const b = Buffer.alloc(2); b.writeUInt16LE(i + 1); return b; });
 
 // VS_VERSIONINFO, shown by Explorer (Properties > Details) and Task Manager.
 // Each block: length, value length, type (1 = text), key, then the value and the children, each aligned to 4 bytes.
@@ -159,29 +126,26 @@ foreach ($r in (Get-Content -Raw $env:FDL_RES | ConvertFrom-Json)) {
 }
 if (![Res]::EndUpdateResource($h, $false)) { throw [ComponentModel.Win32Exception]::new() }`;
 
-// <name>.exe and <name>.ico in dir, from dir's brand.json.
+// <name>.exe in dir, from dir's brand.json.
 export async function build(dir = here) {
-  const { name, logo } = readBrand(dir);
+  const { name, icon } = readBrand(dir);
   const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-build-')), file = f => path.join(tmp, f);
   try {
     await fs.writeFile(file('main.cjs'), launcher(name));
     await fs.writeFile(file('sea.json'), JSON.stringify({ main: file('main.cjs'), output: file('app.blob'), disableExperimentalSEAWarning: true }));
     await run(process.execPath, ['--experimental-sea-config', file('sea.json')]);
-    const images = (await scale(path.resolve(dir, logo))).map(dib);
     const node = readFileSync(process.execPath);
     const res = [
       ...resources(node).filter(r => r.type === 24), // node.exe's manifest: Windows 10/11 support, long paths
       { type: 16, name: 1, data: versionInfo(name, version) },
-      { type: 14, name: 1, data: iconGroup(images) },
-      ...images.map((data, i) => ({ type: 3, name: i + 1, data })),
+      ...iconResources(readFileSync(path.resolve(dir, icon)), icon),
       { type: 10, name: 'NODE_SEA_BLOB', data: readFileSync(file('app.blob')) },
     ];
     await fs.writeFile(file('res.json'), JSON.stringify(res.map(r => ({ ...r, data: r.data.toString('base64') }))));
     await fs.writeFile(file('app.exe'), unsign(node));
     await powershell(UPDATE, { FDL_EXE: file('app.exe'), FDL_RES: file('res.json') });
     await fs.writeFile(path.join(dir, name + '.exe'), finish(readFileSync(file('app.exe'))));
-    await fs.writeFile(path.join(dir, name + '.ico'), icoFile(images));
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
@@ -213,7 +177,7 @@ export async function install(dir = here, where) {
 export async function uninstall(dir = here, where) {
   where ??= await folders();
   const name = installed(dir);
-  for (const f of [...Object.values(where).map(folder => path.join(folder, name + '.lnk')), path.join(dir, name + '.exe'), path.join(dir, name + '.ico'), record(dir)]) {
+  for (const f of [...Object.values(where).map(folder => path.join(folder, name + '.lnk')), path.join(dir, name + '.exe'), record(dir)]) {
     await fs.rm(f, { force: true });
   }
 }

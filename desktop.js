@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 export const here = path.dirname(fileURLToPath(import.meta.url));
 
-// brand.json is the one place for the app's name and logo: exe, file properties, window title, tray, shortcuts.
+// brand.json is the one place for the app's name and icon (.ico): exe, file properties, window title, tray, shortcuts.
+// The extension can't read it: extension.test.js checks that its files use the same name.
 export function readBrand(dir) {
   const brand = JSON.parse(readFileSync(path.join(dir, 'brand.json'), 'utf8'));
   // The name becomes file names, page text and PowerShell input, so only plain characters.
@@ -59,7 +60,7 @@ export async function start(args = process.argv.slice(2)) {
   await import('./server.js');
   // Not detached, so Windows ends it when the app exits for any reason (libuv's job object).
   spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'tray.ps1')],
-    { windowsHide: true, stdio: 'ignore', env: { ...process.env, FDL_NAME: brand.name, FDL_ICON: path.join(here, brand.name + '.ico'), FDL_URL: url } }).on('error', () => {});
+    { windowsHide: true, stdio: 'ignore', env: { ...process.env, FDL_NAME: brand.name, FDL_ICON: path.join(here, brand.icon), FDL_URL: url } }).on('error', () => {});
   if (!quiet) openWindow();
 }
 

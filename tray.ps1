@@ -1,15 +1,21 @@
 # The app's icon next to the clock. desktop.js starts it; Windows ends it together with the app.
 # Menu clicks call the app's local API (FDL_URL), like the web page does.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -Name Native -Namespace FastDL -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr LoadImage(IntPtr inst, string name, uint type, int cx, int cy, uint flags);
+'@
 # Without this, Windows scales a blurry 16 px icon and menu up on high-DPI screens.
-Add-Type -Name Dpi -Namespace FastDL -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
-[void][FastDL.Dpi]::SetProcessDPIAware()
+[void][FastDL.Native]::SetProcessDPIAware()
 
 function Call($path) { try { [void](New-Object Net.WebClient).UploadString($env:FDL_URL + $path, '') } catch {} }
 
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Text = $env:FDL_NAME
-$tray.Icon = if (Test-Path $env:FDL_ICON) { New-Object System.Drawing.Icon $env:FDL_ICON, ([System.Windows.Forms.SystemInformation]::SmallIconSize) } else { [System.Drawing.SystemIcons]::Application }
+# Windows' own loader (IMAGE_ICON, LR_LOADFROMFILE) reads PNG icon images; .NET's Icon class draws them as noise.
+$size = [System.Windows.Forms.SystemInformation]::SmallIconSize
+$icon = [FastDL.Native]::LoadImage([IntPtr]::Zero, $env:FDL_ICON, 1, $size.Width, $size.Height, 0x10)
+$tray.Icon = if ($icon -ne [IntPtr]::Zero) { [System.Drawing.Icon]::FromHandle($icon) } else { [System.Drawing.SystemIcons]::Application }
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $open = $menu.Items.Add("Open $env:FDL_NAME", $null, { Call /api/open })
 $open.Font = New-Object System.Drawing.Font $open.Font, ([System.Drawing.FontStyle]::Bold) # what a click on the icon does
