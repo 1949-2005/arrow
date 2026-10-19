@@ -15,5 +15,6 @@
 - `start.cmd` — Windows launcher (server + Edge app window)
 - `package.json` — `start` and `test` scripts; `"type": "module"`
 - `state.json` — runtime state and settings (gitignored, created on first run)
+- `README.md` — user guide: start/stop, extension install, features, settings, limits, privacy
 - `docs/SPEC.md` — behaviour, data model, API, security model
 - `docs/PLAN.md` — task list and status

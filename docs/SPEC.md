@@ -31,7 +31,7 @@ Settings: `dir, connections(1–32), maxActive(1–20), speedLimitKB(0 = off), s
 - `Origin`, when present, must be the app's own page or a browser extension. Other websites get 403.
 - Extension origins may only use `GET /api/ping` and `POST /api/add`; anything else is 403. Any installed extension can reach the app, and settings (download folder) or `open` would let it plant and run files.
 - Finished files get the Mark-of-the-Web (`:Zone.Identifier` stream, `ZoneId=3`, referrer, URL without credentials) on Windows, like browsers do, so SmartScreen and Office Protected View still apply. Write errors are ignored (FAT/exFAT).
-- Cookies come from the extension, are sent only to the host they were captured for, also across redirects.
+- Cookies come from the extension, are sent only to the host they were captured for, also across redirects, and are dropped from the state once the download is done.
 - Header allowlist: cookie, referer, user-agent. The default User-Agent is honest.
 - File names can't leave the download folder (`sanitize()`).
 

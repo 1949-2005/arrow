@@ -27,7 +27,10 @@ before(async () => {
     if (Date.now() - t > 10000) throw new Error('server did not start');
   }
 });
-after(() => child?.kill());
+after(async () => {
+  child?.kill();
+  await fs.rm(dir, { recursive: true, force: true, maxRetries: 3 });
+});
 
 const call = (url, { origin, body } = {}) => fetch(base + url, {
   method: body ? 'POST' : 'GET',

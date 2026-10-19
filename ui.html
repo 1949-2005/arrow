@@ -156,7 +156,7 @@ function render(st) {
     sz.textContent = d.status === 'done' ? size(d.size) : `${size(d.got)} / ${size(t && Math.round(t))}`;
     r.pct.textContent = Math.floor(fraction(d) * 1000) / 10 + '%';
     speed.textContent = d.status !== 'downloading' ? '' : size(d.speed) + '/s'
-      + (d.connections > 1 ? ` · ${d.connections} conn.` : '') + (d.resumable === false ? ' · no resume' : '');
+      + (d.connections > 1 ? ` · ${d.connections} conn.` : '') + (d.resumable === false ? ' · no resume' : '');
     eta.textContent = d.status === 'downloading' && d.speed && t ? time((t - d.got) / d.speed) : '';
     status.textContent = d.status === 'error' ? 'Error: ' + d.error : LABEL[d.status];
     status.title = d.error || '';

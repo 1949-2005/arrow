@@ -165,7 +165,11 @@ export class Manager {
     ctl.done = (async () => {
       try {
         await (d.kind === 'hls' ? downloadHls(d, ctl, this) : this.runHttp(d, ctl));
-        if (!ctl.ac.signal.aborted) { d.status = 'done'; d.finished = Date.now(); }
+        if (!ctl.ac.signal.aborted) {
+          d.status = 'done';
+          d.finished = Date.now();
+          delete d.headers.cookie; // no reason to keep a login session on disk once the file is here
+        }
       } catch (e) {
         if (d.status === 'downloading') { d.status = 'error'; d.error = e.cause?.message || e.message; }
       }

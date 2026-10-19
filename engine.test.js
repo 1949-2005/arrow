@@ -76,7 +76,11 @@ before(async () => {
   await mgr.load();
   mgr.update({ dir: path.join(dir, 'out'), connections: 4, maxActive: 5 });
 });
-after(() => { server.closeAllConnections(); server.close(); });
+after(async () => {
+  server.closeAllConnections();
+  server.close();
+  await fs.rm(dir, { recursive: true, force: true, maxRetries: 3 }); // ~70 MB of test downloads
+});
 
 async function until(fn, ms = 30000) {
   for (const t = Date.now(); !fn(); await sleep(20)) if (Date.now() - t > ms) throw new Error('timed out');
@@ -199,9 +203,10 @@ test('HLS: a segment that goes silent mid-body is cut off and retried', async ()
 test('browser cookies are not passed on to another host after a redirect', async () => {
   cookies.length = 0;
   const d = mgr.add({ url: base + '/redirect', headers: { Cookie: 'session=secret', 'X-Evil': 'dropped' } });
+  assert.deepEqual(Object.keys(d.headers), ['cookie']);
   assert.equal(sha(await finished(d)), sha(data));
   assert.ok(cookies.length && cookies.every(c => c === undefined), 'cookie leaked to redirect target');
-  assert.deepEqual(Object.keys(d.headers), ['cookie']);
+  assert.equal(d.headers.cookie, undefined, 'finished downloads must not keep login cookies in state.json');
 });
 
 test('speed limit slows the download down', async () => {
