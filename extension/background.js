@@ -1,4 +1,4 @@
-import { send, appAlive } from './common.js';
+import { send, appAlive, pickMedia } from './common.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
@@ -59,3 +59,24 @@ function forget(tabId) {
 
 chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.url) forget(tabId); });
 chrome.tabs.onRemoved.addListener(forget);
+
+// The video button (content.js). Only our own content scripts can send this, but the frame may be hostile,
+// so every field is checked before it reaches the app.
+const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
+const isStr = (x, max = 8192) => typeof x === 'string' && x.length <= max;
+const httpUrl = x => isStr(x) && /^https?:\/\//i.test(x) && URL.canParse(x);
+
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== 'video' || sender.id !== chrome.runtime.id || !sender.tab) return;
+  const { src, pageUrl, title, quality } = msg;
+  if (!isStr(src) || !httpUrl(pageUrl) || !isStr(title, 1000) || (quality !== undefined && !QUALITIES.includes(quality))) {
+    reply({ error: 'Bad request.' });
+    return;
+  }
+  const k = 'tab' + sender.tab.id;
+  chain.then(() => chrome.storage.session.get(k)).then(async got => {
+    const pick = pickMedia({ pageUrl, src, title, quality, media: got[k] ?? [] });
+    reply(pick.error ? pick : await send(pick) ? { ok: true } : { error: 'Arrow is not running.' });
+  }).catch(() => reply({ error: 'Arrow is not running.' }));
+  return true; // reply comes later
+});

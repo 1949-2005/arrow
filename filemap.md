@@ -12,11 +12,12 @@
 - `ui.html` — the whole web UI (HTML + CSS + JS), IDM-style: toolbar, categories sidebar, download list with multi-select, details pane, status bar, Add URL and Settings dialogs; polls `/api/state` every 700 ms; DOM-free helpers (batch links, clipboard link check, category, date label) in `<script id="helpers">`
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
-  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer)
-  - `background.js` — download takeover, context menu, media grabber (webRequest), badge
-  - `popup.html`, `popup.js` — media found on the current tab, takeover toggle
+  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer), `pickMedia()` (what the video button downloads)
+  - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's message
+  - `content.js` — "Download with Arrow" button over page videos (every frame, closed shadow root, YouTube quality menu); a classic script, so it has its own copy of `isYouTubeVideo()`
+  - `popup.html`, `popup.js` — media found on the current tab, takeover and video-button switches
 - `engine.test.js` — engine tests against a local test server
-- `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
+- `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `ytdlp.test.js` — YouTube URLs, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files)
 - `server.test.js` — API access rules (Host, Origin, extension privileges), UTF-8 bodies, the Start with Windows shortcut, brand page and favicon, tray Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`

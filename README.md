@@ -76,6 +76,8 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - While the app runs, browser downloads go to Arrow automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
   - Right-click a link or a video and choose "Download with Arrow".
   - Play a video, then click the extension icon. It shows the media it found (the number on the icon tells how many). Click Download.
+  - Point at a video on a web page. A "Download with Arrow" button appears at its top right. Click it. On YouTube, choose the quality first. If it says "No video found yet", let the video play for a few seconds, then click again.
+  - To hide that button, open the extension popup and switch off "Show download button on videos".
 
 ## YouTube videos
 

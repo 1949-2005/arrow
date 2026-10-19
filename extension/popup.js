@@ -10,6 +10,9 @@ $('#status').className = alive ? '' : 'off';
 const { intercept = true } = await chrome.storage.local.get('intercept');
 $('#intercept').checked = intercept;
 $('#intercept').onchange = e => chrome.storage.local.set({ intercept: e.target.checked });
+const { overlay = true } = await chrome.storage.local.get('overlay');
+$('#overlay').checked = overlay;
+$('#overlay').onchange = e => chrome.storage.local.set({ overlay: e.target.checked });
 $('#open').onclick = () => chrome.tabs.create({ url: APP });
 
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

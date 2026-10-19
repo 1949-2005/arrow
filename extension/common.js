@@ -35,3 +35,17 @@ export async function send({ url, referrer, name, title, quality }) {
   }).catch(() => null);
   return !!res?.ok;
 }
+
+const isHttp = url => /^https?:$/.test(parse(url)?.protocol ?? '');
+
+// What the video button downloads. `media` is the tab's list from the grabber ({url, type, size}).
+// blob: and MSE players have no usable src, so the grabber's HLS playlist or biggest video file stands in.
+export function pickMedia({ pageUrl, src, title, quality, media = [] }) {
+  if (isYouTubeVideo(pageUrl)) return { url: pageUrl, quality };
+  if (isHttp(src)) return { url: src, referrer: pageUrl, title };
+  const ok = media.filter(m => isHttp(m.url));
+  const found = ok.find(m => m.type === 'HLS stream')
+    ?? ok.filter(m => /^video\//.test(m.type)).sort((a, b) => b.size - a.size)[0];
+  return found ? { url: found.url, referrer: pageUrl, title }
+    : { error: 'No video found yet. Play it for a few seconds, then try again.' };
+}

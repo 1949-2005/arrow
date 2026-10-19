@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 
 // Fake MV3 browser: every method returns a Promise and is recorded in `calls`.
 const calls = [];
@@ -12,7 +13,7 @@ const rec = (name, fn = () => {}) => (...args) => { calls.push([name, ...args]);
 const pick = (store, keys) => Object.fromEntries([keys].flat().filter(k => k in store).map(k => [k, store[k]]));
 
 globalThis.chrome = {
-  runtime: { id: 'ext-id', onInstalled: event('onInstalled') },
+  runtime: { id: 'ext-id', onInstalled: event('onInstalled'), onMessage: event('runtime.onMessage') },
   contextMenus: { create: rec('contextMenus.create'), onClicked: event('contextMenus.onClicked') },
   downloads: { onCreated: event('downloads.onCreated'), cancel: rec('downloads.cancel'), erase: rec('downloads.erase'), download: rec('downloads.download') },
   storage: {
@@ -45,7 +46,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 await import('./extension/background.js');
-const { isYouTubeVideo, send } = await import('./extension/common.js');
+const { isYouTubeVideo, send, pickMedia } = await import('./extension/common.js');
 
 function reset(mode = 'up') {
   calls.length = requests.length = 0;
@@ -198,10 +199,13 @@ test('extension files are syntactically valid and the manifest points at real fi
   for (const f of ['common.js', 'background.js', 'popup.js']) {
     execFileSync(process.execPath, ['--check', '--input-type=module'], { input: fs.readFileSync(new URL('./extension/' + f, import.meta.url)) });
   }
+  // content scripts are classic scripts, not modules
+  execFileSync(process.execPath, ['--check', '--input-type=commonjs'], { input: fs.readFileSync(new URL('./extension/content.js', import.meta.url)) });
   const m = JSON.parse(fs.readFileSync(new URL('./extension/manifest.json', import.meta.url), 'utf8'));
   assert.equal(m.manifest_version, 3);
   assert.equal(m.background.type, 'module');
-  for (const f of [m.background.service_worker, m.action.default_popup]) {
+  assert.deepEqual(m.content_scripts, [{ matches: ['<all_urls>'], js: ['content.js'], all_frames: true, run_at: 'document_idle' }]);
+  for (const f of [m.background.service_worker, m.action.default_popup, ...m.content_scripts[0].js]) {
     assert.ok(fs.existsSync(new URL('./extension/' + f, import.meta.url)), f);
   }
   assert.match(fs.readFileSync(new URL('./extension/popup.html', import.meta.url), 'utf8'), /<script type="module" src="popup.js">/);
@@ -212,8 +216,8 @@ test('the extension shows the app name from brand.json', () => {
   const { name } = JSON.parse(read('./brand.json'));
   const m = JSON.parse(read('./extension/manifest.json'));
   assert.deepEqual([m.name, m.action.default_title], [name, name]);
-  const files = ['popup.html', 'popup.js', 'background.js'].map(f => read('./extension/' + f)).join('\n');
-  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`]) assert.ok(files.includes(text), text);
+  const files = ['popup.html', 'popup.js', 'background.js', 'content.js'].map(f => read('./extension/' + f)).join('\n');
+  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `'Sent to ${name} ✓'`]) assert.ok(files.includes(text), text);
 });
 
 test('isYouTubeVideo accepts single-video URLs only, on the exact YouTube hosts', () => {
@@ -305,4 +309,104 @@ test('popup YouTube button sends url + quality, restores and saves the quality',
   await els['#ytdl'].onclick();
   assert.equal(els['#ytdl'].textContent, 'Failed. Is Arrow running?');
   assert.equal(els['#ytdl'].disabled, false);
+});
+
+test('popup "Show download button on videos" defaults on and saves to overlay', async () => {
+  reset();
+  let els = await openPopup('https://x.com/');
+  assert.equal(els['#overlay'].checked, true);
+  els['#overlay'].onchange({ target: { checked: false } });
+  assert.equal(local.overlay, false);
+  els = await openPopup('https://x.com/');
+  assert.equal(els['#overlay'].checked, false);
+});
+
+test('pickMedia: YouTube page, http src, then the grabbed HLS or biggest video, else an error', () => {
+  const yt = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', page = 'https://x.com/watch/1';
+  assert.deepEqual(pickMedia({ pageUrl: yt, src: 'blob:https://www.youtube.com/1', title: 'T', quality: '720', media: [] }), { url: yt, quality: '720' });
+  assert.deepEqual(pickMedia({ pageUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', src: '' }), { url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', quality: undefined });
+  assert.deepEqual(pickMedia({ pageUrl: page, src: 'https://cdn.x.com/v.mp4', title: 'T', quality: '720', media: [{ url: 'https://x.com/a.m3u8', type: 'HLS stream' }] }),
+    { url: 'https://cdn.x.com/v.mp4', referrer: page, title: 'T' });
+  const media = [
+    { url: 'blob:https://x.com/9', type: 'HLS stream', size: 0 },
+    { url: 'https://x.com/small.mp4', type: 'video/mp4', size: 1e6 },
+    { url: 'https://x.com/live.m3u8', type: 'HLS stream', size: 0 },
+    { url: 'https://x.com/second.m3u8', type: 'HLS stream', size: 0 },
+  ];
+  assert.deepEqual(pickMedia({ pageUrl: page, src: 'blob:https://x.com/1', title: 'T', media }), { url: 'https://x.com/live.m3u8', referrer: page, title: 'T' });
+  const files = [
+    { url: 'https://x.com/song.mp3', type: 'audio/mpeg', size: 9e9 },
+    { url: 'https://x.com/small.mp4', type: 'video/mp4', size: 1e6 },
+    { url: 'data:video/mp4,x', type: 'video/mp4', size: 9e9 },
+    { url: 'https://x.com/big.webm', type: 'video/webm', size: 5e6 },
+  ];
+  assert.deepEqual(pickMedia({ pageUrl: page, src: '', title: 'T', media: files }), { url: 'https://x.com/big.webm', referrer: page, title: 'T' });
+  const none = { error: 'No video found yet. Play it for a few seconds, then try again.' };
+  assert.deepEqual(pickMedia({ pageUrl: page, src: 'blob:https://x.com/1', media: [] }), none);
+  assert.deepEqual(pickMedia({ pageUrl: page, src: '', media: [files[0], files[2]] }), none);
+  assert.deepEqual(pickMedia({ pageUrl: page, src: 'javascript:alert(1)' }), none);
+});
+
+// The video button's message: returns what the handler replied (undefined when it ignored the message).
+async function videoMsg(msg, sender = { id: 'ext-id', tab: { id: 5 } }) {
+  let reply;
+  const later = listeners['runtime.onMessage'](msg, sender, r => { reply = r; });
+  if (later === true) await until(() => reply);
+  return reply;
+}
+const vmsg = (over = {}) => ({ type: 'video', src: 'blob:https://x.com/1', pageUrl: 'https://x.com/p', title: 'Clip', ...over });
+
+test('video button message: sends the picked media with the page as referrer', async () => {
+  reset();
+  session.tab5 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
+  assert.deepEqual(await videoMsg(vmsg()), { ok: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' } });
+
+  reset();
+  assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: 'mp3' })), { ok: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: 'mp3', headers: {} });
+
+  reset();
+  assert.deepEqual(await videoMsg(vmsg()), { error: 'No video found yet. Play it for a few seconds, then try again.' });
+  assert.equal(requests.length, 0);
+
+  reset('down');
+  assert.deepEqual(await videoMsg(vmsg({ src: 'https://cdn.x.com/v.mp4' })), { error: 'Arrow is not running.' });
+});
+
+test('video button message: other senders and bad fields are refused', async () => {
+  reset();
+  session.tab5 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
+  assert.equal(await videoMsg(vmsg(), { id: 'other-ext', tab: { id: 5 } }), undefined);
+  assert.equal(await videoMsg(vmsg(), { id: 'ext-id' }), undefined);
+  assert.equal(await videoMsg({ type: 'other' }), undefined);
+  for (const bad of [
+    { pageUrl: 'file:///C:/x.html' }, { pageUrl: 'javascript:alert(1)' }, { pageUrl: 42 }, { pageUrl: undefined },
+    { src: 42 }, { src: undefined }, { title: { x: 1 } }, { title: 'x'.repeat(1001) }, { quality: 'best"; rm' }, { quality: 720 },
+  ]) assert.deepEqual(await videoMsg(vmsg(bad)), { error: 'Bad request.' }, JSON.stringify(bad));
+  assert.equal(requests.length, 0);
+});
+
+// content.js is a classic script; without `document` it only defines its helpers.
+const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
+const content = vm.runInNewContext(contentSrc + '\n;({ isYouTubeVideo, bigEnough, inside })', { URL });
+
+test('content.js helpers: its isYouTubeVideo copy agrees with common.js, size and hit checks', () => {
+  for (const u of [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://youtu.be/dQw4w9WgXcQ', 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    'https://www.youtube.com/shorts/dQw4w9WgXcQ', 'https://www.youtube.com/live/dQw4w9WgXcQ', 'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/', 'https://www.youtube.com/watch?v=short', 'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
+    'ftp://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://x.com/', 'not a url',
+  ]) assert.equal(content.isYouTubeVideo(u), isYouTubeVideo(u), u);
+  assert.ok(content.bigEnough({ width: 200, height: 112 }));
+  assert.ok(!content.bigEnough({ width: 199, height: 360 }));
+  assert.ok(!content.bigEnough({ width: 640, height: 111 }));
+  const r = { left: 10, top: 10, right: 650, bottom: 370 };
+  assert.ok(content.inside(r, 10, 370) && content.inside(r, 300, 200));
+  assert.ok(!content.inside(r, 651, 200) && !content.inside(r, 300, 9));
+});
+
+test('content.js shows the app name from brand.json', () => {
+  const { name } = JSON.parse(fs.readFileSync(new URL('./brand.json', import.meta.url), 'utf8'));
+  for (const text of [`'Download with ${name}'`, `'Sent to ${name} \u2713'`]) assert.ok(contentSrc.includes(text), text);
 });
