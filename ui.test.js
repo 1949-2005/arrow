@@ -6,7 +6,7 @@ import { Manager } from './engine.js';
 // ui.html keeps its DOM-free logic in <script id="helpers">: run exactly that code.
 const html = fs.readFileSync(new URL('./ui.html', import.meta.url), 'utf8');
 const helpers = /<script id="helpers">([\s\S]*?)<\/script>/.exec(html)[1];
-const { expandBatch, clipboardLink, category, dateLabel } = new Function(helpers + '\nreturn { expandBatch, clipboardLink, category, dateLabel };')();
+const { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll } = new Function(helpers + '\nreturn { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll };')();
 
 test('batch links: a numeric range becomes every link in it, zero padding kept', () => {
   assert.deepEqual(expandBatch(['https://s.com/img[001-003].jpg']), ['https://s.com/img001.jpg', 'https://s.com/img002.jpg', 'https://s.com/img003.jpg']);
@@ -82,4 +82,83 @@ test('date added: today with the time, yesterday, else a short date', () => {
   assert.equal(dateLabel(older.getTime(), now), older.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }));
   assert.match(dateLabel(new Date(2025, 9, 17).getTime(), now), /2025/, 'another year shows the year');
   assert.equal(dateLabel(undefined, now), '', 'downloads from before "added" existed');
+});
+
+const V = ['a', 'b', 'c', 'd', 'e'];
+const sel = (selected, anchor) => ({ selected: new Set(selected), anchor });
+const ids = s => [...s.selected].sort();
+
+test('selection: only replaces the selection and moves the anchor', () => {
+  const r = selectRows(sel(['a', 'b'], 'a'), V, 'd', 'only');
+  assert.deepEqual(ids(r), ['d']);
+  assert.equal(r.anchor, 'd');
+  assert.equal(r.cursor, 'd');
+});
+
+test('selection: toggle adds or removes one row and moves the anchor', () => {
+  const added = selectRows(sel(['a'], 'a'), V, 'c', 'toggle');
+  assert.deepEqual(ids(added), ['a', 'c']);
+  assert.equal(added.anchor, 'c');
+  const removed = selectRows(sel(['a', 'c'], 'c'), V, 'a', 'toggle');
+  assert.deepEqual(ids(removed), ['c']);
+  assert.deepEqual([removed.anchor, removed.cursor], ['a', 'a']);
+});
+
+test('selection: range runs from the anchor, either way, and keeps the anchor', () => {
+  const fwd = selectRows(sel(['a'], 'b'), V, 'd', 'range');
+  assert.deepEqual(ids(fwd), ['b', 'c', 'd']);
+  assert.deepEqual([fwd.anchor, fwd.cursor], ['b', 'd']);
+  const back = selectRows(sel([], 'd'), V, 'a', 'range');
+  assert.deepEqual(ids(back), ['a', 'b', 'c', 'd']);
+  assert.deepEqual([back.anchor, back.cursor], ['d', 'a']);
+});
+
+test('selection: a range with a hidden anchor or a hidden target acts like only', () => {
+  for (const [anchor, id] of [['x', 'c'], [null, 'c'], ['b', 'x']]) {
+    const r = selectRows(sel(['a', 'e'], anchor), V, id, 'range');
+    assert.deepEqual(ids(r), [id], `${anchor} → ${id}`);
+    assert.deepEqual([r.anchor, r.cursor], [id, id]);
+  }
+});
+
+test('selection: move changes the cursor only', () => {
+  const r = selectRows(sel(['a', 'b'], 'a'), V, 'e', 'move');
+  assert.deepEqual(ids(r), ['a', 'b']);
+  assert.deepEqual([r.anchor, r.cursor], ['a', 'e']);
+});
+
+test('selection: inputs are never mutated', () => {
+  for (const how of ['only', 'toggle', 'range', 'move']) {
+    const state = sel(['a', 'b'], 'b'), visible = [...V];
+    const r = selectRows(state, visible, 'd', how);
+    assert.deepEqual([...state.selected], ['a', 'b'], how);
+    assert.equal(state.anchor, 'b', how);
+    assert.deepEqual(visible, V, how);
+    assert.notEqual(r.selected, state.selected, how);
+  }
+  const before = new Set(['x']);
+  assert.notEqual(selectAll(before, V), before);
+  assert.deepEqual([...before], ['x']);
+});
+
+test('keyTarget: moves within the list, clamped at both ends', () => {
+  assert.equal(keyTarget('ArrowDown', V, 'b'), 'c');
+  assert.equal(keyTarget('ArrowUp', V, 'b'), 'a');
+  assert.equal(keyTarget('ArrowDown', V, 'e'), 'e');
+  assert.equal(keyTarget('ArrowUp', V, 'a'), 'a');
+  assert.equal(keyTarget('Home', V, 'c'), 'a');
+  assert.equal(keyTarget('End', V, 'c'), 'e');
+});
+
+test('keyTarget: no cursor starts at the first row, other keys and an empty list give null', () => {
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home']) assert.equal(keyTarget(key, V, null), 'a', key);
+  assert.equal(keyTarget('End', V, null), 'e');
+  for (const key of [' ', 'Enter', 'Delete', 'a', 'ArrowLeft']) assert.equal(keyTarget(key, V, 'b'), null, key);
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End']) assert.equal(keyTarget(key, [], null), null, key);
+});
+
+test('selectAll: keeps the selection and adds only the visible rows', () => {
+  assert.deepEqual([...selectAll(new Set(['b']), ['a', 'b', 'c'])].sort(), ['a', 'b', 'c']);
+  assert.deepEqual([...selectAll(new Set(['hidden']), ['a'])].sort(), ['a', 'hidden']);
+  assert.deepEqual([...selectAll(new Set(), [])], []);
 });

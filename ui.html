@@ -313,12 +313,32 @@ function dateLabel(ts, now = Date.now()) {
   if (tDay === day(n.getFullYear(), n.getMonth(), n.getDate() - 1)) return 'Yesterday';
   return t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(t.getFullYear() !== n.getFullYear() && { year: 'numeric' }) });
 }
+
+// Selection, like a file list: how = 'only' | 'toggle' | 'range' (from the anchor) | 'move' (only the cursor moves).
+// Returns a new { selected, anchor, cursor }; a range whose anchor or target is not visible acts like 'only'.
+function selectRows({ selected, anchor }, visibleIds, id, how) {
+  const a = visibleIds.indexOf(anchor), b = visibleIds.indexOf(id);
+  if (how === 'range' && a >= 0 && b >= 0) return { selected: new Set(visibleIds.slice(Math.min(a, b), Math.max(a, b) + 1)), anchor, cursor: id };
+  if (how === 'move') return { selected: new Set(selected), anchor, cursor: id };
+  const next = new Set(how === 'toggle' ? selected : []);
+  next.has(id) ? next.delete(id) : next.add(id);
+  return { selected: next, anchor: id, cursor: id };
+}
+
+// Row a navigation key moves to, clamped to the list; with no cursor, ArrowUp also goes to the first row.
+function keyTarget(key, visibleIds, cursor) {
+  const i = visibleIds.indexOf(cursor), last = visibleIds.length - 1;
+  const j = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: last }[key];
+  return j === undefined || last < 0 ? null : visibleIds[Math.max(0, Math.min(last, j))];
+}
+
+const selectAll = (selected, visibleIds) => new Set([...selected, ...visibleIds]);
 </script>
 <script>
 const $ = s => document.querySelector(s);
 const rows = new Map(); // id → row parts, in list order
 const seen = new Map();
-const selected = new Set();
+let selected = new Set();
 let anchor = null, cursor = null; // Shift range start; the row that holds the list's tab stop
 let state = { downloads: [], settings: {}, categories: {} };
 let filter = 'all';
@@ -490,22 +510,9 @@ function refresh() {
   return api('/api/state').then(st => { state = st; $('#offline').hidden = true; render(st); }, () => { $('#offline').hidden = false; });
 }
 
-// Selection, like a file list: how = 'only' | 'toggle' | 'range' (from the anchor) | 'move' (only the cursor moves)
+// Selection rules live in selectRows (helpers block)
 function select(id, how) {
-  const v = visible().map(r => r.d.id), a = v.indexOf(anchor);
-  if (how === 'range' && a >= 0) {
-    const b = v.indexOf(id);
-    selected.clear();
-    for (const x of v.slice(Math.min(a, b), Math.max(a, b) + 1)) selected.add(x);
-  } else if (how === 'toggle') {
-    selected.has(id) ? selected.delete(id) : selected.add(id);
-    anchor = id;
-  } else if (how !== 'move') {
-    selected.clear();
-    selected.add(id);
-    anchor = id;
-  }
-  cursor = id;
+  ({ selected, anchor, cursor } = selectRows({ selected, anchor }, visible().map(r => r.d.id), id, how));
   layout();
 }
 const openDone = d => d?.status === 'done' && run([[d.id, 'open']]);
@@ -516,21 +523,16 @@ $('#list').onclick = e => {
 };
 $('#list').ondblclick = e => { const tr = e.target.closest('tr'); if (tr) openDone(rows.get(tr.dataset.id)?.d); };
 $('#list').onkeydown = e => {
-  const v = visible().map(r => r.d.id), i = v.indexOf(cursor);
-  const move = j => {
-    const id = v[Math.max(0, Math.min(v.length - 1, j))];
-    select(id, e.shiftKey ? 'range' : e.ctrlKey ? 'move' : 'only');
-    rows.get(id).tr.focus();
-  };
+  const v = visible().map(r => r.d.id), to = keyTarget(e.key, v, cursor);
   if (!v.length) return;
-  if (e.key === 'ArrowDown') move(i + 1);
-  else if (e.key === 'ArrowUp') move(i - 1);
-  else if (e.key === 'Home') move(0);
-  else if (e.key === 'End') move(v.length - 1);
+  if (to != null) {
+    select(to, e.shiftKey ? 'range' : e.ctrlKey ? 'move' : 'only');
+    rows.get(to).tr.focus();
+  }
   else if (e.key === ' ' && cursor) select(cursor, 'toggle');
   else if (e.key === 'Enter') openDone(rows.get(cursor)?.d);
   else if (e.key === 'Delete') del();
-  else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { v.forEach(id => selected.add(id)); layout(); }
+  else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { selected = selectAll(selected, v); layout(); }
   else return;
   e.preventDefault();
 };
