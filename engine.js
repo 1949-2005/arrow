@@ -167,6 +167,13 @@ export class Manager {
     this.pump();
   }
 
+  // Tray "Pause all": running and waiting downloads. Scheduled ones keep their start time.
+  pauseAll() {
+    for (const d of this.list) if (['downloading', 'queued'].includes(d.status)) d.status = 'paused';
+    for (const ctl of this.running.values()) ctl.ac.abort();
+    this.dirty = true;
+  }
+
   pump() {
     for (const d of this.list) {
       if (this.running.size >= this.settings.maxActive) break;

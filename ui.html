@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<div id="offline" hidden>FastDL is not running. Start it with start.cmd.</div>
+<div id="offline" hidden>FastDL is not running. Start it from the Start menu.</div>
 <header>
   <div id="countdown" role="alert" hidden><span></span> <span aria-hidden="true"></span> <button type="button">Cancel</button></div>
   <form id="add">
@@ -95,7 +95,7 @@
     <label>Start scheduled downloads at <input name="scheduleAt" type="time"></label>
     <label class="check"><input name="categories" type="checkbox"> Sort into Video, Music, Compressed, Documents, Programs folders</label>
     <label class="check"><input name="clipboard" type="checkbox"> Offer download links I copy (clipboard monitoring)</label>
-    <label class="check"><input name="startup" type="checkbox"> Start with Windows (minimized)</label>
+    <label class="check"><input name="startup" type="checkbox"> Start with Windows (in the tray)</label>
     <menu><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></menu>
   </form>
 </dialog>
@@ -313,6 +313,11 @@ $('#offerNo').onclick = () => offer(null);
 const whenDone = value => api('/api/settings', { whenDone: value }).then(refresh, e => alert(e.message));
 $('#whenDone').onchange = e => whenDone(e.target.value);
 $('#countdown button').onclick = () => whenDone('');
+
+// One window at a time: "Open" in the tray starts a new app window, and the browser can't bring an old one to the front, so old ones close.
+const windows = new BroadcastChannel('fastdl-window');
+windows.onmessage = () => window.close();
+windows.postMessage('opened');
 
 refresh().then(() => checkClipboard());
 setInterval(refresh, 700);

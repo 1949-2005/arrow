@@ -5,14 +5,50 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 ## Requirements
 
 - Windows 10 or 11.
-- Node.js 20.3 or newer. To check, open a command window and type `node --version`.
-- Brave, Google Chrome or Microsoft Edge, for the browser extension.
+- Node.js 20.3 or newer, to install FastDL. To check, open a command window and type `node --version`.
+- Brave, Google Chrome or Microsoft Edge. FastDL opens its window in the first one it finds (else in your default browser), and the browser extension needs one of them.
 
-## Start and stop
+## Install
 
-- Double-click `start.cmd`. It starts the app in a small, minimized console window and opens the FastDL window in Brave, Chrome or Edge (the first one it finds), or else in your default browser.
-- Other way: run `npm start` in this folder, then open http://127.0.0.1:9614 in your browser.
-- To quit, close the minimized "FastDL" console window, or press Ctrl+C in it.
+- Double-click `install.cmd`. Wait about 10 seconds.
+- It makes `FastDL.exe` in this folder (about 90 MB: it carries its own copy of Node.js), puts FastDL in the Start menu and on the desktop, and starts FastDL.
+- FastDL stays in this folder. Do not move the folder after you install. If you must move it, uninstall first, move it, then install again.
+- If FastDL is running, `install.cmd` asks you to quit it first.
+
+## Start
+
+- Click FastDL in the Start menu, or double-click the FastDL icon on the desktop.
+- The FastDL window opens, and the FastDL icon appears next to the clock.
+- On Windows 11, a new icon may be hidden under the **^** arrow next to the clock. Drag it to the taskbar to always see it.
+- Start FastDL again while it runs: it only opens its window again.
+
+## Close and quit
+
+- Close the window: FastDL keeps running next to the clock, like IDM. Downloads go on.
+- Click the icon next to the clock to open the window again.
+- Right-click the icon for the menu:
+  - **Open FastDL** opens the window.
+  - **Pause all** pauses the downloads that run or wait. Scheduled downloads keep their start time.
+  - **Quit** stops FastDL. Unfinished downloads continue the next time you start it.
+
+## Uninstall
+
+- Quit FastDL first (right-click the icon next to the clock, then Quit).
+- Double-click `uninstall.cmd`.
+- It removes the Start menu and desktop shortcuts, the Start with Windows shortcut, and `FastDL.exe`.
+- Your downloaded files stay. `state.json` (the download list and settings) stays too. Delete the folder if you want it all gone.
+
+## Your own name and logo
+
+- `brand.json` holds the app's name and its logo file. The logo is a PNG, best square and 256 × 256 pixels or bigger.
+- The name and logo are used for the exe, the window title, the window and taskbar icon, the icon next to the clock, the shortcuts and the file properties.
+- To change them: quit the app, edit `brand.json` or replace the PNG, then double-click `install.cmd` again. It removes the shortcuts with the old name.
+- The name may use letters, digits, spaces and `. _ ( ) + ! -` (40 at most).
+
+## Updates
+
+- After you update FastDL's files, quit FastDL and start it again. No new install is needed.
+- Run `install.cmd` again only after you change `brand.json` or the logo, or after you update Node.js.
 
 ## Install the browser extension
 
@@ -74,8 +110,9 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - Browser cookies are passed along, so downloads that need a login work.
 - Batch links with number ranges, like `img[001-120].jpg`.
 - Clipboard monitoring (off by default).
-- Start with Windows (off by default): FastDL starts minimized when you sign in to Windows.
+- Start with Windows (off by default): FastDL starts next to the clock when you sign in to Windows, without opening its window.
 - Sleep or shut down the PC when all downloads finish, after a countdown you can cancel.
+- A real Windows app: `FastDL.exe` with its own icon, no console window, Start menu and desktop shortcuts, and an icon next to the clock with Open, Pause all and Quit.
 
 ## Settings
 
@@ -88,7 +125,7 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 | Start scheduled downloads at (HH:MM) | empty (off) |
 | Sort into folders by type | on |
 | Offer download links I copy (clipboard monitoring) | off |
-| Start with Windows (minimized) | off |
+| Start with Windows (in the tray) | off |
 
 ## Limits
 
@@ -96,7 +133,9 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - No DRM-protected video.
 - No torrents and no FTP.
 - No proxy settings.
-- No tray icon.
+- `FastDL.exe` is not signed. If Windows Smart App Control is on, it may block FastDL.
+- The browser extension keeps the name FastDL. `brand.json` does not change it.
+- If FastDL stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
 - Clipboard monitoring only looks at the clipboard when you switch to the FastDL window, not while you work in other windows. It only offers links that end in a file type from the sorting folders (Video, Music, Compressed, Documents, Programs).
 - Sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video is saved as .ts. Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
@@ -116,4 +155,6 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 ## For developers
 
 - `npm test` runs all tests. No internet is needed.
+- `npm start` runs only the server (no window, no icon next to the clock). Then open http://127.0.0.1:9614.
+- `node desktop.js` runs the whole app without `FastDL.exe`.
 - See `CLAUDE.md`, `docs/SPEC.md` and `filemap.md`.

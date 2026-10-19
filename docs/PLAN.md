@@ -12,11 +12,15 @@
 2. **Test extension with stubbed browser APIs** — Medium. `extension.test.js` driving background.js with fake `chrome`/`fetch`. Fixed: googlevideo HLS manifests were remembered; tab cleanup raced with in-flight `remember()`. Status: done
 3. **Write README** — Light, after 1 and 2. Status: done
 4. **Most-missed IDM features** — Medium. Batch links (`[001-120]`, max 1000, count shown first), clipboard monitoring (page reads the clipboard on focus, offers only), Start with Windows (Startup-folder shortcut, minimized server), sleep/shut down when all downloads finish (60 s countdown, Cancel, used once). Status: done (7 new tests; the new `ui.test.js` runs the UI's helper script)
+5. **Real Windows desktop app** — Careful. `<name>.exe` as a Node single executable app built without npm tools (UpdateResource via PowerShell, fuse and GUI-subsystem patch), logo icons and version info from `brand.json`, tray icon (Open / Pause all / Quit), one instance, one window, install/uninstall with Start menu and desktop shortcuts, Start with Windows through the exe. `start.cmd` removed. Status: done (14 new tests, including a real build in a temp folder; the exe was also run by hand on an isolated port)
 
 ## Known gaps (not planned)
 - popup.js has no automated test; the extension was never loaded in a real browser.
 - The real sleep and shutdown commands never run in tests (a recorder stands in for `Manager.power`). Only the countdown logic is tested, plus a manual check that the .NET sleep method resolves.
 - Clipboard monitoring depends on the browser's clipboard permission and on the window getting focus; it is not tested in Firefox.
-- The Startup shortcut points at the current `node.exe` and app folder: after moving the folder or reinstalling Node, turn the setting off and on again.
+- The shortcuts point at the exe in the app folder: after moving the folder, uninstall and install again.
+- The tray menu was not clicked in an automated test (the routes it calls are tested), and the "older windows close" step was not tried in a real Brave window.
+- The browser extension is not branded by `brand.json` (manifest name, popup and context menu say FastDL).
+- A crash after startup leaves no trace: the exe has no console and writes no log file.
 - HLS playlist bodies and `#EXT-X-MAP` byte ranges are not covered by the stall watchdog / byte-range refusal.
 - `Retry-After` as an HTTP date is ignored (default backoff).

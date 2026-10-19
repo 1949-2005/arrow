@@ -154,6 +154,18 @@ test('pause, restart the app, resume: continues where it stopped', async () => {
   assert.ok(ranges.length && ranges.every(r => r && !r.startsWith('bytes=0-')), `restarted from zero: ${ranges}`);
 });
 
+test('pause all: running and queued downloads pause, scheduled ones keep their start time', async () => {
+  const m = new Manager(path.join(dir, 'pause-all.json'));
+  await m.load();
+  m.update({ dir: path.join(dir, 'out'), maxActive: 1 });
+  const running = m.add({ url: base + '/slow.bin' }), queued = m.add({ url: base + '/slow.bin' }), later = m.add({ url: base + '/slow.bin', scheduled: true });
+  await until(() => got(running) > 0);
+  assert.equal(queued.status, 'queued');
+  m.pauseAll();
+  await until(() => !m.running.size);
+  assert.deepEqual([running.status, queued.status, later.status], ['paused', 'paused', 'scheduled']);
+});
+
 test('server that allows only 2 connections: finishes with fewer instead of failing', async () => {
   const d = mgr.add({ url: base + '/limited.bin' });
   assert.equal(sha(await finished(d)), sha(data));

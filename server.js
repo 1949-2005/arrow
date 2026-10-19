@@ -1,30 +1,23 @@
 import http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
+import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, openWindow } from './desktop.js';
 
-const PORT = Number(process.env.FASTDL_PORT) || 9614;
-const here = path.dirname(fileURLToPath(import.meta.url));
 const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
 await mgr.load();
-const page = readFileSync(path.join(here, 'ui.html'));
-// FASTDL_STARTUP: tests point this at a temp folder instead of the real Startup folder
-const startupLink = path.join(process.env.FASTDL_STARTUP || path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'), 'FastDL.lnk');
-
+const page = readFileSync(path.join(here, 'ui.html'), 'utf8').replaceAll('FastDL', brand.name);
+const startupLink = path.join(startupDir, brand.name + '.lnk');
 const run = promisify(execFile);
-// Values go in as environment variables, so no path or quote can break out of the command.
-const powershell = (script, env) => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$ErrorActionPreference = "Stop"; ' + script], { env: { ...process.env, ...env }, windowsHide: true });
 
-// "Start with Windows": a Startup-folder shortcut that runs this server minimized (WindowStyle 7). The shortcut itself is the setting.
+// "Start with Windows": a Startup-folder shortcut that starts the exe in the tray. The shortcut itself is the setting.
 async function setStartup(on) {
   if (process.platform !== 'win32') throw new Error('Start with Windows only works on Windows');
   if (!on) return rm(startupLink, { force: true });
-  await powershell('$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:FDL_LINK); $s.TargetPath = $env:FDL_NODE; $s.Arguments = $env:FDL_ARGS; $s.WorkingDirectory = $env:FDL_DIR; $s.WindowStyle = 7; $s.Save()',
-    { FDL_LINK: startupLink, FDL_NODE: process.execPath, FDL_ARGS: `"${path.join(here, 'server.js')}"`, FDL_DIR: here })
+  await shortcut(startupLink, exe, '--tray')
     .catch(e => { throw new Error('could not create the Startup shortcut: ' + (e.stderr || e.message).trim().split('\n')[0]); });
 }
 
@@ -34,7 +27,7 @@ async function setStartup(on) {
 mgr.power = op => {
   console.log(`All downloads finished: ${op === 'shutdown' ? 'shutting down' : 'going to sleep'}`);
   (op === 'shutdown'
-    ? run('shutdown.exe', ['/s', '/t', '0'])
+    ? run('shutdown.exe', ['/s', '/t', '0'], { windowsHide: true })
     : powershell('Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState("Suspend", $false, $false)')
   ).catch(e => console.error(`could not ${op === 'shutdown' ? 'shut down' : 'sleep'}:`, e.message));
 };
@@ -71,6 +64,9 @@ const server = http.createServer(async (req, res) => {
   if (extension && route !== 'GET /api/ping' && route !== 'POST /api/add') return send(res, 403, { error: 'not allowed from extensions' });
   try {
     if (req.method === 'GET' && req.url === '/') return send(res, 200, page, 'text/html; charset=utf-8');
+    if (req.method === 'GET' && req.url === '/favicon.ico') { // the logo, so the app window and its taskbar button show it
+      return readFile(path.join(here, brand.logo)).then(b => send(res, 200, b, 'image/png'), () => send(res, 404, { error: 'not found' }));
+    }
     if (req.method === 'GET' && req.url === '/api/ping') return send(res, 200, { app: 'fastdl' });
     if (req.method === 'GET' && req.url === '/api/state') {
       const v = mgr.view();
@@ -79,6 +75,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
     if (req.url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
+    // The tray menu (tray.ps1)
+    if (req.url === '/api/open') { openWindow(); return send(res, 200, { ok: true }); }
+    if (req.url === '/api/pause-all') { mgr.pauseAll(); return send(res, 200, { ok: true }); }
+    if (req.url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
     if (req.url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
@@ -104,9 +104,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('error', e => {
-  console.error(e.code === 'EADDRINUSE' ? `FastDL is already running on port ${PORT}` : e.message);
+  console.error(e.code === 'EADDRINUSE' ? `${brand.name} is already running on port ${PORT}` : e.message);
   process.exit(1);
 });
-server.listen(PORT, '127.0.0.1', () => console.log(`FastDL running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`));
+server.listen(PORT, '127.0.0.1', () => console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`));
 
-for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, () => { mgr.saveSync(); process.exit(0); });
+// Running yt-dlp processes and the tray end with this process (libuv puts child processes in a job object).
+function quit() {
+  mgr.saveSync();
+  process.exit(0);
+}
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, quit);

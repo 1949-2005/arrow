@@ -4,7 +4,7 @@ const $ = s => document.querySelector(s);
 const size = n => !n ? '' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 
 const alive = await appAlive();
-$('#status').textContent = alive ? 'App is running.' : 'App is not running. Start it with start.cmd.';
+$('#status').textContent = alive ? 'App is running.' : 'App is not running. Start it from the Start menu.';
 $('#status').className = alive ? '' : 'off';
 
 const { intercept = true } = await chrome.storage.local.get('intercept');
