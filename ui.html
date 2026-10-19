@@ -5,85 +5,246 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FastDL</title>
 <style>
-  :root { --bg: #f5f6f8; --panel: #fff; --text: #1c2230; --muted: #687083; --line: #e2e5eb; --accent: #2f6fec; --done: #1d8f4e; --err: #c93a3a; --bar: #e6eaf1; }
+  :root {
+    --window: #ECECEF; --toolbar: #F6F6F8; --sidebar: #E9E9EC; --panel: #FFFFFF; --alt: #F7F7F9;
+    --line: #D9D9DE; --text: #1D1D1F; --muted: #6E6E73; --hover: rgba(0,0,0,.06);
+    --accent: #0F766E; --on-accent: #FFFFFF; --fill: #0F766E; --soft: #D6EEEA; --bar: #E2E2E7;
+    --done: #1E8E3E; --err: #D70015; --c-video: #AF52DE; --c-music: #E0245E; --c-doc: #0A6CDB; --c-zip: #D97706; --c-app: #5856D6; --c-other: #8E8E93;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #13151a; --panel: #1b1e25; --text: #e5e8ee; --muted: #959cab; --line: #2a2e38; --accent: #5b8cff; --done: #3dbb72; --err: #ff6b6b; --bar: #272b35; }
+    :root:not([data-theme="light"]) {
+      --window: #1E1E20; --toolbar: #2A2A2D; --sidebar: #252528; --panel: #1B1B1D; --alt: #212124;
+      --line: #3A3A3E; --text: #F5F5F7; --muted: #A1A1A6; --hover: rgba(255,255,255,.07);
+      --fill: #14B8A6; --soft: #12403C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
+      --c-video: #BF5AF2; --c-music: #FF375F; --c-doc: #4DA3FF; --c-zip: #FFB340; --c-app: #7D7AFF; --c-other: #98989D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --window: #1E1E20; --toolbar: #2A2A2D; --sidebar: #252528; --panel: #1B1B1D; --alt: #212124;
+    --line: #3A3A3E; --text: #F5F5F7; --muted: #A1A1A6; --hover: rgba(255,255,255,.07);
+    --fill: #14B8A6; --soft: #12403C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
+    --c-video: #BF5AF2; --c-music: #FF375F; --c-doc: #4DA3FF; --c-zip: #FFB340; --c-app: #7D7AFF; --c-other: #98989D;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  header { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
-  form#add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  h1 { font-size: 16px; margin: 0 8px 0 0; letter-spacing: .2px; }
-  input, button, select { font: inherit; color: inherit; }
-  input[type=text], input[type=number], input[type=time], select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
-  #url { flex: 1 1 280px; }
-  #name { flex: 0 1 180px; }
-  button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
-  button:hover { border-color: var(--muted); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  label.check { display: flex; gap: 6px; align-items: center; color: var(--muted); }
-  main { padding: 12px 16px 48px; }
-  .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--window); color: var(--text);
+    font: 13px/1.35 "SF Pro Text", "SF Pro", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg.s { width: 16px; height: 16px; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--fill); outline-offset: 2px; }
+
+  /* toolbar: icon above label, like IDM */
+  .toolbar { display: flex; align-items: center; gap: 2px; padding: 6px 10px; background: var(--toolbar); border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 4px; margin-right: 6px; border-right: 1px solid var(--line); }
+  .brand img { width: 26px; height: 26px; }
+  .brand b { font: 600 15px "SF Pro Display", "SF Pro", -apple-system, system-ui, sans-serif; letter-spacing: -.1px; }
+  .tool { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 64px; padding: 6px 8px 5px; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 11.5px; color: var(--text); white-space: nowrap; flex: none; }
+  .tool:hover { background: var(--hover); }
+  .tool:disabled { opacity: .38; cursor: default; background: none; }
+  .tool.primary svg { color: var(--fill); }
+  .sep { width: 1px; align-self: stretch; margin: 6px 6px; background: var(--line); flex: none; }
+
+  /* banners under the toolbar */
+  #offline { background: var(--err); color: #fff; padding: 8px 12px; flex: none; }
+  #countdown { display: flex; align-items: center; gap: 8px; background: var(--accent); color: var(--on-accent); padding: 6px 12px; font-weight: 600; flex: none; }
+  #offer { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--soft); border-bottom: 1px solid var(--line); flex: none; }
+  #offer span { word-break: break-all; }
+
+  /* sidebar + list */
+  .content { flex: 1; display: grid; grid-template-columns: 196px 1fr; min-height: 0; }
+  nav { background: var(--sidebar); border-right: 1px solid var(--line); padding: 10px 8px; overflow: auto; }
+  nav h2 { font-size: 11px; font-weight: 600; color: var(--muted); margin: 8px 8px 4px; letter-spacing: .2px; }
+  .cat { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: none; cursor: pointer; text-align: left; }
+  .cat:hover { background: var(--hover); }
+  .cat[aria-current="true"] { background: var(--soft); color: var(--text); font-weight: 600; }
+  .cat[aria-current="true"] svg { color: var(--fill); }
+  .cat .n { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 400; }
+  .listwrap { background: var(--panel); overflow: auto; min-width: 0; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  tr:last-child td { border-bottom: 0; }
-  th { font-weight: 600; color: var(--muted); font-size: 12px; }
-  td.name { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
-  td.status { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-  td.speed { white-space: normal; min-width: 90px; }
-  .progress { display: flex; align-items: center; gap: 8px; }
-  canvas { width: 140px; height: 10px; border-radius: 3px; background: var(--bar); }
-  td.actions { display: flex; gap: 4px; }
-  .muted, .queued, .paused, .scheduled { color: var(--muted); }
-  .done { color: var(--done); }
-  .error { color: var(--err); }
-  #empty { padding: 40px 16px; text-align: center; color: var(--muted); }
-  #offline { background: var(--err); color: #fff; padding: 8px 16px; }
-  #countdown { background: var(--accent); color: #fff; margin: -12px -16px 12px; padding: 8px 16px; font-weight: 600; }
-  #offer { margin-top: 10px; color: var(--muted); }
-  #offer span { color: var(--text); word-break: break-all; margin-right: 6px; }
-  footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 6px 16px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  footer select { padding: 2px 6px; }
-  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(460px, calc(100vw - 32px)); }
-  dialog h2 { margin: 0 0 12px; font-size: 16px; }
+  th { position: sticky; top: 0; z-index: 1; background: var(--panel); text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 0 10px; height: 30px; white-space: nowrap; }
+  tbody { user-select: none; }
+  tbody tr.alt { background: var(--alt); }
+  tbody tr { cursor: default; }
+  tbody tr:focus-visible { outline-offset: -2px; }
+  tbody tr[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+  tbody tr[aria-selected="true"]:focus-visible { outline-color: var(--on-accent); }
+  tbody tr[aria-selected="true"] .muted, tbody tr[aria-selected="true"] .ft, tbody tr[aria-selected="true"] .st { color: var(--on-accent) !important; }
+  td.name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+  td.stc { max-width: 300px; }
+  .fn { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .fn span { overflow: hidden; text-overflow: ellipsis; }
+  .num { text-align: right; }
+  th.num { text-align: right; }
+  .muted { color: var(--muted); }
+  .status { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .status .st { overflow: hidden; text-overflow: ellipsis; }
+  .mini { width: 90px; height: 6px; border-radius: 3px; background: var(--bar); overflow: hidden; flex: none; }
+  .mini i { display: block; height: 100%; background: var(--fill); border-radius: 3px; }
+  tr[aria-selected="true"] .mini { background: rgba(255,255,255,.3); }
+  tr[aria-selected="true"] .mini i { background: #fff; }
+  .st.done { color: var(--done); } .st.err { color: var(--err); }
+  #empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 16px; text-align: center; color: var(--muted); }
+  #empty > svg { width: 32px; height: 32px; }
+  #empty p { margin: 0; max-width: 420px; }
+
+  /* details: IDM's segment view, docked */
+  .details { display: grid; grid-template-columns: 1fr auto; gap: 6px 28px; padding: 14px 18px 14px; background: var(--toolbar); border-top: 1px solid var(--line); flex: none; }
+  .details > div:first-child { min-width: 0; }
+  .dname { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dname b { font: 600 15px "SF Pro Display", "SF Pro", -apple-system, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .durl { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+  .stats { display: grid; grid-template-columns: repeat(5, auto); gap: 2px 26px; align-content: start; margin: 0; }
+  .stats dt { font-size: 11px; color: var(--muted); }
+  .stats dd { margin: 0; font-weight: 600; }
+  .segs { grid-column: 1 / -1; position: relative; height: 14px; border-radius: 4px; background: var(--bar); overflow: hidden; margin-top: 6px; }
+  .segs i { position: absolute; top: 0; bottom: 0; background: var(--fill); border-right: 2px solid var(--toolbar); }
+  .segs.done i { background: var(--done); } .segs.error i { background: var(--err); }
+  .dact { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 4px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); cursor: pointer; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 12px; font-size: 12px; color: var(--muted); background: var(--toolbar); border-top: 1px solid var(--line); flex: none; }
+  footer select { padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(460px, calc(100vw - 32px)); padding: 18px; }
+  dialog::backdrop { background: rgba(0,0,0,.3); }
+  dialog h2 { margin: 0 0 12px; font: 600 15px "SF Pro Display", "SF Pro", -apple-system, system-ui, sans-serif; }
   dialog label { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); }
-  dialog label.check { display: flex; }
-  dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 12px 0 0; }
+  dialog label.check { display: flex; gap: 6px; align-items: center; }
+  dialog input[type=text], dialog input[type=number], dialog input[type=time], dialog select, dialog textarea { background: var(--window); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  dialog textarea { resize: vertical; min-height: 84px; }
+  dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 14px 0 0; }
+
+  @media (max-width: 819px) {
+    .content { grid-template-columns: 1fr; }
+    nav, table :is(th, td):nth-child(6) { display: none; }
+  }
+  @media (max-width: 639px) {
+    table :is(th, td):nth-child(5) { display: none; }
+    .details { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(3, auto); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-stopall" viewBox="0 0 24 24"><rect x="4" y="8" width="11" height="11" rx="2"/><path d="M9 4h9a2 2 0 0 1 2 2v9"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-clean" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="m9 13 2 2 4-4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5.5 5h13L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-app" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12l4 4 4-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+</svg>
+
 <div id="offline" hidden>FastDL is not running. Start it from the Start menu.</div>
-<header>
-  <div id="countdown" role="alert" hidden><span></span> <span aria-hidden="true"></span> <button type="button">Cancel</button></div>
-  <form id="add">
-    <h1>FastDL</h1>
-    <input id="url" type="text" placeholder="Paste one or more links (or drop them on this window)" aria-label="Download links" required>
-    <select id="quality" aria-label="Video quality" hidden>
-      <option value="best">Best quality</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option><option value="mp3">MP3 (audio only)</option>
-    </select>
-    <input id="name" type="text" placeholder="Save as (optional)" aria-label="Save as">
-    <label class="check"><input id="later" type="checkbox"> Schedule</label>
-    <button class="primary">Download</button>
-    <button type="button" id="openSettings">Settings</button>
-  </form>
-  <div id="offer" hidden>Download? <span></span> <button type="button" id="offerYes" class="primary">Download</button> <button type="button" id="offerNo">Dismiss</button></div>
-</header>
-<main>
-  <div class="wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Size</th><th>Progress</th><th>Speed</th><th>Time left</th><th>Status</th><th>Actions</th></tr></thead>
+<div class="toolbar" role="toolbar" aria-label="Downloads">
+  <div class="brand"><img src="/favicon.ico" alt=""><b>FastDL</b></div>
+  <button class="tool primary" id="tAdd"><svg class="i"><use href="#i-plus"/></svg>Add URL</button>
+  <button class="tool" id="tResume"><svg class="i"><use href="#i-play"/></svg>Resume</button>
+  <button class="tool" id="tStop"><svg class="i"><use href="#i-stop"/></svg>Stop</button>
+  <button class="tool" id="tStopAll"><svg class="i"><use href="#i-stopall"/></svg>Stop all</button>
+  <div class="sep"></div>
+  <button class="tool" id="tDelete"><svg class="i"><use href="#i-trash"/></svg>Delete</button>
+  <button class="tool" id="tClean"><svg class="i"><use href="#i-clean"/></svg>Delete completed</button>
+  <div class="sep"></div>
+  <button class="tool" id="tOptions"><svg class="i"><use href="#i-sliders"/></svg>Options</button>
+  <button class="tool" id="tScheduler"><svg class="i"><use href="#i-clock"/></svg>Scheduler</button>
+</div>
+<div id="countdown" role="alert" hidden><span></span> <span aria-hidden="true"></span> <button type="button" class="btn">Cancel</button></div>
+<div id="offer" hidden>Download? <span></span> <button type="button" id="offerYes" class="btn primary">Download</button> <button type="button" id="offerNo" class="btn">Dismiss</button></div>
+
+<div class="content">
+  <nav aria-label="Categories">
+    <h2>CATEGORIES</h2>
+    <button class="cat" data-filter="all"><svg class="i s"><use href="#i-inbox"/></svg>All downloads<span class="n"></span></button>
+    <button class="cat" data-filter="Compressed"><svg class="i s" style="color:var(--c-zip)"><use href="#i-zip"/></svg>Compressed<span class="n"></span></button>
+    <button class="cat" data-filter="Documents"><svg class="i s" style="color:var(--c-doc)"><use href="#i-doc"/></svg>Documents<span class="n"></span></button>
+    <button class="cat" data-filter="Music"><svg class="i s" style="color:var(--c-music)"><use href="#i-music"/></svg>Music<span class="n"></span></button>
+    <button class="cat" data-filter="Programs"><svg class="i s" style="color:var(--c-app)"><use href="#i-app"/></svg>Programs<span class="n"></span></button>
+    <button class="cat" data-filter="Video"><svg class="i s" style="color:var(--c-video)"><use href="#i-video"/></svg>Video<span class="n"></span></button>
+    <button class="cat" data-filter="Other"><svg class="i s" style="color:var(--c-other)"><use href="#i-file"/></svg>Other<span class="n"></span></button>
+    <h2>STATUS</h2>
+    <button class="cat" data-filter="unfinished"><svg class="i s"><use href="#i-down"/></svg>Unfinished<span class="n"></span></button>
+    <button class="cat" data-filter="finished"><svg class="i s"><use href="#i-check"/></svg>Finished<span class="n"></span></button>
+    <button class="cat" data-filter="scheduled"><svg class="i s"><use href="#i-clock"/></svg>Scheduled<span class="n"></span></button>
+  </nav>
+
+  <div class="listwrap">
+    <table role="grid" aria-multiselectable="true" aria-label="Downloads">
+      <thead><tr><th>File name</th><th class="num">Size</th><th>Status</th><th class="num">Time left</th><th class="num">Transfer rate</th><th>Date added</th></tr></thead>
       <tbody id="list"></tbody>
     </table>
-    <div id="empty">No downloads yet. Paste a link above, or install the browser extension to catch downloads and videos.</div>
+    <div id="empty" hidden>
+      <svg class="i" aria-hidden="true"><use href="#i-down"/></svg>
+      <p></p>
+      <button type="button" class="btn primary" id="emptyAdd"><svg class="i s" aria-hidden="true"><use href="#i-plus"/></svg>Add URL</button>
+    </div>
   </div>
-</main>
+</div>
+
+<section class="details" aria-label="Selected download">
+  <div>
+    <div class="dname" id="dHead"><svg class="i" id="dIcon" aria-hidden="true"><use href="#i-file"/></svg><b id="dName"></b></div>
+    <div class="durl" id="dUrl"></div>
+  </div>
+  <dl class="stats" id="dStats">
+    <div><dt>Downloaded</dt><dd></dd></div>
+    <div><dt>Transfer rate</dt><dd></dd></div>
+    <div><dt>Time left</dt><dd></dd></div>
+    <div><dt>Connections</dt><dd></dd></div>
+    <div><dt>Resume</dt><dd></dd></div>
+  </dl>
+  <div class="segs" id="dSegs" aria-hidden="true"></div>
+  <div class="dact" id="dAct">
+    <button type="button" class="btn" id="dOpen"><svg class="i s" aria-hidden="true"><use href="#i-open"/></svg>Open</button>
+    <button type="button" class="btn" id="dFolder"><svg class="i s" aria-hidden="true"><use href="#i-folder"/></svg>Show in folder</button>
+    <button type="button" class="btn" id="dLink">Change link</button>
+  </div>
+</section>
+
 <footer>
   <span id="total"></span>
   <label>When all downloads finish
     <select id="whenDone"><option value="">Do nothing</option><option value="sleep">Sleep</option><option value="shutdown">Shut down</option></select>
   </label>
 </footer>
+
+<dialog id="addDlg" aria-labelledby="addTitle">
+  <form id="add">
+    <h2 id="addTitle">Add URL</h2>
+    <label>Links <textarea id="url" rows="4" required placeholder="One or more links. img[001-120].jpg adds img001.jpg to img120.jpg."></textarea></label>
+    <label id="qualityRow" hidden>Quality
+      <select id="quality">
+        <option value="best">Best quality</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option><option value="mp3">MP3 (audio only)</option>
+      </select>
+    </label>
+    <label>Save as <input id="name" type="text" placeholder="Optional, for a single link"></label>
+    <label class="check"><input id="later" type="checkbox"> Start later (scheduled)</label>
+    <menu><button type="button" class="btn" id="addCancel">Cancel</button><button class="btn primary">Download</button></menu>
+  </form>
+</dialog>
 
 <dialog id="settings">
   <form method="dialog">
@@ -96,7 +257,7 @@
     <label class="check"><input name="categories" type="checkbox"> Sort into Video, Music, Compressed, Documents, Programs folders</label>
     <label class="check"><input name="clipboard" type="checkbox"> Offer download links I copy (clipboard monitoring)</label>
     <label class="check"><input name="startup" type="checkbox"> Start with Windows (in the tray)</label>
-    <menu><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></menu>
+    <menu><button value="cancel" formnovalidate class="btn">Cancel</button><button value="save" class="btn primary">Save</button></menu>
   </form>
 </dialog>
 
@@ -132,15 +293,43 @@ function clipboardLink(text, exts) {
     return null;
   }
 }
+
+// Sidebar category: from the file extension (engine.js CATEGORIES, sent as state.categories), else Other.
+// YouTube downloads are Video, or Music as MP3; HLS is always Video.
+function category(d, categories) {
+  if (d.kind === 'video') return d.quality === 'mp3' ? 'Music' : 'Video';
+  if (d.kind === 'hls') return 'Video';
+  const ext = /\.(\w+)$/.exec(d.file || d.name || String(d.url).split(/[?#]/)[0])?.[1].toLowerCase();
+  return Object.keys(categories).find(c => categories[c].includes(ext)) ?? 'Other';
+}
+
+// "Date added" column: "Today 14:05", "Yesterday", else a short date (with the year when it is not this year).
+function dateLabel(ts, now = Date.now()) {
+  if (!ts) return '';
+  const t = new Date(ts), n = new Date(now), pad = v => String(v).padStart(2, '0');
+  const day = (y, m, d) => new Date(y, m, d).getTime();
+  const tDay = day(t.getFullYear(), t.getMonth(), t.getDate());
+  if (tDay === day(n.getFullYear(), n.getMonth(), n.getDate())) return `Today ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  if (tDay === day(n.getFullYear(), n.getMonth(), n.getDate() - 1)) return 'Yesterday';
+  return t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(t.getFullYear() !== n.getFullYear() && { year: 'numeric' }) });
+}
 </script>
 <script>
 const $ = s => document.querySelector(s);
-const rows = new Map();
+const rows = new Map(); // id → row parts, in list order
 const seen = new Map();
-let state = { downloads: [], settings: {} };
+const selected = new Set();
+let anchor = null, cursor = null; // Shift range start; the row that holds the list's tab stop
+let state = { downloads: [], settings: {}, categories: {} };
+let filter = 'all';
+try { filter = localStorage.getItem('fastdl-filter') || 'all'; } catch {}
+if (!document.querySelector(`.cat[data-filter="${CSS.escape(filter)}"]`)) filter = 'all';
 const LABEL = { queued: 'Queued', downloading: 'Downloading', paused: 'Paused', done: 'Complete', scheduled: 'Scheduled', removed: 'Removing' };
 const PHASE = { video: 'Downloading video', audio: 'Downloading audio', merging: 'Merging', converting: 'Converting to MP3' };
+const ICON = { Video: ['video', 'c-video'], Music: ['music', 'c-music'], Compressed: ['zip', 'c-zip'], Documents: ['doc', 'c-doc'], Programs: ['app', 'c-app'], Other: ['file', 'c-other'] };
 const isYouTube = u => /^https?:\/\/((www|m|music)\.)?youtube\.com\/|^https?:\/\/youtu\.be\//i.test(u);
+const canResume = d => ['paused', 'error', 'scheduled'].includes(d.status);
+const canStop = d => ['downloading', 'queued', 'scheduled'].includes(d.status);
 
 async function api(path, body) {
   const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -149,76 +338,76 @@ async function api(path, body) {
   return j;
 }
 const size = n => n == null || !isFinite(n) ? '?' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
-const time = s => !isFinite(s) ? '' : s < 60 ? Math.ceil(s) + 's' : s < 3600 ? Math.floor(s / 60) + 'm ' + Math.floor(s % 60) + 's' : Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm';
+const time = s => !isFinite(s) ? '' : s < 60 ? Math.ceil(s) + ' s' : s < 3600 ? Math.floor(s / 60) + ' min ' + Math.floor(s % 60) + ' s' : Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min';
 const total = d => d.kind === 'hls' && d.status !== 'done' ? (d.hls?.done ? d.hls.bytes / d.hls.done * d.hls.total : null) : d.size;
 const fraction = d => d.status === 'done' ? 1 : d.kind === 'hls' ? (d.hls ? d.hls.done / d.hls.total : 0) : d.size ? d.got / d.size : 0;
 const shortName = d => d.name || (d.kind === 'video' ? 'YouTube video' : decodeURIComponent(d.url.split('?')[0].split('/').pop()) || d.url);
+const eta = d => { const t = total(d); return d.status === 'downloading' && d.speed && t ? time((t - d.got) / d.speed) : ''; };
+const plural = n => n === 1 ? '1 download' : `${n} downloads`;
+const setIcon = (svg, cat) => { svg.firstChild.setAttribute('href', '#i-' + ICON[cat][0]); svg.style.color = `var(--${ICON[cat][1]})`; };
+const picked = () => state.downloads.filter(d => selected.has(d.id));
+const visible = () => [...rows.values()].filter(r => !r.tr.hidden);
+const narrow = matchMedia('(max-width: 819px)'); // the sidebar is hidden there, so its filter must not hide rows
+const matches = (r, f) => f === 'all' || (f === 'unfinished' ? r.d.status !== 'done' : f === 'finished' ? r.d.status === 'done' : f === 'scheduled' ? r.d.status === 'scheduled' : r.cat === f);
 
-function draw(canvas, d) {
-  const w = canvas.width = canvas.clientWidth * devicePixelRatio, h = canvas.height = canvas.clientHeight * devicePixelRatio;
-  const g = canvas.getContext('2d');
-  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(d.status === 'done' ? '--done' : d.status === 'error' ? '--err' : '--accent');
-  // one bar per connection, like IDM's segment view
-  if (d.segments && d.size && d.kind !== 'hls') for (const [start, , pos] of d.segments) g.fillRect(start / d.size * w, 0, Math.max(1, (pos - start) / d.size * w), h);
-  else g.fillRect(0, 0, fraction(d) * w, h);
+// Status column: [text, class, bar fraction or null]
+function status(d) {
+  const pct = Math.floor(fraction(d) * 1000) / 10 + '%';
+  if (d.status === 'error') return ['Error: ' + d.error, 'err', null];
+  if (d.status === 'done') return ['Complete', 'done', null];
+  if (d.status === 'downloading') return [PHASE[d.phase] || pct, '', fraction(d)];
+  if (d.status === 'paused') return ['Paused · ' + pct, '', fraction(d)];
+  return [LABEL[d.status], 'muted', null];
 }
 
-function button(text, onclick) {
-  const b = document.createElement('button');
-  b.textContent = text;
-  b.onclick = onclick;
-  return b;
-}
-
-function actions(cell, d) {
-  const act = (op, extra) => api('/api/action', { id: d.id, op, ...extra }).then(refresh, e => alert(e.message));
-  const list = [];
-  if (['downloading', 'queued', 'scheduled'].includes(d.status)) list.push(button('Pause', () => act('pause')));
-  if (['paused', 'error', 'scheduled'].includes(d.status)) list.push(button(d.status === 'scheduled' ? 'Start now' : 'Resume', () => act('resume')));
-  if (['paused', 'error'].includes(d.status) && d.kind !== 'video') list.push(button('Change link', () => {
-    const url = prompt('New link for the same file (when the old one expired):', d.url);
-    if (url) act('url', { url });
-  }));
-  if (d.status === 'done') list.push(button('Open', () => act('open')));
-  if (d.file) list.push(button('Folder', () => act('folder')));
-  list.push(button('Remove', () => {
-    if (!confirm(`Remove "${shortName(d)}" from the list?`)) return;
-    act(d.status === 'done' && confirm('Also delete the downloaded file from disk?') ? 'removeFile' : 'remove');
-  }));
-  cell.replaceChildren(...list);
+// Run actions one after the other, then show the new state.
+async function run(ops) {
+  try { for (const [id, op, extra] of ops) await api('/api/action', { id, op, ...extra }); } catch (e) { alert(e.message); }
+  refresh();
 }
 
 function render(st) {
   const ids = new Set(st.downloads.map(d => d.id));
-  for (const [id, r] of rows) if (!ids.has(id)) { r.tr.remove(); rows.delete(id); }
+  let lostFocus = false;
+  for (const [id, r] of rows) if (!ids.has(id)) {
+    lostFocus ||= r.tr.contains(document.activeElement);
+    r.tr.remove(); rows.delete(id); selected.delete(id);
+    if (cursor === id) cursor = null;
+  }
   for (const d of st.downloads) {
     let r = rows.get(d.id);
     if (!r) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td class="name"></td><td></td><td><div class="progress"><canvas aria-hidden="true"></canvas><span class="muted"></span></div></td><td class="speed"></td><td></td><td class="status"></td><td class="actions"></td>';
-      r = { tr, canvas: tr.querySelector('canvas'), pct: tr.querySelector('.progress span') };
+      tr.dataset.id = d.id;
+      tr.innerHTML = '<td class="name"><div class="fn"><svg class="i s ft" aria-hidden="true"><use/></svg><span></span></div></td><td class="num"></td>'
+        + '<td class="stc"><div class="status"><div class="mini"><i></i></div><span class="st"></span></div></td><td class="num"></td><td class="num"></td><td class="muted"></td>';
+      const c = tr.children;
+      r = { tr, icon: c[0].querySelector('svg'), name: c[0].querySelector('span'), size: c[1], mini: c[2].querySelector('.mini'), st: c[2].querySelector('.st'), eta: c[3], rate: c[4], date: c[5] };
       rows.set(d.id, r);
       $('#list').append(tr);
     }
-    const [name, sz, , speed, eta, status, acts] = r.tr.children;
+    r.d = d;
+    const cat = category(d, st.categories);
+    if (r.cat !== cat) setIcon(r.icon, r.cat = cat);
+    r.name.textContent = shortName(d);
+    r.tr.title = d.file || d.url;
     const t = total(d);
-    name.textContent = shortName(d);
-    name.title = d.file || d.url;
-    sz.textContent = d.status === 'done' ? size(d.size) : `${size(d.got)} / ${size(t && Math.round(t))}`;
-    r.pct.textContent = Math.floor(fraction(d) * 1000) / 10 + '%';
-    speed.textContent = d.status !== 'downloading' ? '' : size(d.speed) + '/s'
-      + (d.connections > 1 ? ` · ${d.connections} conn.` : '') + (d.resumable === false ? ' · no resume' : '');
-    eta.textContent = d.status === 'downloading' && d.speed && t ? time((t - d.got) / d.speed) : '';
-    status.textContent = d.status === 'error' ? 'Error: ' + d.error : d.status === 'downloading' && PHASE[d.phase] || LABEL[d.status];
-    status.title = d.error || '';
-    status.className = 'status ' + d.status;
-    const key = d.status + !!d.file;
-    if (r.key !== key) { r.key = key; actions(acts, d); }
-    draw(r.canvas, d);
+    r.size.textContent = t == null ? '' : size(Math.round(t));
+    const [text, cls, bar] = status(d);
+    r.st.textContent = text;
+    r.st.className = 'st ' + cls;
+    r.st.title = d.error || '';
+    r.mini.hidden = bar == null;
+    if (bar != null) r.mini.firstChild.style.width = bar * 100 + '%';
+    r.eta.textContent = eta(d);
+    r.rate.textContent = d.status === 'downloading' ? size(d.speed) + '/s' : '';
+    r.date.textContent = dateLabel(d.added);
     if (seen.get(d.id) === 'downloading' && d.status === 'done' && window.Notification?.permission === 'granted') new Notification('Download complete', { body: shortName(d) });
     seen.set(d.id, d.status);
   }
-  $('#empty').hidden = st.downloads.length > 0;
+  layout();
+  if (lostFocus && cursor) rows.get(cursor).tr.focus(); // a deleted row had focus: keep it in the list
+
   const active = st.downloads.filter(d => d.status === 'downloading');
   $('#total').textContent = `${active.length} downloading · ${size(active.reduce((a, d) => a + d.speed, 0))}/s`
     + (st.settings.speedLimitKB ? ` · limit ${st.settings.speedLimitKB} KB/s` : '')
@@ -238,30 +427,169 @@ function render(st) {
   if (st.whenDone !== shownWhenDone) $('#whenDone').value = shownWhenDone = st.whenDone;
 }
 
+// Filter, stripes, selection marks, counts, empty state, details and toolbar: everything that depends on the selection.
+function layout() {
+  let n = 0;
+  for (const [id, r] of rows) {
+    const show = matches(r, narrow.matches ? 'all' : filter);
+    r.tr.hidden = !show;
+    if (show) r.tr.classList.toggle('alt', n++ % 2 === 1);
+    else selected.delete(id);
+    r.tr.setAttribute('aria-selected', selected.has(id));
+  }
+  if (!rows.get(cursor) || rows.get(cursor).tr.hidden) cursor = visible()[0]?.d.id ?? null;
+  for (const [id, r] of rows) r.tr.tabIndex = id === cursor ? 0 : -1;
+  for (const b of document.querySelectorAll('.cat')) {
+    b.setAttribute('aria-current', b.dataset.filter === filter);
+    b.querySelector('.n').textContent = [...rows.values()].filter(r => matches(r, b.dataset.filter)).length;
+  }
+  $('#empty').hidden = n > 0;
+  $('#empty p').textContent = rows.size ? 'No downloads here.' : 'No downloads yet. Add a link, drop links on this window, or install the browser extension to catch downloads and videos.';
+  details();
+  const sel = picked();
+  $('#tResume').disabled = !sel.some(canResume);
+  $('#tStop').disabled = !sel.some(canStop);
+  $('#tStopAll').disabled = !state.downloads.some(d => ['downloading', 'queued'].includes(d.status));
+  $('#tDelete').disabled = !sel.length;
+  $('#tClean').disabled = !state.downloads.some(d => d.status === 'done');
+}
+
+function details() {
+  const sel = picked(), d = sel.length === 1 && sel[0];
+  $('#dHead').hidden = !sel.length;
+  $('#dIcon').hidden = $('#dStats').hidden = $('#dSegs').hidden = $('#dAct').hidden = !d;
+  if (!d) {
+    $('#dName').textContent = sel.length + ' downloads selected';
+    $('#dUrl').textContent = sel.length ? 'Total size ' + size(sel.reduce((a, x) => a + (total(x) ?? 0), 0)) : 'Select a download to see its details.';
+    return;
+  }
+  setIcon($('#dIcon'), category(d, state.categories));
+  $('#dName').textContent = shortName(d);
+  $('#dUrl').textContent = `${d.url} · Saved to ${d.file ? d.file.replace(/[\\/][^\\/]*$/, '') : state.settings.dir}`;
+  $('#dUrl').title = d.url;
+  const t = total(d), running = d.status === 'downloading';
+  const dd = $('#dStats').querySelectorAll('dd');
+  dd[0].textContent = `${size(d.got)} of ${size(t && Math.round(t))}`;
+  dd[1].textContent = running ? size(d.speed) + '/s' : '—';
+  dd[2].textContent = eta(d) || '—';
+  dd[3].textContent = running ? d.connections : '—';
+  dd[4].textContent = d.resumable === true ? 'Yes' : d.resumable === false ? 'No' : '—';
+  // one piece per connection, like IDM's segment view; HLS and video get one fill
+  const pieces = d.status !== 'done' && d.segments && d.size && d.kind !== 'hls' ? d.segments.map(([start, , pos]) => [start / d.size, (pos - start) / d.size]) : [[0, fraction(d)]];
+  const html = pieces.map(([a, w]) => `<i style="left:${a * 100}%;width:max(1px, ${w * 100}%)"></i>`).join('');
+  const segs = $('#dSegs');
+  segs.className = 'segs ' + d.status;
+  if (segs.dataset.html !== html) segs.innerHTML = segs.dataset.html = html;
+  $('#dOpen').hidden = d.status !== 'done';
+  $('#dFolder').hidden = !d.file;
+  $('#dLink').hidden = !['paused', 'error'].includes(d.status) || d.kind === 'video';
+  $('#dAct').hidden = $('#dOpen').hidden && $('#dFolder').hidden && $('#dLink').hidden;
+}
+
 function refresh() {
   return api('/api/state').then(st => { state = st; $('#offline').hidden = true; render(st); }, () => { $('#offline').hidden = false; });
 }
+
+// Selection, like a file list: how = 'only' | 'toggle' | 'range' (from the anchor) | 'move' (only the cursor moves)
+function select(id, how) {
+  const v = visible().map(r => r.d.id), a = v.indexOf(anchor);
+  if (how === 'range' && a >= 0) {
+    const b = v.indexOf(id);
+    selected.clear();
+    for (const x of v.slice(Math.min(a, b), Math.max(a, b) + 1)) selected.add(x);
+  } else if (how === 'toggle') {
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    anchor = id;
+  } else if (how !== 'move') {
+    selected.clear();
+    selected.add(id);
+    anchor = id;
+  }
+  cursor = id;
+  layout();
+}
+const openDone = d => d?.status === 'done' && run([[d.id, 'open']]);
+
+$('#list').onclick = e => {
+  const tr = e.target.closest('tr');
+  if (tr) select(tr.dataset.id, e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'only');
+};
+$('#list').ondblclick = e => { const tr = e.target.closest('tr'); if (tr) openDone(rows.get(tr.dataset.id)?.d); };
+$('#list').onkeydown = e => {
+  const v = visible().map(r => r.d.id), i = v.indexOf(cursor);
+  const move = j => {
+    const id = v[Math.max(0, Math.min(v.length - 1, j))];
+    select(id, e.shiftKey ? 'range' : e.ctrlKey ? 'move' : 'only');
+    rows.get(id).tr.focus();
+  };
+  if (!v.length) return;
+  if (e.key === 'ArrowDown') move(i + 1);
+  else if (e.key === 'ArrowUp') move(i - 1);
+  else if (e.key === 'Home') move(0);
+  else if (e.key === 'End') move(v.length - 1);
+  else if (e.key === ' ' && cursor) select(cursor, 'toggle');
+  else if (e.key === 'Enter') openDone(rows.get(cursor)?.d);
+  else if (e.key === 'Delete') del();
+  else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { v.forEach(id => selected.add(id)); layout(); }
+  else return;
+  e.preventDefault();
+};
+
+narrow.onchange = layout;
+for (const b of document.querySelectorAll('.cat')) b.onclick = () => {
+  filter = b.dataset.filter;
+  try { localStorage.setItem('fastdl-filter', filter); } catch {}
+  layout();
+};
+
+function del() {
+  const list = picked();
+  if (!list.length || !confirm(`Remove ${plural(list.length)} from the list?`)) return;
+  const files = list.some(d => d.status === 'done') && confirm('Also delete the downloaded files from disk?');
+  run(list.map(d => [d.id, files && d.status === 'done' ? 'removeFile' : 'remove']));
+}
+$('#tResume').onclick = () => run(picked().filter(canResume).map(d => [d.id, 'resume']));
+$('#tStop').onclick = () => run(picked().filter(canStop).map(d => [d.id, 'pause']));
+$('#tStopAll').onclick = () => api('/api/pause-all', {}).then(refresh, e => alert(e.message));
+$('#tDelete').onclick = del;
+$('#tClean').onclick = () => {
+  const done = state.downloads.filter(d => d.status === 'done');
+  if (done.length && confirm(`Remove ${done.length} finished downloads from the list? The files stay on disk.`)) run(done.map(d => [d.id, 'remove']));
+};
+const one = () => { const s = picked(); return s.length === 1 ? s[0] : null; };
+$('#dOpen').onclick = () => openDone(one());
+$('#dFolder').onclick = () => { const d = one(); if (d) run([[d.id, 'folder']]); };
+$('#dLink').onclick = () => {
+  const d = one();
+  const url = d && prompt('New link for the same file (when the old one expired):', d.url);
+  if (url) run([[d.id, 'url', { url }]]);
+};
+
+const addDlg = $('#addDlg');
+$('#tAdd').onclick = $('#emptyAdd').onclick = () => addDlg.showModal();
+$('#addCancel').onclick = () => addDlg.close();
 
 async function add(urls) {
   if (window.Notification?.permission === 'default') Notification.requestPermission();
   const name = urls.length === 1 ? $('#name').value.trim() : '';
   for (const url of urls) {
     try { await api('/api/add', { url, name: name || undefined, scheduled: $('#later').checked, quality: isYouTube(url) ? $('#quality').value : undefined }); }
-    catch (e) { alert(`${url}\n${e.message}`); return; }
+    catch (e) { alert(`${url}\n${e.message}`); return false; }
   }
   $('#url').value = $('#name').value = '';
-  $('#quality').hidden = true; // keeps its value for the next YouTube link
+  $('#qualityRow').hidden = true; // keeps its value for the next YouTube link
   refresh();
+  return true;
 }
 
-$('#url').oninput = () => { $('#quality').hidden = !$('#url').value.split(/\s+/).some(isYouTube); };
+$('#url').oninput = () => { $('#qualityRow').hidden = !$('#url').value.split(/\s+/).some(isYouTube); };
 $('#add').onsubmit = e => {
   e.preventDefault();
   const typed = $('#url').value.split(/\s+/).filter(Boolean);
   let urls;
   try { urls = expandBatch(typed); } catch (err) { return alert(err.message); }
   if (urls.length > typed.length && !confirm(`Add ${urls.length} downloads?\n\n${urls[0]}\n…\n${urls.at(-1)}`)) return;
-  add(urls);
+  add(urls).then(ok => ok && addDlg.close());
 };
 document.ondragover = e => e.preventDefault();
 document.ondrop = e => {
@@ -272,10 +600,12 @@ document.ondrop = e => {
 };
 
 const dlg = $('#settings'), f = dlg.querySelector('form').elements;
-$('#openSettings').onclick = () => {
+function openSettings() {
   for (const [k, v] of Object.entries(state.settings)) if (f[k]) f[k].type === 'checkbox' ? (f[k].checked = v) : (f[k].value = v);
   dlg.showModal();
-};
+}
+$('#tOptions').onclick = openSettings;
+$('#tScheduler').onclick = () => { openSettings(); f.scheduleAt.focus(); };
 dlg.onclose = () => {
   if (dlg.returnValue !== 'save') return;
   const askClipboard = f.clipboard.checked && !state.settings.clipboard; // just turned on: the browser asks for clipboard access now
@@ -319,6 +649,7 @@ const windows = new BroadcastChannel('fastdl-window');
 windows.onmessage = () => window.close();
 windows.postMessage('opened');
 
+layout();
 refresh().then(() => checkClipboard());
 setInterval(refresh, 700);
 </script>

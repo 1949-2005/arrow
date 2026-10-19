@@ -9,7 +9,7 @@
 - `install.js` — builds `<name>.exe` (Node single executable app: launcher, brand icon, version info, no console); install/uninstall shortcuts; pure PE/icon/version-info helpers for tests
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
 - `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand (`extension.test.js` checks the extension's copies of the name)
-- `ui.html` — the whole web UI (HTML + CSS + JS); polls `/api/state` every 700 ms; DOM-free helpers (batch links, clipboard link check) in `<script id="helpers">`
+- `ui.html` — the whole web UI (HTML + CSS + JS), IDM-style: toolbar, categories sidebar, download list with multi-select, details pane, status bar, Add URL and Settings dialogs; polls `/api/state` every 700 ms; DOM-free helpers (batch links, clipboard link check, category, date label) in `<script id="helpers">`
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
   - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer)
@@ -22,7 +22,7 @@
 - `server.test.js` — API access rules (Host, Origin, extension privileges), UTF-8 bodies, the Start with Windows shortcut, brand page and favicon, tray Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
 - `desktop.test.js` — browser order, brand name rules, second start and port conflict (`node desktop.js --tray` against a stand-in server), `tray.ps1` syntax
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder (Windows)
-- `ui.test.js` — batch links and the clipboard link check, by running `ui.html`'s helpers script in Node
+- `ui.test.js` — batch links, the clipboard link check, categories and date labels, by running `ui.html`'s helpers script in Node; `view()`'s `categories` and `added`
 - `assets/logo.svg` — app logo source (teal download arrow); `logo.png` (512 px) and `logo.ico` (16–256 px) are rendered from it. `brand.json` points at `logo.ico`, which goes into the exe and the tray as is
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)

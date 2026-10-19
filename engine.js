@@ -447,7 +447,7 @@ export class Manager {
         const ctl = this.running.get(d.id);
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
-          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality,
+          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, added: d.added,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,
@@ -457,6 +457,7 @@ export class Manager {
       whenDone: this.whenDone,
       powerIn: this.powerAt ? Math.max(0, Math.ceil((this.powerAt - Date.now()) / 1000)) : null, // seconds left
       exts: Object.values(CATEGORIES).flat(), // file types the UI offers from the clipboard
+      categories: CATEGORIES, // the UI's sidebar sorts by these
     };
   }
 }

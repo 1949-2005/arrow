@@ -59,8 +59,16 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 ## How to use
 
-- Paste one or more links into the box (or drop links on the window). Click Download.
-- "Save as" is optional. If you tick "Schedule", the download is added as scheduled.
+- Click **Add URL**. Paste one or more links into "Links" (or drop links on the window). Click Download.
+- "Save as" is optional and used only for a single link. If you tick "Start later (scheduled)", the download is added as scheduled.
+- The toolbar at the top works on the downloads you select in the list:
+  - **Resume** and **Stop** start or pause them. **Stop all** pauses everything that runs or waits.
+  - **Delete** (or the Delete key) removes them from the list. For finished ones, Arrow asks if it should also delete the files.
+  - **Delete completed** removes all finished downloads from the list. The files stay on disk.
+  - **Options** opens the settings. **Scheduler** opens them at "Start scheduled downloads at".
+- Select like in a file list: click, Ctrl+click to add or remove one, Shift+click for a range. With the keyboard: Up and Down move, Shift+Up/Down extend, Ctrl+A selects all, Space adds or removes one. Enter or a double-click opens a finished file.
+- The left side sorts the list by category (Compressed, Documents, Music, Programs, Video, Other, by file type) and by status (Unfinished, Finished, Scheduled). Click one to show only those downloads. Arrow remembers your choice. In a narrow window the left side is hidden and the list shows everything.
+- The pane under the list shows the selected download: its link and folder, how much is downloaded, speed, time left, connections, whether it can resume, and one bar piece per connection. It has Open, Show in folder and Change link (for a paused or failed download whose link expired).
 - Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Arrow tells you how many links that makes before it adds them. At most 1000 at a time.
 - Clipboard monitoring (turn it on in Settings): copy a link to a file, for example a .zip or .mp4, then switch to the Arrow window. Arrow asks "Download?" and adds the file only if you click Download. The first time, the browser asks if Arrow may see the clipboard. Click Allow.
 - When all downloads finish: at the bottom right, choose Do nothing, Sleep or Shut down. When the last download ends, a 60-second countdown appears at the top of the window. Click Cancel to stop it. The choice is used once: after the countdown, or after Cancel, it goes back to Do nothing. It is not kept when the app restarts.
@@ -77,7 +85,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - If one is already installed, winget tells you so.
 - Three ways to start:
   - In Brave, open a YouTube video page. Click the Arrow icon, choose the quality, and click **Download this video**.
-  - Paste the link in Arrow. A quality picker appears next to the box.
+  - Paste the link in Arrow's Add URL window. A quality picker appears under the links.
   - Right-click a YouTube link and choose "Download with Arrow". This uses the best quality.
 - Qualities: Best quality, 1080p, 720p, 480p, MP3 (audio only).
 - Videos are saved as MP4 in the `Video` folder. MP3 files go to the `Music` folder.
@@ -105,7 +113,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - If a file name already exists, the new file gets (1), (2) and so on.
 - HLS video streams (.m3u8), also AES-128 encrypted ones. They are saved as .ts (or .mp4).
 - "Change link" for links that have expired.
-- Open and Folder buttons for finished files.
+- Open and Show in folder buttons for finished files.
 - A desktop notification when a download finishes.
 - YouTube videos and MP3 audio, with a quality choice (needs yt-dlp and ffmpeg).
 - Browser cookies are passed along, so downloads that need a login work.
