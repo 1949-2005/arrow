@@ -65,13 +65,19 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, scheduleAt: '', categories: true };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, scheduleAt: '', categories: true, clipboard: false };
   list = [];
   running = new Map();
   limiter = new Limiter();
   stallMs = 30000;
   dirty = false;
   saving = false;
+  // "When all downloads finish": used once and never saved, so a forgotten "shut down" can't fire days later
+  whenDone = ''; // '' | 'sleep' | 'shutdown'
+  powerAt = 0; // end of the countdown, 0 when none runs
+  powerDelayMs = 60000;
+  power = () => {}; // server.js puts the real sleep/shutdown here; tests and other users of Manager stay harmless
+  worked = false; // a download started since the last tick, so even one that ended between ticks counts
 
   constructor(stateFile) {
     this.stateFile = stateFile;
@@ -98,6 +104,11 @@ export class Manager {
     if (s.speedLimitKB != null) t.speedLimitKB = clamp(s.speedLimitKB, 0, 1e7);
     if (s.scheduleAt != null) t.scheduleAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(s.scheduleAt) ? s.scheduleAt : '';
     if (s.categories != null) t.categories = !!s.categories;
+    if (s.clipboard != null) t.clipboard = !!s.clipboard;
+    if (s.whenDone != null) {
+      this.whenDone = ['sleep', 'shutdown'].includes(s.whenDone) ? s.whenDone : '';
+      if (!this.whenDone) this.powerAt = 0; // Cancel stops the countdown at once
+    }
     this.limiter.rate = t.speedLimitKB * 1024;
     this.dirty = true;
     this.pump();
@@ -160,6 +171,7 @@ export class Manager {
   start(d) {
     const ctl = { ac: new AbortController(), active: new Set(), bytes: 0, last: 0, speed: 0 };
     this.running.set(d.id, ctl);
+    this.worked = true;
     d.status = 'downloading';
     d.error = null;
     ctl.done = (async () => {
@@ -380,6 +392,17 @@ export class Manager {
       this.dirty = true;
       this.pump();
     }
+    // Paused and failed downloads don't wait; scheduled ones do once a start time is set.
+    const busy = this.list.some(d => ['downloading', 'queued'].includes(d.status) || (d.status === 'scheduled' && at));
+    if (busy || !this.whenDone) this.powerAt = 0; // new work came in, or the user cancelled
+    else if (this.worked) this.powerAt = Date.now() + this.powerDelayMs; // the last download just ended
+    else if (this.powerAt && Date.now() >= this.powerAt) {
+      const op = this.whenDone;
+      this.whenDone = '';
+      this.powerAt = 0;
+      this.power(op);
+    }
+    this.worked = busy;
     if (this.dirty || this.running.size) this.save();
   }
 
@@ -418,6 +441,9 @@ export class Manager {
           segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos]),
         };
       }),
+      whenDone: this.whenDone,
+      powerIn: this.powerAt ? Math.max(0, Math.ceil((this.powerAt - Date.now()) / 1000)) : null, // seconds left
+      exts: Object.values(CATEGORIES).flat(), // file types the UI offers from the clipboard
     };
   }
 }

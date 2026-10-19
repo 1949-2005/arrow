@@ -24,6 +24,9 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 
 - Paste one or more links into the box (or drop links on the window). Click Download.
 - "Save as" is optional. If you tick "Schedule", the download is added as scheduled.
+- Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). FastDL tells you how many links that makes before it adds them. At most 1000 at a time.
+- Clipboard monitoring (turn it on in Settings): copy a link to a file, for example a .zip or .mp4, then switch to the FastDL window. FastDL asks "Download?" and adds the file only if you click Download. The first time, the browser asks if FastDL may see the clipboard. Click Allow.
+- When all downloads finish: at the bottom right, choose Do nothing, Sleep or Shut down. When the last download ends, a 60-second countdown appears at the top of the window. Click Cancel to stop it. The choice is used once: after the countdown, or after Cancel, it goes back to Do nothing. It is not kept when the app restarts.
 - With the extension:
   - While the app runs, browser downloads go to FastDL automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
   - Right-click a link or a video and choose "Download with FastDL".
@@ -46,6 +49,10 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - Open and Folder buttons for finished files.
 - A desktop notification when a download finishes.
 - Browser cookies are passed along, so downloads that need a login work.
+- Batch links with number ranges, like `img[001-120].jpg`.
+- Clipboard monitoring (off by default).
+- Start with Windows (off by default): FastDL starts minimized when you sign in to Windows.
+- Sleep or shut down the PC when all downloads finish, after a countdown you can cancel.
 
 ## Settings
 
@@ -57,6 +64,8 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 | Speed limit in KB/s (0 = unlimited) | 0 |
 | Start scheduled downloads at (HH:MM) | empty (off) |
 | Sort into folders by type | on |
+| Offer download links I copy (clipboard monitoring) | off |
+| Start with Windows (minimized) | off |
 
 ## Limits
 
@@ -64,14 +73,18 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 - No DRM-protected video.
 - No torrents and no FTP.
 - No proxy settings.
-- No clipboard monitoring and no tray icon.
+- No tray icon.
+- Clipboard monitoring only looks at the clipboard when you switch to the FastDL window, not while you work in other windows. It only offers links that end in a file type from the sorting folders (Video, Music, Compressed, Documents, Programs).
+- Sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video is saved as .ts. Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
 
 ## Privacy and safety
 
 - FastDL runs only on your computer (127.0.0.1). Other websites cannot control it.
-- The browser extension can only add downloads. It cannot change settings or open files.
+- The browser extension can only add downloads. It cannot change settings, turn on Start with Windows, or open files.
+- Start with Windows puts a "FastDL" shortcut in your Startup folder. Turning the setting off deletes it.
+- Clipboard monitoring reads the clipboard only when you switch to the FastDL window. If the clipboard holds anything other than one download link, FastDL ignores it. Nothing from the clipboard is saved.
 - Browser cookies are only sent to the site they belong to.
 - Finished files are marked as "downloaded from the internet", so Windows SmartScreen still checks programs before they run.
 - The download list and settings are saved in `state.json` next to the app. This file holds the links and login cookies of unfinished downloads. Do not share it.

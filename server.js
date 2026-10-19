@@ -1,7 +1,9 @@
 import http from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
 
@@ -10,6 +12,32 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
 await mgr.load();
 const page = readFileSync(path.join(here, 'ui.html'));
+// FASTDL_STARTUP: tests point this at a temp folder instead of the real Startup folder
+const startupLink = path.join(process.env.FASTDL_STARTUP || path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'), 'FastDL.lnk');
+
+const run = promisify(execFile);
+// Values go in as environment variables, so no path or quote can break out of the command.
+const powershell = (script, env) => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$ErrorActionPreference = "Stop"; ' + script], { env: { ...process.env, ...env }, windowsHide: true });
+
+// "Start with Windows": a Startup-folder shortcut that runs this server minimized (WindowStyle 7). The shortcut itself is the setting.
+async function setStartup(on) {
+  if (process.platform !== 'win32') throw new Error('Start with Windows only works on Windows');
+  if (!on) return rm(startupLink, { force: true });
+  await powershell('$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:FDL_LINK); $s.TargetPath = $env:FDL_NODE; $s.Arguments = $env:FDL_ARGS; $s.WorkingDirectory = $env:FDL_DIR; $s.WindowStyle = 7; $s.Save()',
+    { FDL_LINK: startupLink, FDL_NODE: process.execPath, FDL_ARGS: `"${path.join(here, 'server.js')}"`, FDL_DIR: here })
+    .catch(e => { throw new Error('could not create the Startup shortcut: ' + (e.stderr || e.message).trim().split('\n')[0]); });
+}
+
+// "When all downloads finish", after the 60-second countdown in engine.js.
+// shutdown /t 0 because any other timeout implies /f; without /f, apps with unsaved work can still stop it.
+// Sleep goes through .NET: rundll32 powrprof.dll,SetSuspendState hibernates on PCs that have hibernation on.
+mgr.power = op => {
+  console.log(`All downloads finished: ${op === 'shutdown' ? 'shutting down' : 'going to sleep'}`);
+  (op === 'shutdown'
+    ? run('shutdown.exe', ['/s', '/t', '0'])
+    : powershell('Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState("Suspend", $false, $false)')
+  ).catch(e => console.error(`could not ${op === 'shutdown' ? 'shut down' : 'sleep'}:`, e.message));
+};
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
@@ -44,11 +72,18 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && req.url === '/') return send(res, 200, page, 'text/html; charset=utf-8');
     if (req.method === 'GET' && req.url === '/api/ping') return send(res, 200, { app: 'fastdl' });
-    if (req.method === 'GET' && req.url === '/api/state') return send(res, 200, mgr.view());
+    if (req.method === 'GET' && req.url === '/api/state') {
+      const v = mgr.view();
+      return send(res, 200, { ...v, settings: { ...v.settings, startup: existsSync(startupLink) } });
+    }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
     if (req.url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
-    if (req.url === '/api/settings') { mgr.update(body); return send(res, 200, mgr.settings); }
+    if (req.url === '/api/settings') {
+      mgr.update(body);
+      if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
+      return send(res, 200, mgr.settings);
+    }
     if (req.url === '/api/action' && body.op === 'folder') {
       const d = mgr.list.find(x => x.id === body.id);
       if (!d?.file) throw new Error('file not created yet');

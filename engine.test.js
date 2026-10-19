@@ -218,6 +218,54 @@ test('speed limit slows the download down', async () => {
   assert.ok(Date.now() - t > 1800, `6 MB at 2 MB/s took only ${Date.now() - t} ms`);
 });
 
+// mgr.power is swapped for a recorder: these tests must never put the PC to sleep or shut it down.
+async function withPower(fn) {
+  const ops = [];
+  mgr.power = op => ops.push(op);
+  mgr.powerDelayMs = 200;
+  try {
+    await fn(ops);
+  } finally {
+    mgr.update({ whenDone: '' });
+    mgr.power = () => {};
+    mgr.powerDelayMs = 60000;
+  }
+}
+
+test('when all downloads finish: counts down after the last one, then sleeps once', () => withPower(async ops => {
+  mgr.update({ whenDone: 'sleep' });
+  await finished(mgr.add({ url: base + '/file.bin' }));
+  mgr.tick(); // the 1 s timer does this too; a download that ended between two ticks still counts
+  assert.ok(mgr.view().powerIn > 0, 'countdown should run');
+  const d = mgr.add({ url: base + '/file.bin' }); // more work during the countdown: wait for it
+  mgr.tick();
+  assert.equal(mgr.view().powerIn, null);
+  await finished(d);
+  mgr.tick();
+  assert.ok(mgr.view().powerIn > 0);
+  assert.deepEqual(ops, [], 'nothing may happen before the countdown ends');
+  await sleep(250);
+  mgr.tick();
+  assert.deepEqual(ops, ['sleep']);
+  assert.equal(mgr.view().whenDone, '', 'the choice is used once');
+  assert.equal(mgr.view().powerIn, null);
+}));
+
+test('when all downloads finish: Cancel keeps the PC on; choosing while idle waits for a download', () => withPower(async ops => {
+  mgr.update({ whenDone: 'shutdown' });
+  await finished(mgr.add({ url: base + '/file.bin' }));
+  mgr.tick();
+  assert.ok(mgr.view().powerIn > 0);
+  mgr.update({ whenDone: '' }); // the countdown's Cancel button
+  assert.equal(mgr.view().powerIn, null);
+  await sleep(250);
+  mgr.tick();
+  mgr.update({ whenDone: 'shutdown' });
+  mgr.tick();
+  assert.equal(mgr.view().powerIn, null, 'nothing finished since the choice was made');
+  assert.deepEqual(ops, []);
+}));
+
 test('file names cannot escape the folder', () => {
   assert.equal(sanitize('../../a:b?.exe'), '_.._a_b_.exe');
   assert.equal(sanitize('CON.txt'), '_CON.txt');

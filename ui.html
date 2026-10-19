@@ -14,8 +14,8 @@
   header { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
   form#add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   h1 { font-size: 16px; margin: 0 8px 0 0; letter-spacing: .2px; }
-  input, button { font: inherit; color: inherit; }
-  input[type=text], input[type=number], input[type=time] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  input, button, select { font: inherit; color: inherit; }
+  input[type=text], input[type=number], input[type=time], select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
   #url { flex: 1 1 280px; }
   #name { flex: 0 1 180px; }
   button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
@@ -40,7 +40,11 @@
   .error { color: var(--err); }
   #empty { padding: 40px 16px; text-align: center; color: var(--muted); }
   #offline { background: var(--err); color: #fff; padding: 8px 16px; }
-  footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 6px 16px; color: var(--muted); font-size: 12px; }
+  #countdown { background: var(--accent); color: #fff; margin: -12px -16px 12px; padding: 8px 16px; font-weight: 600; }
+  #offer { margin-top: 10px; color: var(--muted); }
+  #offer span { color: var(--text); word-break: break-all; margin-right: 6px; }
+  footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 6px 16px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  footer select { padding: 2px 6px; }
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(460px, calc(100vw - 32px)); }
   dialog h2 { margin: 0 0 12px; font-size: 16px; }
   dialog label { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); }
@@ -51,6 +55,7 @@
 <body>
 <div id="offline" hidden>FastDL is not running. Start it with start.cmd.</div>
 <header>
+  <div id="countdown" role="alert" hidden><span></span> <span aria-hidden="true"></span> <button type="button">Cancel</button></div>
   <form id="add">
     <h1>FastDL</h1>
     <input id="url" type="text" placeholder="Paste one or more links (or drop them on this window)" aria-label="Download links" required>
@@ -59,6 +64,7 @@
     <button class="primary">Download</button>
     <button type="button" id="openSettings">Settings</button>
   </form>
+  <div id="offer" hidden>Download? <span></span> <button type="button" id="offerYes" class="primary">Download</button> <button type="button" id="offerNo">Dismiss</button></div>
 </header>
 <main>
   <div class="wrap">
@@ -69,7 +75,12 @@
     <div id="empty">No downloads yet. Paste a link above, or install the browser extension to catch downloads and videos.</div>
   </div>
 </main>
-<footer id="total"></footer>
+<footer>
+  <span id="total"></span>
+  <label>When all downloads finish
+    <select id="whenDone"><option value="">Do nothing</option><option value="sleep">Sleep</option><option value="shutdown">Shut down</option></select>
+  </label>
+</footer>
 
 <dialog id="settings">
   <form method="dialog">
@@ -80,10 +91,45 @@
     <label>Speed limit in KB/s (0 = unlimited) <input name="speedLimitKB" type="number" min="0"></label>
     <label>Start scheduled downloads at <input name="scheduleAt" type="time"></label>
     <label class="check"><input name="categories" type="checkbox"> Sort into Video, Music, Compressed, Documents, Programs folders</label>
+    <label class="check"><input name="clipboard" type="checkbox"> Offer download links I copy (clipboard monitoring)</label>
+    <label class="check"><input name="startup" type="checkbox"> Start with Windows (minimized)</label>
     <menu><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></menu>
   </form>
 </dialog>
 
+<script id="helpers">
+// No DOM in this block: ui.test.js runs it in Node.
+const BATCH = /\[(\d+)-(\d+)\]/;
+
+// Batch links: "img[001-120].jpg" gives img001.jpg … img120.jpg. Zero padding is kept, a range may count down,
+// and several ranges in one link multiply. Never builds more than max links: a range that would pass it throws.
+function expandBatch(links, max = 1000) {
+  links = [...links];
+  for (let i = 0; i < links.length; i++) {
+    const m = BATCH.exec(links[i]);
+    if (!m) continue;
+    const a = Number(m[1]), b = Number(m[2]), count = Math.abs(b - a) + 1;
+    const pad = /^0\d/.test(m[1]) || /^0\d/.test(m[2]) ? Math.max(m[1].length, m[2].length) : 0;
+    if (links.length - 1 + count > max) throw new Error(`A batch can add at most ${max} links.`);
+    const out = [];
+    for (let k = 0; k < count; k++) out.push(links[i].replace(BATCH, String(a < b ? a + k : a - k).padStart(pad, '0')));
+    links.splice(i--, 1, ...out); // i-- checks the first new link again, for a second range
+  }
+  return links;
+}
+
+// Clipboard monitoring offers only a lone http(s) link to a file type FastDL sorts (engine.js CATEGORIES, sent as state.exts).
+function clipboardLink(text, exts) {
+  const t = String(text).trim();
+  if (!/^https?:\/\/\S+$/i.test(t)) return null;
+  try {
+    const u = new URL(t);
+    return exts.includes(/\.(\w+)$/.exec(u.pathname)?.[1].toLowerCase()) ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+</script>
 <script>
 const $ = s => document.querySelector(s);
 const rows = new Map();
@@ -172,6 +218,19 @@ function render(st) {
   $('#total').textContent = `${active.length} downloading · ${size(active.reduce((a, d) => a + d.speed, 0))}/s`
     + (st.settings.speedLimitKB ? ` · limit ${st.settings.speedLimitKB} KB/s` : '')
     + (st.settings.scheduleAt ? ` · scheduled start ${st.settings.scheduleAt}` : '');
+  if (offered && st.downloads.some(d => d.url === offered)) offer(null);
+  const cd = $('#countdown');
+  cd.hidden = st.powerIn == null;
+  if (st.powerIn != null) {
+    const going = st.whenDone === 'shutdown' ? 'Shutting down' : 'Going to sleep';
+    if (!counting && window.Notification?.permission === 'granted') new Notification(`${going} in ${st.powerIn} seconds`, { body: 'All downloads finished. Open FastDL to cancel.' });
+    const text = `All downloads finished. ${going} in`;
+    if (cd.children[0].textContent !== text) cd.children[0].textContent = text; // rewriting it would make screen readers repeat the alert
+    cd.children[1].textContent = st.powerIn + ' s.';
+  }
+  counting = st.powerIn != null;
+  // only when the server's value changes, so a poll that started before the user's pick can't undo it
+  if (st.whenDone !== shownWhenDone) $('#whenDone').value = shownWhenDone = st.whenDone;
 }
 
 function refresh() {
@@ -189,7 +248,14 @@ async function add(urls) {
   refresh();
 }
 
-$('#add').onsubmit = e => { e.preventDefault(); add($('#url').value.split(/\s+/).filter(Boolean)); };
+$('#add').onsubmit = e => {
+  e.preventDefault();
+  const typed = $('#url').value.split(/\s+/).filter(Boolean);
+  let urls;
+  try { urls = expandBatch(typed); } catch (err) { return alert(err.message); }
+  if (urls.length > typed.length && !confirm(`Add ${urls.length} downloads?\n\n${urls[0]}\n…\n${urls.at(-1)}`)) return;
+  add(urls);
+};
 document.ondragover = e => e.preventDefault();
 document.ondrop = e => {
   e.preventDefault();
@@ -205,13 +271,43 @@ $('#openSettings').onclick = () => {
 };
 dlg.onclose = () => {
   if (dlg.returnValue !== 'save') return;
+  const askClipboard = f.clipboard.checked && !state.settings.clipboard; // just turned on: the browser asks for clipboard access now
   api('/api/settings', {
     dir: f.dir.value, connections: f.connections.value, maxActive: f.maxActive.value,
     speedLimitKB: f.speedLimitKB.value, scheduleAt: f.scheduleAt.value, categories: f.categories.checked,
-  }).then(refresh, e => alert(e.message));
+    clipboard: f.clipboard.checked, startup: f.startup.checked,
+  }).then(refresh).then(() => askClipboard && checkClipboard(true), e => alert(e.message));
 };
 
-refresh();
+// Clipboard monitoring: read when this window gets focus, so nothing watches the clipboard in the background,
+// and only ever offer the link.
+let lastClip = null, offered = null, counting = false, shownWhenDone;
+function offer(url) {
+  offered = url;
+  $('#offer span').textContent = url ?? '';
+  $('#offer').hidden = !url;
+}
+async function checkClipboard(asked) {
+  if (!state.settings.clipboard) return;
+  let text;
+  try { text = await navigator.clipboard.readText(); } catch {
+    if (asked) alert('FastDL could not read the clipboard. Allow clipboard access for this page in the browser\'s site settings, then turn the setting on again.');
+    return;
+  }
+  if (text === lastClip) return; // each copy is offered once
+  lastClip = text;
+  const url = clipboardLink(text, state.exts);
+  if (url && !state.downloads.some(d => d.url === url)) offer(url);
+}
+window.addEventListener('focus', () => checkClipboard());
+$('#offerYes').onclick = () => { const url = offered; offer(null); api('/api/add', { url }).then(refresh, e => alert(e.message)); };
+$('#offerNo').onclick = () => offer(null);
+
+const whenDone = value => api('/api/settings', { whenDone: value }).then(refresh, e => alert(e.message));
+$('#whenDone').onchange = e => whenDone(e.target.value);
+$('#countdown button').onclick = () => whenDone('');
+
+refresh().then(() => checkClipboard());
 setInterval(refresh, 700);
 </script>
 </body>
