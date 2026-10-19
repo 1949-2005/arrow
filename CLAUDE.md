@@ -3,7 +3,7 @@
 IDM-style download manager: Node.js >= 20.3 (ESM), zero npm dependencies, local web UI + MV3 browser extension. Windows-first.
 
 ## Commands
-- Run: `npm start` (or `start.cmd`, which also opens an Edge app window) → http://127.0.0.1:9614
+- Run: `npm start` (or `start.cmd`, which also opens an app window in Brave, Chrome or Edge, else the default browser) → http://127.0.0.1:9614
 - Test: `npm test` (node:test, local test servers only, no network)
 - Syntax-check a file: `node --check <file>`
 - Don't start `server.js` on port 9614 while testing: tests use their own ports and temp folders.

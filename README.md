@@ -6,18 +6,18 @@ FastDL is a download manager that runs on your PC. It makes downloads faster by 
 
 - Windows 10 or 11.
 - Node.js 20.3 or newer. To check, open a command window and type `node --version`.
-- Microsoft Edge or Google Chrome, for the browser extension.
+- Brave, Google Chrome or Microsoft Edge, for the browser extension.
 
 ## Start and stop
 
-- Double-click `start.cmd`. It starts the app in a small, minimized console window and opens the FastDL window in Edge.
+- Double-click `start.cmd`. It starts the app in a small, minimized console window and opens the FastDL window in Brave, Chrome or Edge (the first one it finds), or else in your default browser.
 - Other way: run `npm start` in this folder, then open http://127.0.0.1:9614 in your browser.
 - To quit, close the minimized "FastDL" console window, or press Ctrl+C in it.
 
 ## Install the browser extension
 
-- Edge: open `edge://extensions`, turn on "Developer mode", click "Load unpacked" and choose the `extension` folder.
-- Chrome: open `chrome://extensions`, turn on "Developer mode", click "Load unpacked" and choose the same `extension` folder.
+- Brave: open `brave://extensions`, turn on "Developer mode", click "Load unpacked" and choose the `extension` folder.
+- Chrome: the same at `chrome://extensions`. Edge: the same at `edge://extensions`.
 - Then pin the FastDL icon to the toolbar.
 
 ## How to use

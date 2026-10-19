@@ -4,7 +4,7 @@
 - `hls.js` — HLS (.m3u8): best-variant pick, AES-128 decryption, parallel segment fetch written in order
 - `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html`; Host/Origin checks live here
 - `ui.html` — the whole web UI (HTML + CSS + JS); polls `/api/state` every 700 ms
-- `extension/` — MV3 extension for Edge/Chrome
+- `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
   - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer)
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge
@@ -12,7 +12,7 @@
 - `engine.test.js` — engine tests against a local test server
 - `extension.test.js` — extension logic (background.js) with fake `chrome` and `fetch`, plus manifest/syntax checks
 - `server.test.js` — API access rules (Host, Origin, extension privileges) and UTF-8 bodies, against `server.js` spawned on a free port with a temp `FASTDL_STATE`
-- `start.cmd` — Windows launcher (server + Edge app window)
+- `start.cmd` — Windows launcher (server + app window in Brave/Chrome/Edge, else the default browser)
 - `package.json` — `start` and `test` scripts; `"type": "module"`
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `README.md` — user guide: start/stop, extension install, features, settings, limits, privacy
