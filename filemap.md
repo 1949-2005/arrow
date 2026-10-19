@@ -1,0 +1,17 @@
+# File map
+
+- `engine.js` — core: queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, `state.json` persistence, `view()` for the UI
+- `hls.js` — HLS (.m3u8): best-variant pick, AES-128 decryption, parallel segment fetch written in order
+- `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html`; Host/Origin checks live here
+- `ui.html` — the whole web UI (HTML + CSS + JS); polls `/api/state` every 700 ms
+- `extension/` — MV3 extension for Edge/Chrome
+  - `manifest.json` — permissions
+  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer)
+  - `background.js` — download takeover, context menu, media grabber (webRequest), badge
+  - `popup.html`, `popup.js` — media found on the current tab, takeover toggle
+- `engine.test.js` — engine tests against a local test server
+- `start.cmd` — Windows launcher (server + Edge app window)
+- `package.json` — `start` and `test` scripts; `"type": "module"`
+- `state.json` — runtime state and settings (gitignored, created on first run)
+- `docs/SPEC.md` — behaviour, data model, API, security model
+- `docs/PLAN.md` — task list and status

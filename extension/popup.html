@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #fff; --text: #1c2230; --muted: #687083; --line: #e2e5eb; --accent: #2f6fec; --err: #c93a3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1e25; --text: #e5e8ee; --muted: #959cab; --line: #2a2e38; --accent: #5b8cff; --err: #ff6b6b; } }
+  body { margin: 0; width: 360px; padding: 12px; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); }
+  #status.off { color: var(--err); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  small { color: var(--muted); }
+  button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>FastDL</h1>
+  <div id="status">Checking app…</div>
+  <label><input type="checkbox" id="intercept"> Take over browser downloads</label>
+  <h2>Media on this page</h2>
+  <ul id="media"></ul>
+  <p><button id="open" class="primary">Open FastDL</button></p>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

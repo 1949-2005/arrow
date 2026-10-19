@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FastDL</title>
+<style>
+  :root { --bg: #f5f6f8; --panel: #fff; --text: #1c2230; --muted: #687083; --line: #e2e5eb; --accent: #2f6fec; --done: #1d8f4e; --err: #c93a3a; --bar: #e6eaf1; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #13151a; --panel: #1b1e25; --text: #e5e8ee; --muted: #959cab; --line: #2a2e38; --accent: #5b8cff; --done: #3dbb72; --err: #ff6b6b; --bar: #272b35; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
+  form#add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  h1 { font-size: 16px; margin: 0 8px 0 0; letter-spacing: .2px; }
+  input, button { font: inherit; color: inherit; }
+  input[type=text], input[type=number], input[type=time] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  #url { flex: 1 1 280px; }
+  #name { flex: 0 1 180px; }
+  button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label.check { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+  main { padding: 12px 16px 48px; }
+  .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; }
+  td.name { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+  td.status { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  td.speed { white-space: normal; min-width: 90px; }
+  .progress { display: flex; align-items: center; gap: 8px; }
+  canvas { width: 140px; height: 10px; border-radius: 3px; background: var(--bar); }
+  td.actions { display: flex; gap: 4px; }
+  .muted, .queued, .paused, .scheduled { color: var(--muted); }
+  .done { color: var(--done); }
+  .error { color: var(--err); }
+  #empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  #offline { background: var(--err); color: #fff; padding: 8px 16px; }
+  footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 6px 16px; color: var(--muted); font-size: 12px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(460px, calc(100vw - 32px)); }
+  dialog h2 { margin: 0 0 12px; font-size: 16px; }
+  dialog label { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); }
+  dialog label.check { display: flex; }
+  dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 12px 0 0; }
+</style>
+</head>
+<body>
+<div id="offline" hidden>FastDL is not running. Start it with start.cmd.</div>
+<header>
+  <form id="add">
+    <h1>FastDL</h1>
+    <input id="url" type="text" placeholder="Paste one or more links (or drop them on this window)" aria-label="Download links" required>
+    <input id="name" type="text" placeholder="Save as (optional)" aria-label="Save as">
+    <label class="check"><input id="later" type="checkbox"> Schedule</label>
+    <button class="primary">Download</button>
+    <button type="button" id="openSettings">Settings</button>
+  </form>
+</header>
+<main>
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Size</th><th>Progress</th><th>Speed</th><th>Time left</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="list"></tbody>
+    </table>
+    <div id="empty">No downloads yet. Paste a link above, or install the browser extension to catch downloads and videos.</div>
+  </div>
+</main>
+<footer id="total"></footer>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>Settings</h2>
+    <label>Save to folder <input name="dir" type="text" required></label>
+    <label>Connections per download (1–32) <input name="connections" type="number" min="1" max="32"></label>
+    <label>Downloads at the same time <input name="maxActive" type="number" min="1" max="20"></label>
+    <label>Speed limit in KB/s (0 = unlimited) <input name="speedLimitKB" type="number" min="0"></label>
+    <label>Start scheduled downloads at <input name="scheduleAt" type="time"></label>
+    <label class="check"><input name="categories" type="checkbox"> Sort into Video, Music, Compressed, Documents, Programs folders</label>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></menu>
+  </form>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const rows = new Map();
+const seen = new Map();
+let state = { downloads: [], settings: {} };
+const LABEL = { queued: 'Queued', downloading: 'Downloading', paused: 'Paused', done: 'Complete', scheduled: 'Scheduled', removed: 'Removing' };
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  return j;
+}
+const size = n => n == null || !isFinite(n) ? '?' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+const time = s => !isFinite(s) ? '' : s < 60 ? Math.ceil(s) + 's' : s < 3600 ? Math.floor(s / 60) + 'm ' + Math.floor(s % 60) + 's' : Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm';
+const total = d => d.kind === 'hls' && d.status !== 'done' ? (d.hls?.done ? d.hls.bytes / d.hls.done * d.hls.total : null) : d.size;
+const fraction = d => d.status === 'done' ? 1 : d.kind === 'hls' ? (d.hls ? d.hls.done / d.hls.total : 0) : d.size ? d.got / d.size : 0;
+const shortName = d => d.name || decodeURIComponent(d.url.split('?')[0].split('/').pop()) || d.url;
+
+function draw(canvas, d) {
+  const w = canvas.width = canvas.clientWidth * devicePixelRatio, h = canvas.height = canvas.clientHeight * devicePixelRatio;
+  const g = canvas.getContext('2d');
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(d.status === 'done' ? '--done' : d.status === 'error' ? '--err' : '--accent');
+  // one bar per connection, like IDM's segment view
+  if (d.segments && d.size && d.kind !== 'hls') for (const [start, , pos] of d.segments) g.fillRect(start / d.size * w, 0, Math.max(1, (pos - start) / d.size * w), h);
+  else g.fillRect(0, 0, fraction(d) * w, h);
+}
+
+function button(text, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.onclick = onclick;
+  return b;
+}
+
+function actions(cell, d) {
+  const act = (op, extra) => api('/api/action', { id: d.id, op, ...extra }).then(refresh, e => alert(e.message));
+  const list = [];
+  if (['downloading', 'queued', 'scheduled'].includes(d.status)) list.push(button('Pause', () => act('pause')));
+  if (['paused', 'error', 'scheduled'].includes(d.status)) list.push(button(d.status === 'scheduled' ? 'Start now' : 'Resume', () => act('resume')));
+  if (['paused', 'error'].includes(d.status)) list.push(button('Change link', () => {
+    const url = prompt('New link for the same file (when the old one expired):', d.url);
+    if (url) act('url', { url });
+  }));
+  if (d.file) list.push(button('Folder', () => act('folder')));
+  list.push(button('Remove', () => {
+    if (!confirm(`Remove "${shortName(d)}" from the list?`)) return;
+    act(d.status === 'done' && confirm('Also delete the downloaded file from disk?') ? 'removeFile' : 'remove');
+  }));
+  cell.replaceChildren(...list);
+}
+
+function render(st) {
+  const ids = new Set(st.downloads.map(d => d.id));
+  for (const [id, r] of rows) if (!ids.has(id)) { r.tr.remove(); rows.delete(id); }
+  for (const d of st.downloads) {
+    let r = rows.get(d.id);
+    if (!r) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="name"></td><td></td><td><div class="progress"><canvas aria-hidden="true"></canvas><span class="muted"></span></div></td><td class="speed"></td><td></td><td class="status"></td><td class="actions"></td>';
+      r = { tr, canvas: tr.querySelector('canvas'), pct: tr.querySelector('.progress span') };
+      rows.set(d.id, r);
+      $('#list').append(tr);
+    }
+    const [name, sz, , speed, eta, status, acts] = r.tr.children;
+    const t = total(d);
+    name.textContent = shortName(d);
+    name.title = d.file || d.url;
+    sz.textContent = d.status === 'done' ? size(d.size) : `${size(d.got)} / ${size(t && Math.round(t))}`;
+    r.pct.textContent = Math.floor(fraction(d) * 1000) / 10 + '%';
+    speed.textContent = d.status !== 'downloading' ? '' : size(d.speed) + '/s'
+      + (d.connections > 1 ? ` · ${d.connections} conn.` : '') + (d.resumable === false ? ' · no resume' : '');
+    eta.textContent = d.status === 'downloading' && d.speed && t ? time((t - d.got) / d.speed) : '';
+    status.textContent = d.status === 'error' ? 'Error: ' + d.error : LABEL[d.status];
+    status.title = d.error || '';
+    status.className = 'status ' + d.status;
+    const key = d.status + !!d.file;
+    if (r.key !== key) { r.key = key; actions(acts, d); }
+    draw(r.canvas, d);
+    if (seen.get(d.id) === 'downloading' && d.status === 'done' && window.Notification?.permission === 'granted') new Notification('Download complete', { body: shortName(d) });
+    seen.set(d.id, d.status);
+  }
+  $('#empty').hidden = st.downloads.length > 0;
+  const active = st.downloads.filter(d => d.status === 'downloading');
+  $('#total').textContent = `${active.length} downloading · ${size(active.reduce((a, d) => a + d.speed, 0))}/s`
+    + (st.settings.speedLimitKB ? ` · limit ${st.settings.speedLimitKB} KB/s` : '')
+    + (st.settings.scheduleAt ? ` · scheduled start ${st.settings.scheduleAt}` : '');
+}
+
+function refresh() {
+  return api('/api/state').then(st => { state = st; $('#offline').hidden = true; render(st); }, () => { $('#offline').hidden = false; });
+}
+
+async function add(urls) {
+  if (window.Notification?.permission === 'default') Notification.requestPermission();
+  const name = urls.length === 1 ? $('#name').value.trim() : '';
+  for (const url of urls) {
+    try { await api('/api/add', { url, name: name || undefined, scheduled: $('#later').checked }); }
+    catch (e) { alert(`${url}\n${e.message}`); return; }
+  }
+  $('#url').value = $('#name').value = '';
+  refresh();
+}
+
+$('#add').onsubmit = e => { e.preventDefault(); add($('#url').value.split(/\s+/).filter(Boolean)); };
+document.ondragover = e => e.preventDefault();
+document.ondrop = e => {
+  e.preventDefault();
+  const text = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+  const urls = text.split(/\s+/).filter(u => /^https?:\/\//i.test(u));
+  if (urls.length) add(urls);
+};
+
+const dlg = $('#settings'), f = dlg.querySelector('form').elements;
+$('#openSettings').onclick = () => {
+  for (const [k, v] of Object.entries(state.settings)) if (f[k]) f[k].type === 'checkbox' ? (f[k].checked = v) : (f[k].value = v);
+  dlg.showModal();
+};
+dlg.onclose = () => {
+  if (dlg.returnValue !== 'save') return;
+  api('/api/settings', {
+    dir: f.dir.value, connections: f.connections.value, maxActive: f.maxActive.value,
+    speedLimitKB: f.speedLimitKB.value, scheduleAt: f.scheduleAt.value, categories: f.categories.checked,
+  }).then(refresh, e => alert(e.message));
+};
+
+refresh();
+setInterval(refresh, 700);
+</script>
+</body>
+</html>

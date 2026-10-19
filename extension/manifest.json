@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "FastDL",
+  "version": "1.0",
+  "description": "Send downloads and page videos to the FastDL download manager.",
+  "permissions": ["downloads", "contextMenus", "webRequest", "cookies", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "FastDL" }
+}
