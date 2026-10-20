@@ -226,7 +226,7 @@ test('the extension shows the app name from brand.json', () => {
   const m = JSON.parse(read('./extension/manifest.json'));
   assert.deepEqual([m.name, m.action.default_title], [name, name]);
   const files = ['popup.html', 'popup.js', 'background.js', 'content.js'].map(f => read('./extension/' + f)).join('\n');
-  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `'Sent to ${name} ✓'`,
+  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `const NAME = '${name}';`,
     `'${name} could not list the formats.'`]) assert.ok(files.includes(text), text);
 });
 
@@ -461,10 +461,11 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
 
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step })', { URL });
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step, panelAt })', { URL });
 
 test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
-  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy\) return;\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/); // \s+: git may check out CRLF
+  // \s+: git may check out CRLF
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy \|\| dragged\) return;\s+closeHelp\(\);\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/);
   assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
   assert.match(contentSrc, /if \(!e\.isTrusted\) return;\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
   assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
@@ -491,6 +492,22 @@ test('content.js helpers: the YouTube check agrees with common.js, menu groups, 
   assert.deepEqual([content.step(-1, 3, 'ArrowDown'), content.step(-1, 3, 'ArrowUp'), content.step(2, 3, 'ArrowDown'), content.step(0, 3, 'ArrowUp'), content.step(1, 3, 'ArrowDown')], [0, 2, 0, 2, 2]);
 });
 
+test('content.js panel: ? and × take trusted clicks only, × hides it for this video and page, only a trusted press drags', () => {
+  assert.match(contentSrc, /helpBtn\.addEventListener\('click', e => \{\s+if \(!e\.isTrusted \|\| dragged\) return;/);
+  assert.match(contentSrc, /closeBtn\.addEventListener\('click', e => \{\s+if \(!e\.isTrusted \|\| dragged\) return;\s+if \(video\) dismissed\.set\(video, location\.href\);/);
+  assert.match(contentSrc, /if \(v && dismissed\.get\(v\) !== location\.href\) show\(v\);/);
+  assert.match(contentSrc, /drag = e\.isTrusted && e\.button === 0 \?/);
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| \(e\.target !== panel && e\.target !== grip\)\) return;\s+offset = \{ x: 0, y: 0 \};/, 'double-click on the edge puts it back');
+});
+
+test('content.js panelAt: 8 px inside the top-right corner, moved by the drag, kept in the window', () => {
+  const r = { right: 650, top: 10 }, at = (x, y) => JSON.parse(JSON.stringify(content.panelAt(r, { x, y }, 250, 36, 1280, 720)));
+  assert.deepEqual(at(0, 0), { left: 642, top: 18 });
+  assert.deepEqual(at(-100, 50), { left: 542, top: 68 });
+  assert.deepEqual(at(1000, -500), { left: 1280, top: 0 });
+  assert.deepEqual(at(-1000, 2000), { left: 250, top: 684 });
+});
+
 test('content.js helpers: size and hit checks', () => {
   assert.ok(content.bigEnough({ width: 200, height: 112 }));
   assert.ok(!content.bigEnough({ width: 199, height: 360 }));
@@ -502,5 +519,5 @@ test('content.js helpers: size and hit checks', () => {
 
 test('content.js shows the app name from brand.json', () => {
   const { name } = JSON.parse(fs.readFileSync(new URL('./brand.json', import.meta.url), 'utf8'));
-  for (const text of [`'Download with ${name}'`, `'Sent to ${name} \u2713'`]) assert.ok(contentSrc.includes(text), text);
+  assert.ok(contentSrc.includes(`const NAME = '${name}';`), 'NAME'); // the panel's help title, "Sent to \u2026" and its label for screen readers
 });

@@ -75,7 +75,9 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - With the extension:
   - While the app runs, browser downloads go to Arrow automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
   - Right-click a link or a video and choose "Download with Arrow".
-  - Point at a video on a web page. A "Download with Arrow" button appears at its top right. Click it. If it says "No video found yet", let the video play for a few seconds, then click again.
+  - Point at a video on a web page. The Arrow panel appears at its top right, like IDM's. Click **Download this video**. If it says "No video found yet", let the video play for a few seconds, then click again.
+    - **?** explains the panel. **×** hides it on that video until you reload the page.
+    - Drag the panel to move it. Double-click its edge (the dots on the left) to put it back.
   - Each of these opens the **Download File Info** window, like IDM:
     - It shows the link, the size (when the server tells it) and where the file goes.
     - For YouTube, choose the **Format** (MP4, WEBM, M4A or MP3). Each one shows its real size. The file name is the video's title.
@@ -94,7 +96,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - `winget install yt-dlp.FFmpeg`
   - If one is already installed, winget tells you so.
 - Ways to start:
-  - Point at the YouTube video and click **Download with Arrow**. A list of formats opens, with the real size of each:
+  - Point at the YouTube video and click **Download this video**. A list of formats opens, with the real size of each:
     - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
     - **AUDIO**: M4A and MP3.
     - Click one. The Download File Info window opens with that format.

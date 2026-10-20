@@ -16,7 +16,7 @@
   - `manifest.json` — permissions
   - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending and opens the Download File Info window), `pickMedia()` (what the video button downloads)
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); opens the Download File Info window for each
-  - `content.js` — "Download with Arrow" button over page videos (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
+  - `content.js` — IDM-style download panel over page videos: Download this video, ? (help), × (hide on that video), drag to move (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`

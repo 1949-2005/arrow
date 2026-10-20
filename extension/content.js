@@ -1,14 +1,23 @@
-// "Download with Arrow" button over web video players, like IDM's. Runs in every frame (embedded players
-// live in iframes). One click sends it; the app's Download File Info window asks the rest.
-// On YouTube a click first shows the video's formats with their real sizes (the app's /api/formats, through background.js);
-// the picked one opens the Download File Info window with that format.
+// IDM-style download panel over web video players: "Download this video", ? (what this panel is) and × (hide it on
+// this video). Runs in every frame (embedded players live in iframes). One click sends it; the app's Download File Info
+// window asks the rest. On YouTube a click first shows the video's formats with their real sizes (the app's /api/formats,
+// through background.js); the picked one opens the Download File Info window with that format.
+// The panel can be dragged; a double-click on its edge puts it back, as in IDM.
 // Content scripts can't be ES modules, so the helpers below are plain functions; extension.test.js runs them in Node.
 
-const LABEL = 'Download with Arrow';
+const NAME = 'Arrow';
+const LABEL = 'Download this video';
 
 // Big enough to be a player, not a thumbnail preview or an icon.
 const bigEnough = r => r.width >= 200 && r.height >= 112;
 const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+
+// The panel's top-right corner: 8 px inside the video's, moved by the drag offset, and kept in the window
+// (w, h: the panel's size; vw, vh: the window's).
+const panelAt = (r, off, w, h, vw, vh) => ({
+  left: Math.min(Math.max(r.right - 8 + off.x, w), vw),
+  top: Math.max(Math.min(r.top + 8 + off.y, vh - h), 0),
+});
 
 // A single YouTube video page, as common.js isYouTubeVideo() (extension.test.js checks they agree).
 function isYouTubePage(href) {
@@ -39,16 +48,25 @@ function main() {
       transition: opacity .12s, visibility 0s .12s; font: 600 13px/1 "SF Pro Text", -apple-system, "Segoe UI", system-ui, sans-serif; }
     .box.on { opacity: 1; visibility: visible; transition: opacity .12s; }
     @media (prefers-reduced-motion: reduce) { .box, .box.on { transition: none; } .spin { animation: none !important; } }
+    [hidden] { display: none !important; }
     button { all: unset; box-sizing: border-box; cursor: pointer; }
-    .pill { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 8px;
-      border-radius: 15px; background: rgba(17,24,39,.88); border: 1px solid rgba(255,255,255,.18); color: #fff;
-      font: inherit; white-space: nowrap; }
-    .pill:hover { background: rgba(17,24,39,.96); }
-    .pill:focus-visible { outline: 2px solid #14B8A6; }
+    button:focus-visible { outline: 2px solid #14B8A6; outline-offset: -2px; }
+    .panel { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(17,24,39,.9);
+      border: 1px solid rgba(255,255,255,.18); box-shadow: 0 4px 14px rgba(0,0,0,.35); color: #fff;
+      cursor: move; user-select: none; touch-action: none; }
+    .grip { width: 6px; height: 16px; margin: 0 3px 0 4px; opacity: .45;
+      background: radial-gradient(circle, #fff 1px, transparent 1.3px) 0 0 / 3px 4px; }
+    .pill { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px 0 8px; border-radius: 7px;
+      background: rgba(255,255,255,.1); font: inherit; white-space: nowrap; }
+    .pill:hover { background: rgba(255,255,255,.18); }
+    .logo { flex: none; width: 18px; height: 18px; }
     .chev { width: 12px; height: 12px; opacity: .7; margin-left: 2px; }
-    .menu { box-sizing: border-box; width: 292px; max-height: 392px; overflow: auto; padding: 6px; border-radius: 12px; background: rgba(17,24,39,.96);
-      border: 1px solid rgba(255,255,255,.18); box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
-    .menu[hidden] { display: none; }
+    .icon { display: grid; place-items: center; width: 26px; height: 28px; border-radius: 7px; color: rgba(255,255,255,.7); }
+    .icon:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .icon svg { width: 14px; height: 14px; }
+    .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(17,24,39,.96); border: 1px solid rgba(255,255,255,.18);
+      box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
+    .menu { width: 292px; max-height: 392px; overflow: auto; padding: 6px; }
     h3 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: rgba(255,255,255,.55); }
     .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 13px; }
     .item:hover, .item:focus { background: rgba(255,255,255,.1); }
@@ -60,9 +78,17 @@ function main() {
     .spin { flex: none; box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25);
       border-top-color: #14B8A6; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .sr { display: none; }`;
+    .help { width: 300px; padding: 14px 16px 12px; cursor: default; }
+    .help h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+    .help p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: rgba(255,255,255,.8); }
+    .help b { font-weight: 600; color: #fff; }
+    .ok { display: block; margin: 10px 0 0 auto; height: 28px; padding: 0 18px; border-radius: 7px; background: #0F766E; line-height: 28px; font-weight: 600; }
+    .ok:hover { background: #0B5F58; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* heard, not seen */`;
 
-  let host, root, box, btn, label, chev, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;
+  let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;
+  let offset = { x: 0, y: 0 }, drag = null, dragged = false;
+  const dismissed = new WeakMap(); // video → the page it was hidden on with ×: YouTube reuses one <video> for every video
 
   // DOM building without innerHTML, which Trusted Types pages (YouTube) may refuse.
   const make = (ns, tag, attrs = {}, ...kids) => {
@@ -73,16 +99,12 @@ function main() {
   };
   const h = (...a) => make(null, ...a);
   const s = (...a) => make('http://www.w3.org/2000/svg', ...a);
-  // assets/logo.svg at 16 px
-  const logo = () => s('svg', { width: 16, height: 16, viewBox: '0 0 256 256', 'aria-hidden': 'true' },
-    s('defs', {}, s('linearGradient', { id: 'g', x1: 0, y1: 0, x2: 1, y2: 1 },
-      s('stop', { offset: 0, 'stop-color': '#0F766E' }), s('stop', { offset: 1, 'stop-color': '#19C2AE' }))),
-    s('rect', { width: 256, height: 256, rx: 58, fill: 'url(#g)' }),
-    s('rect', { x: 70, y: 50, width: 14, height: 56, rx: 7, fill: '#fff', opacity: '.5' }),
-    s('rect', { x: 172, y: 38, width: 14, height: 44, rx: 7, fill: '#fff', opacity: '.5' }),
-    s('rect', { x: 106, y: 38, width: 44, height: 104, rx: 12, fill: '#fff' }),
-    s('path', { d: 'M64 130 H192 L128 196 Z', fill: '#fff', stroke: '#fff', 'stroke-width': 12, 'stroke-linejoin': 'round' }),
-    s('rect', { x: 70, y: 214, width: 116, height: 16, rx: 8, fill: '#fff' }));
+  // The Arrow logo, a paper-plane arrow, with strokes thick enough for 18 px
+  const logo = () => s('svg', { class: 'logo', viewBox: '0 0 512 512', fill: 'none', stroke: 'currentColor', 'stroke-width': 40,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'aria-hidden': 'true' },
+  s('path', { d: 'M86 98 L434 256 L86 414 Z' }), s('path', { d: 'M86 98 L192 256 L434 256' }), s('path', { d: 'M192 256 L434 256 L86 414 Z', fill: 'currentColor' }));
+  const icon = (...paths) => s('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', 'stroke-linecap': 'round',
+    'stroke-linejoin': 'round', 'aria-hidden': 'true' }, ...paths.map(d => s('path', { d })));
 
   // Closed shadow root: page CSS can't style it and page scripts can't reach the buttons.
   function build() {
@@ -90,20 +112,44 @@ function main() {
     host.style.cssText = 'all: initial !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; z-index: 2147483647 !important; display: block !important;';
     root = host.attachShadow({ mode: 'closed' });
     label = h('span', {}, LABEL);
-    chev = s('svg', { class: 'chev', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
-      s('path', { d: 'm6 9 6 6 6-6' }));
+    chev = icon('m6 9 6 6 6-6');
+    chev.setAttribute('class', 'chev');
     btn = h('button', { class: 'pill', 'aria-label': LABEL }, logo(), label, chev);
+    const q = icon('M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01');
+    q.setAttribute('viewBox', '2.5 2 19 19'); // the ? fills little of its 24 box: zoomed in, it matches the ×
+    helpBtn = h('button', { class: 'icon', title: 'What is this?', 'aria-label': 'What is this?', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }, q);
+    const closeBtn = h('button', { class: 'icon', title: 'Hide on this video', 'aria-label': 'Hide on this video' }, icon('M18 6 6 18', 'm6 6 12 12'));
+    grip = h('span', { class: 'grip', title: 'Drag to move. Double-click to put it back.' });
+    panel = h('div', { class: 'panel', role: 'group', 'aria-label': `${NAME} download panel` }, grip, btn, helpBtn, closeBtn);
     menu = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Choose a format', hidden: '' });
-    box = h('div', { class: 'box' }, btn, menu);
+    okBtn = h('button', { class: 'ok' }, 'OK');
+    help = h('div', { class: 'help', role: 'dialog', 'aria-labelledby': 'help-title', hidden: '' },
+      h('h2', { id: 'help-title' }, logo(), `${NAME} download panel`),
+      h('p', {}, `To turn it off, click the ${NAME} icon in your browser's toolbar and untick `, h('b', {}, 'Show download button on videos'), '.'),
+      h('p', {}, 'Drag the panel to move it. Double-click its edge to put it back. × hides it on this video until you reload the page.'),
+      okBtn);
+    box = h('div', { class: 'box' }, panel, menu, help);
     live = h('div', { class: 'sr', 'aria-live': 'polite' });
     root.append(h('style', {}, CSS), box, live);
     // keyboard Enter/Space on a <button> fires a trusted click too; scripted clicks are not trusted
     btn.addEventListener('click', e => {
-      if (!e.isTrusted || busy) return;
+      if (!e.isTrusted || busy || dragged) return;
+      closeHelp();
       if (!isYouTubePage(location.href)) grab();
       else if (menu.hidden) openMenu();
       else closeMenu();
     });
+    helpBtn.addEventListener('click', e => {
+      if (!e.isTrusted || dragged) return;
+      if (help.hidden) openHelp();
+      else closeHelp();
+    });
+    closeBtn.addEventListener('click', e => {
+      if (!e.isTrusted || dragged) return;
+      if (video) dismissed.set(video, location.href);
+      hide(true);
+    });
+    okBtn.addEventListener('click', () => { closeHelp(); helpBtn.focus(); });
     menu.addEventListener('keydown', e => {
       if (!e.isTrusted) return;
       e.stopPropagation(); // the page's own shortcuts (YouTube: arrows seek and change the volume)
@@ -116,6 +162,37 @@ function main() {
         closeMenu();
         btn.focus();
       }
+    });
+    help.addEventListener('keydown', e => {
+      if (!e.isTrusted) return;
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeHelp();
+        helpBtn.focus();
+      }
+    });
+    // Drag: past 4 px a press moves the panel instead of clicking. The pointer is captured only then,
+    // because a captured press would no longer click the button under it.
+    panel.addEventListener('pointerdown', e => {
+      dragged = false;
+      drag = e.isTrusted && e.button === 0 ? { x: e.clientX, y: e.clientY, from: offset } : null;
+    });
+    panel.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (!(e.buttons & 1)) { drag = null; return; } // released outside the panel before it became a drag
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!dragged && Math.hypot(dx, dy) < 4) return;
+      if (!dragged) { dragged = true; panel.setPointerCapture(e.pointerId); closeMenu(); closeHelp(); }
+      offset = { x: drag.from.x + dx, y: drag.from.y + dy };
+      place();
+    });
+    panel.addEventListener('pointerup', () => { drag = null; });
+    panel.addEventListener('pointercancel', () => { drag = null; });
+    panel.addEventListener('dblclick', e => {
+      if (!e.isTrusted || (e.target !== panel && e.target !== grip)) return;
+      offset = { x: 0, y: 0 };
+      place();
     });
     document.documentElement.append(host);
   }
@@ -131,7 +208,7 @@ function main() {
     say('Sending…');
     const msg = { type: 'video', src: video?.currentSrc ?? '', pageUrl: pick.pageUrl ?? location.href, title: pick.title ?? document.title, ...(pick.format && { format: pick.format }) };
     const res = await chrome.runtime.sendMessage(msg).catch(() => null); // fails after the extension reloads
-    say(res?.ok ? 'Sent to Arrow ✓' : res?.error ?? 'Reload the page and try again.');
+    say(res?.ok ? `Sent to ${NAME} ✓` : res?.error ?? 'Reload the page and try again.');
     setTimeout(() => { busy = false; say(LABEL); }, 2500);
   }
 
@@ -142,7 +219,7 @@ function main() {
     return b;
   };
 
-  // The format list under the pill. pageUrl and title are kept from the moment it opened: YouTube changes pages without reloading.
+  // The format list under the panel. pageUrl and title are kept from the moment it opened: YouTube changes pages without reloading.
   async function openMenu() {
     const n = ++asked, pageUrl = location.href;
     menu.replaceChildren(h('div', { class: 'note' }, h('span', { class: 'spin' }), 'Getting formats…'));
@@ -175,19 +252,34 @@ function main() {
     live.textContent = '';
   }
 
+  function openHelp() {
+    closeMenu();
+    help.hidden = false;
+    helpBtn.setAttribute('aria-expanded', 'true');
+    okBtn.focus();
+  }
+
+  function closeHelp() {
+    if (!help || help.hidden) return;
+    help.hidden = true;
+    helpBtn.setAttribute('aria-expanded', 'false');
+  }
+
   function place() {
     if (!video || !box?.classList.contains('on')) return;
     const r = video.getBoundingClientRect();
     if (!video.isConnected || !bigEnough(r) || document.fullscreenElement) return hide(true);
-    box.style.left = r.right - 8 + 'px';
-    box.style.top = r.top + 8 + 'px';
+    const { clientWidth, clientHeight } = document.documentElement; // the window without its scrollbars
+    const p = panelAt(r, offset, panel.offsetWidth, panel.offsetHeight, clientWidth, clientHeight);
+    box.style.left = p.left + 'px';
+    box.style.top = p.top + 'px';
   }
 
   function show(v) {
     clearTimeout(hideTimer);
     hideTimer = 0;
     if (!host) build();
-    if (v !== video) closeMenu();
+    if (v !== video) { closeMenu(); closeHelp(); }
     video = v;
     const yt = isYouTubePage(location.href);
     chev.style.display = yt ? '' : 'none';
@@ -197,15 +289,15 @@ function main() {
     place();
   }
 
-  // 1.5 s after the pointer left the video and the button (counted from leaving, not from the last move).
-  // An open format list stays until a pick, Esc or a click elsewhere.
+  // 1.5 s after the pointer left the video and the panel (counted from leaving, not from the last move).
+  // An open format list or help stays until a pick, OK, Esc or a click elsewhere.
   function hide(now) {
     if (!box?.classList.contains('on') || (hideTimer && now !== true)) return;
     clearTimeout(hideTimer);
-    if (now === true) closeMenu();
+    if (now === true) { closeMenu(); closeHelp(); }
     hideTimer = setTimeout(() => {
       hideTimer = 0;
-      if (busy || !menu.hidden) return hide(); // keep the result and the list readable
+      if (now !== true && (busy || !menu.hidden || !help.hidden)) return hide(); // keep the result, the list and the help readable; × can't wait
       box.classList.remove('on');
       video = null;
     }, now === true ? 0 : 1500);
@@ -222,15 +314,15 @@ function main() {
   // Chromium already delivers mousemove at most once per frame, so no extra throttling.
   addEventListener('mousemove', e => {
     if (!enabled) return;
-    // Not over fullscreen video: only the fullscreen element is drawn, so the button would have to go
+    // Not over fullscreen video: only the fullscreen element is drawn, so the panel would have to go
     // inside the page's own player, where page scripts and CSS can reach it.
     if (document.fullscreenElement) return hide(true);
     const v = host && e.composedPath().includes(host) ? video : videoAt(e.clientX, e.clientY);
-    if (v) show(v);
+    if (v && dismissed.get(v) !== location.href) show(v);
     else if (video) hide();
   }, { passive: true, capture: true });
   addEventListener('mouseout', e => { if (!e.relatedTarget && video) hide(); }, true); // pointer left the frame
-  addEventListener('pointerdown', e => { if (host && !e.composedPath().includes(host)) closeMenu(); }, true); // a click elsewhere
+  addEventListener('pointerdown', e => { if (host && !e.composedPath().includes(host)) { closeMenu(); closeHelp(); } }, true); // a click elsewhere
   addEventListener('scroll', place, { passive: true, capture: true });
   addEventListener('resize', place, { passive: true });
 
@@ -241,7 +333,7 @@ function main() {
     hideTimer = 0;
     asked++;
     host.remove();
-    host = root = box = menu = video = null;
+    host = root = box = panel = menu = help = video = null;
     busy = false;
   }
   chrome.storage.local.get('overlay').then(({ overlay = true }) => setEnabled(overlay));
