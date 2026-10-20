@@ -7,6 +7,10 @@ import { Manager } from './engine.js';
 const html = fs.readFileSync(new URL('./ui.html', import.meta.url), 'utf8');
 const helpers = /<script id="helpers">([\s\S]*?)<\/script>/.exec(html)[1];
 const { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll } = new Function(helpers + '\nreturn { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll };')();
+// confirm.html (Download File Info) and progress.html keep theirs the same way
+const helpersOf = (file, names) => new Function(/<script id="helpers">([\s\S]*?)<\/script>/.exec(fs.readFileSync(new URL(file, import.meta.url), 'utf8'))[1] + `\nreturn { ${names} };`)();
+const confirmJs = helpersOf('./confirm.html', 'folderFor, splitPath, joinPath, withExt, size, subtitle');
+const progressJs = helpersOf('./progress.html', 'size, time, total, fraction, heading, statusText, pieces, canPause');
 
 test('batch links: a numeric range becomes every link in it, zero padding kept', () => {
   assert.deepEqual(expandBatch(['https://s.com/img[001-003].jpg']), ['https://s.com/img001.jpg', 'https://s.com/img002.jpg', 'https://s.com/img003.jpg']);
@@ -161,4 +165,58 @@ test('selectAll: keeps the selection and adds only the visible rows', () => {
   assert.deepEqual([...selectAll(new Set(['b']), ['a', 'b', 'c'])].sort(), ['a', 'b', 'c']);
   assert.deepEqual([...selectAll(new Set(['hidden']), ['a'])].sort(), ['a', 'hidden']);
   assert.deepEqual([...selectAll(new Set(), [])], []);
+});
+
+test('Download File Info: Save As folder follows the category, Other and categories off use the folder itself', () => {
+  const { folderFor, joinPath, splitPath, withExt } = confirmJs;
+  const on = { dir: 'C:\\Users\\PC\\Downloads', categories: true };
+  assert.equal(folderFor(on, 'Video'), 'C:\\Users\\PC\\Downloads\\Video');
+  assert.equal(folderFor(on, 'Other'), 'C:\\Users\\PC\\Downloads');
+  assert.equal(folderFor({ ...on, categories: false }, 'Music'), 'C:\\Users\\PC\\Downloads');
+  assert.equal(folderFor({ dir: 'D:\\', categories: true }, 'Programs'), 'D:\\Programs');
+  assert.equal(joinPath(folderFor(on, 'Compressed'), 'a.iso'), 'C:\\Users\\PC\\Downloads\\Compressed\\a.iso');
+  assert.equal(joinPath('D:\\', 'a.iso'), 'D:\\a.iso');
+  assert.deepEqual(splitPath('C:\\a\\b c\\Me at the zoo.mp4'), ['C:\\a\\b c', 'Me at the zoo.mp4']);
+  assert.deepEqual(splitPath('C:/a/f.zip'), ['C:/a', 'f.zip']);
+  assert.deepEqual(splitPath('f.zip'), ['', 'f.zip']);
+  assert.equal(withExt('Me at the zoo.mp4', '.mp3'), 'Me at the zoo.mp3');
+  assert.equal(withExt('clip', '.mp4'), 'clip.mp4');
+  assert.equal(withExt('v1.2 final.mp4', ''), 'v1.2 final');
+});
+
+test('Download File Info: header line and size text', () => {
+  const { subtitle, size } = confirmJs;
+  assert.equal(subtitle({ kind: 'video', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, 'Me at the zoo.mp4'), 'Me at the zoo · youtube.com');
+  assert.equal(subtitle({ kind: 'http', url: 'https://releases.ubuntu.com/24.04/u.iso' }, 'u.iso'), 'u.iso · releases.ubuntu.com');
+  assert.equal(subtitle({ kind: 'http', url: 'bad' }, 'u.iso'), 'u.iso');
+  assert.equal(size(6291456000), '5.86 GB');
+  assert.equal(size(10), '10 B');
+});
+
+test('progress window: header, status line and bar pieces', () => {
+  const { heading, statusText, pieces, fraction, canPause, size, time } = progressJs;
+  const http = { kind: 'http', status: 'downloading', size: 1000, got: 452, connections: 8, segments: [[0, 500, 300], [500, 1000, 652]] };
+  assert.equal(heading(http), 'Downloading · 45%');
+  assert.equal(statusText(http), 'Receiving data… (8 connections)');
+  assert.equal(statusText({ ...http, connections: 1 }), 'Receiving data… (1 connection)');
+  assert.deepEqual(pieces(http), [[0, 0.3], [0.5, 0.152]]);
+  assert.equal(heading({ ...http, status: 'paused' }), 'Paused · 45%');
+  assert.equal(statusText({ ...http, status: 'paused' }), 'Paused');
+  assert.equal(statusText({ ...http, status: 'queued' }), 'Queued');
+  assert.equal(heading({ ...http, status: 'queued' }), 'Queued');
+  assert.equal(heading({ ...http, status: 'error', error: 'HTTP 404' }), 'Error');
+  assert.equal(statusText({ ...http, status: 'error', error: 'HTTP 404' }), 'Error: HTTP 404');
+  assert.equal(heading({ ...http, status: 'done' }), 'Download complete');
+  assert.equal(fraction({ ...http, status: 'done' }), 1);
+  const video = { kind: 'video', status: 'downloading', size: 200, got: 50, phase: 'audio' };
+  assert.equal(statusText(video), 'Downloading audio');
+  assert.equal(statusText({ ...video, phase: 'converting' }), 'Converting to MP3');
+  assert.equal(heading({ ...video, phase: 'merging' }), 'Merging');
+  assert.deepEqual(pieces(video), [[0, 0.25]], 'one fill for video');
+  const hls = { kind: 'hls', status: 'downloading', got: 300, hls: { done: 3, total: 6, bytes: 300 }, connections: 0 };
+  assert.equal(statusText(hls), 'Receiving data…');
+  assert.deepEqual(pieces(hls), [[0, 0.5]]);
+  assert.ok(canPause(http) && canPause({ status: 'queued' }) && !canPause({ status: 'paused' }) && !canPause({ status: 'error' }));
+  assert.equal(size(null), 'Unknown');
+  assert.equal(time(190), '3 min 10 s');
 });

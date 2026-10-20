@@ -30,6 +30,7 @@ globalThis.chrome = {
     query: rec('tabs.query', () => [{ id: 9, url: tabUrl, title: 'Tab' }]), create: rec('tabs.create'),
   },
   webRequest: { onHeadersReceived: event('webRequest.onHeadersReceived') },
+  windows: { create: rec('windows.create'), getLastFocused: rec('windows.getLastFocused', () => ({ left: 100, top: 40, width: 1400, height: 900 })) },
   cookies: { getAll: rec('cookies.getAll', () => [{ name: 'a', value: '1' }, { name: 'b', value: '2' }]) },
 };
 
@@ -42,7 +43,7 @@ globalThis.fetch = async (url, opts = {}) => {
   requests.push({ url, method: opts.method ?? 'GET', body: opts.body ? JSON.parse(opts.body) : undefined, headers: opts.headers });
   if (app === 'down') throw new TypeError('fetch failed');
   const status = url.endsWith('/api/add') && app === 'error' ? 500 : 200;
-  return { ok: status < 300, status };
+  return { ok: status < 300, status, json: async () => ({ id: 'dl-1' }) };
 };
 
 await import('./extension/background.js');
@@ -67,6 +68,8 @@ const media = (tabId, url, headers) => listeners['webRequest.onHeadersReceived']
   tabId, url, responseHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
 });
 const MB5 = String(5 * 1024 * 1024);
+// The Download File Info window for the app's download dl-1: 560x470, centred on the 1400x900 browser window at 100,40
+const dialog = { url: 'http://127.0.0.1:9614/confirm?id=dl-1', type: 'popup', width: 560, height: 470, focused: true, left: 520, top: 255 };
 
 test('media grabber remembers real media and HLS, skips fragments and small files', async () => {
   reset();
@@ -136,7 +139,8 @@ test('download takeover: cancel, erase, then hand to the app with cookies and re
   assert.equal(adds.length, 1);
   assert.equal(adds[0].url, 'http://127.0.0.1:9614/api/add');
   assert.equal(adds[0].method, 'POST');
-  assert.deepEqual(adds[0].body, { url: 'https://cdn.x.com/file.zip', name: 'file.zip', headers: { referer: 'https://x.com/page', cookie: 'a=1; b=2' } });
+  assert.deepEqual(adds[0].body, { url: 'https://cdn.x.com/file.zip', name: 'file.zip', headers: { referer: 'https://x.com/page', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
   assert.doesNotMatch(JSON.stringify(requests).toLowerCase(), /user-agent/);
   assert.deepEqual(called('cookies.getAll')[0][1], { url: 'https://cdn.x.com/file.zip' });
   // cancel before erase before add
@@ -163,6 +167,7 @@ test('download takeover is skipped when it should be', async () => {
     await takeover(it);
     assert.equal(called('downloads.cancel').length, 0, JSON.stringify(it));
     assert.equal(requests.filter(r => r.url.endsWith('/api/add')).length, 0);
+    assert.equal(called('windows.create').length, 0);
   }
 });
 
@@ -171,14 +176,16 @@ test('download takeover gives the download back when the app refuses it', async 
   await takeover(item());
   assert.equal(called('downloads.cancel').length, 1);
   assert.deepEqual(called('downloads.download'), [['downloads.download', { url: 'https://cdn.x.com/file.zip' }]]);
+  assert.equal(called('windows.create').length, 0);
 });
 
 test('context menu sends the link or the media source with the tab as referer', async () => {
   reset();
-  listeners['contextMenus.onClicked']({ menuItemId: 'fastdl', linkUrl: 'https://x.com/f.zip' }, { url: 'https://x.com/page' });
-  await until(() => requests.some(r => r.url.endsWith('/api/add')));
+  await listeners['contextMenus.onClicked']({ menuItemId: 'fastdl', linkUrl: 'https://x.com/f.zip' }, { url: 'https://x.com/page' });
   assert.equal(requests.at(-1).body.url, 'https://x.com/f.zip');
   assert.deepEqual(requests.at(-1).body.headers, { referer: 'https://x.com/page', cookie: 'a=1; b=2' });
+  assert.equal(requests.at(-1).body.confirm, true);
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
 
   reset();
   listeners['contextMenus.onClicked']({ menuItemId: 'fastdl', srcUrl: 'https://x.com/v.mp4', mediaType: 'video' }, { url: 'https://x.com/watch' });
@@ -248,9 +255,19 @@ test('isYouTubeVideo accepts single-video URLs only, on the exact YouTube hosts'
   ]) assert.ok(!isYouTubeVideo(u), String(u));
 });
 
+test('send() returns the id of the app\'s download, or null', async () => {
+  reset();
+  assert.equal(await send({ url: 'https://x.com/a.zip', confirm: true }), 'dl-1');
+  assert.equal(requests.at(-1).body.confirm, true);
+  reset('error');
+  assert.equal(await send({ url: 'https://x.com/a.zip' }), null);
+  reset('down');
+  assert.equal(await send({ url: 'https://x.com/a.zip' }), null);
+});
+
 test('send() passes quality and keeps YouTube cookies in the browser', async () => {
   reset();
-  assert.equal(await send({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', referrer: 'https://www.youtube.com/', quality: '720' }), true);
+  assert.equal(await send({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', referrer: 'https://www.youtube.com/', quality: '720' }), 'dl-1');
   assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: '720', headers: { referer: 'https://www.youtube.com/' } });
   assert.equal(called('cookies.getAll').length, 0);
 
@@ -290,25 +307,44 @@ test('popup shows the YouTube section only on video pages', async () => {
   assert.equal((await openPopup('https://x.com/'))['#yt'].hidden, true);
 });
 
-test('popup YouTube button sends url + quality, restores and saves the quality', async () => {
+test('popup YouTube button opens the Download File Info window; no quality picker any more', async () => {
   reset();
   let els = await openPopup('https://www.youtube.com/shorts/dQw4w9WgXcQ');
-  assert.equal(els['#quality'].value, 'best');
-  els['#quality'].value = '480';
-  els['#quality'].onchange({ target: els['#quality'] });
-  assert.equal(local.quality, '480');
   await els['#ytdl'].onclick();
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', quality: '480', headers: {} });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', headers: {}, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
   assert.equal(els['#ytdl'].textContent, 'Sent ✓');
   assert.equal(els['#ytdl'].disabled, true);
+  assert.ok(!('#quality' in els), 'popup.js must not touch a quality select');
+  assert.ok(!called('local.get').some(c => [c[1]].flat().includes('quality')), 'no remembered quality');
+  const html = fs.readFileSync(new URL('./extension/popup.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /<select|quality/i);
 
+  reset('down');
   els = await openPopup('https://youtu.be/dQw4w9WgXcQ');
-  assert.equal(els['#quality'].value, '480');
-
-  app = 'down';
   await els['#ytdl'].onclick();
   assert.equal(els['#ytdl'].textContent, 'Failed. Is Arrow running?');
   assert.equal(els['#ytdl'].disabled, false);
+  assert.equal(called('windows.create').length, 0);
+});
+
+test('popup media rows open the Download File Info window too', async () => {
+  reset();
+  session.tab9 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
+  let els = await openPopup('https://x.com/watch');
+  const [li] = els['#media'].children, b = li.children[2];
+  await b.onclick();
+  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Tab', headers: { referer: 'https://x.com/watch', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  assert.equal(b.textContent, 'Sent ✓');
+
+  reset('error');
+  session.tab9 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
+  els = await openPopup('https://x.com/watch');
+  const b2 = els['#media'].children[0].children[2];
+  await b2.onclick();
+  assert.equal(b2.textContent, 'Failed');
+  assert.equal(called('windows.create').length, 0);
 });
 
 test('popup "Show download button on videos" defaults on and saves to overlay', async () => {
@@ -360,18 +396,22 @@ test('video button message: sends the picked media with the page as referrer', a
   reset();
   session.tab5 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
   assert.deepEqual(await videoMsg(vmsg()), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' } });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
 
-  reset();
-  assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: 'mp3' })), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: 'mp3', headers: {} });
+  reset(); // YouTube: type and quality are picked in the Download File Info window
+  assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })), { ok: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', headers: {}, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
 
   reset();
   assert.deepEqual(await videoMsg(vmsg()), { error: 'No video found yet. Play it for a few seconds, then try again.' });
   assert.equal(requests.length, 0);
+  assert.equal(called('windows.create').length, 0);
 
   reset('down');
   assert.deepEqual(await videoMsg(vmsg({ src: 'https://cdn.x.com/v.mp4' })), { error: 'Arrow is not running.' });
+  assert.equal(called('windows.create').length, 0);
 });
 
 test('video button message: other senders and bad fields are refused', async () => {
@@ -389,15 +429,15 @@ test('video button message: other senders and bad fields are refused', async () 
 
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ isYouTubeVideo, bigEnough, inside })', { URL });
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside })', { URL });
 
-test('content.js helpers: its isYouTubeVideo copy agrees with common.js, size and hit checks', () => {
-  for (const u of [
-    'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://youtu.be/dQw4w9WgXcQ', 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    'https://www.youtube.com/shorts/dQw4w9WgXcQ', 'https://www.youtube.com/live/dQw4w9WgXcQ', 'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
-    'https://www.youtube.com/', 'https://www.youtube.com/watch?v=short', 'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
-    'ftp://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://x.com/', 'not a url',
-  ]) assert.equal(content.isYouTubeVideo(u), isYouTubeVideo(u), u);
+test('content.js: one click sends, no quality menu (the Download File Info window asks)', () => {
+  assert.doesNotMatch(contentSrc, /menu|QUALITIES|aria-expanded|1080|msg\.quality/);
+  assert.match(contentSrc, /if \(e\.isTrusted && !busy\) grab\(\);/);
+  assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: location\.href, title: document\.title \}/);
+});
+
+test('content.js helpers: size and hit checks', () => {
   assert.ok(content.bigEnough({ width: 200, height: 112 }));
   assert.ok(!content.bigEnough({ width: 199, height: 360 }));
   assert.ok(!content.bigEnough({ width: 640, height: 111 }));

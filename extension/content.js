@@ -1,23 +1,8 @@
 // "Download with Arrow" button over web video players, like IDM's. Runs in every frame (embedded players
-// live in iframes). Content scripts can't be ES modules, so the helpers below are plain functions;
-// extension.test.js runs them in Node.
+// live in iframes). One click sends it; the app's Download File Info window asks the rest (YouTube type and quality too).
+// Content scripts can't be ES modules, so the helpers below are plain functions; extension.test.js runs them in Node.
 
 const LABEL = 'Download with Arrow';
-const QUALITIES = [['best', 'Best quality'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['mp3', 'MP3 (audio only)']];
-
-// Copy of isYouTubeVideo() in common.js (extension.test.js checks they agree).
-const YT_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com']);
-const YT_ID = /^[\w-]{11}$/;
-function isYouTubeVideo(url) {
-  let u;
-  try { u = new URL(url); } catch { return false; }
-  if (!/^https?:$/.test(u.protocol)) return false;
-  if (u.hostname === 'youtu.be') return YT_ID.test(u.pathname.slice(1));
-  if (!YT_HOSTS.has(u.hostname)) return false;
-  if (u.pathname === '/watch') return YT_ID.test(u.searchParams.get('v') ?? '');
-  const m = u.pathname.match(/^\/(?:shorts|live|embed)\/([^/]+)\/?$/);
-  return !!m && YT_ID.test(m[1]);
-}
 
 // Big enough to be a player, not a thumbnail preview or an icon.
 const bigEnough = r => r.width >= 200 && r.height >= 112;
@@ -36,10 +21,9 @@ function main() {
       font: inherit; white-space: nowrap; cursor: pointer; }
     button:hover { background: rgba(17,24,39,.96); }
     button:focus-visible { outline: 2px solid #14B8A6; }
-    .menu { position: absolute; top: calc(100% + 4px); right: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-    .menu[hidden], .sr { display: none; }`;
+    .sr { display: none; }`;
 
-  let host, box, btn, label, menu, live, video, hideTimer = 0, busy = false, enabled = false;
+  let host, box, btn, label, live, video, hideTimer = 0, busy = false, enabled = false;
 
   // DOM building without innerHTML, which Trusted Types pages (YouTube) may refuse.
   const make = (ns, tag, attrs = {}, ...kids) => {
@@ -68,46 +52,14 @@ function main() {
     const root = host.attachShadow({ mode: 'closed' });
     label = h('span', {}, LABEL);
     btn = h('button', { 'aria-label': LABEL }, logo(), label);
-    menu = h('div', { class: 'menu', role: 'group', 'aria-label': 'Quality' },
-      ...QUALITIES.map(([q, text]) => h('button', { 'data-q': q, 'aria-label': 'Download ' + text }, text)));
-    menu.hidden = true;
-    box = h('div', { class: 'box' }, btn, menu);
+    box = h('div', { class: 'box' }, btn);
     live = h('div', { class: 'sr', 'aria-live': 'polite' });
     root.append(h('style', {}, CSS), box, live);
     // keyboard Enter/Space on a <button> fires a trusted click too; scripted clicks are not trusted
     btn.addEventListener('click', e => {
-      if (!e.isTrusted || busy) return;
-      if (!isYouTubeVideo(location.href)) return grab();
-      if (menu.hidden) openMenu(); else closeMenu();
-    });
-    menu.addEventListener('click', e => {
-      const q = e.target.closest?.('button')?.dataset.q;
-      if (!e.isTrusted || !q) return;
-      closeMenu();
-      btn.focus(); // the picked item just disappeared
-      chrome.storage.local.set({ quality: q });
-      grab(q);
-    });
-    root.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && !menu.hidden) { e.stopPropagation(); closeMenu(); btn.focus(); }
+      if (e.isTrusted && !busy) grab();
     });
     document.documentElement.append(host);
-  }
-
-  async function openMenu() {
-    const { quality = 'best' } = await chrome.storage.local.get('quality');
-    for (const b of menu.children) {
-      b.setAttribute('aria-pressed', String(b.dataset.q === quality));
-      b.textContent = (b.dataset.q === quality ? '✓ ' : '') + QUALITIES.find(x => x[0] === b.dataset.q)[1];
-    }
-    menu.hidden = false;
-    btn.setAttribute('aria-expanded', 'true');
-    menu.querySelector('[aria-pressed="true"]').focus();
-  }
-  function closeMenu() {
-    if (!menu || menu.hidden) return;
-    menu.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
   }
 
   function say(text) {
@@ -116,11 +68,10 @@ function main() {
     live.textContent = text === LABEL ? '' : text;
   }
 
-  async function grab(quality) {
+  async function grab() {
     busy = true;
     say('Sending…');
     const msg = { type: 'video', src: video?.currentSrc ?? '', pageUrl: location.href, title: document.title };
-    if (quality) msg.quality = quality;
     const res = await chrome.runtime.sendMessage(msg).catch(() => null); // fails after the extension reloads
     say(res?.ok ? 'Sent to Arrow ✓' : res?.error ?? 'Reload the page and try again.');
     setTimeout(() => { busy = false; say(LABEL); }, 2500);
@@ -138,7 +89,6 @@ function main() {
     clearTimeout(hideTimer);
     hideTimer = 0;
     if (!host) build();
-    if (video !== v) closeMenu();
     video = v;
     box.classList.add('on');
     place();
@@ -151,7 +101,6 @@ function main() {
     hideTimer = setTimeout(() => {
       hideTimer = 0;
       if (busy) return hide(); // keep the result readable
-      closeMenu();
       box.classList.remove('on');
       video = null;
     }, now === true ? 0 : 1500);
@@ -178,7 +127,6 @@ function main() {
   addEventListener('mouseout', e => { if (!e.relatedTarget && video) hide(); }, true); // pointer left the frame
   addEventListener('scroll', place, { passive: true, capture: true });
   addEventListener('resize', place, { passive: true });
-  addEventListener('pointerdown', e => { if (host && !e.composedPath().includes(host)) closeMenu(); }, true);
 
   function setEnabled(on) {
     enabled = on;

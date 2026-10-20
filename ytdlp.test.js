@@ -95,6 +95,17 @@ test('video download: title, size and progress from yt-dlp, filed under Video, t
   assert.equal(path.basename(again.file), 'Fake vidéo_ okVideo0001 (1).mp4', 'names stay unique');
 });
 
+test('a path chosen in the Download File Info window is kept, with the quality picked there', async () => {
+  const d = mgr.add({ url: 'https://youtu.be/okAudio0002', confirm: true });
+  const file = path.join(dir, 'chosen', 'My song.mp3');
+  mgr.confirm(d.id, { action: 'start', path: path.join(dir, 'chosen', 'My song.mp4'), quality: 'mp3' });
+  await settled(d);
+  assert.equal(d.status, 'done', d.error);
+  assert.equal(d.file, file);
+  assert.equal(d.tmp, undefined);
+  assert.deepEqual(await fs.readFile(file), bytes('a1', 0, 30000));
+});
+
 test('mp3: filed under Music, size added up from the streams when yt-dlp gives none up front', async () => {
   const d = mgr.add({ url: 'https://youtu.be/okAudio0001', quality: 'mp3' });
   await settled(d);

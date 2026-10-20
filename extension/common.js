@@ -22,7 +22,8 @@ const isYouTubeHost = h => h === 'youtu.be' || h === 'youtube.com' || h.endsWith
 // Hands a link to the app with the browser's cookies and referrer, so logged-in downloads work.
 // The browser's user agent is left out: servers drop clients that claim to be Chrome but aren't.
 // YouTube login cookies never leave the browser: the app does not need them for public videos.
-export async function send({ url, referrer, name, title, quality }) {
+// confirm: the app keeps it waiting for the Download File Info window. Returns the download's id, or null.
+export async function send({ url, referrer, name, title, quality, confirm }) {
   const headers = {};
   if (referrer) headers.referer = referrer;
   const host = parse(url)?.hostname ?? '';
@@ -31,9 +32,21 @@ export async function send({ url, referrer, name, title, quality }) {
   const res = await fetch(APP + '/api/add', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url, name, title, headers, quality }),
+    body: JSON.stringify({ url, name, title, headers, quality, confirm }),
   }).catch(() => null);
-  return !!res?.ok;
+  return res?.ok ? (await res.json().catch(() => null))?.id ?? null : null;
+}
+
+// Every Download click in the browser: the app keeps the download waiting (confirm: true) and IDM's
+// Download File Info window opens, centred on the browser window. Returns the id, or null when the app refused it.
+const W = 560, H = 470;
+export async function sendConfirm(item) {
+  const id = await send({ ...item, confirm: true });
+  if (!id) return null;
+  const b = await chrome.windows.getLastFocused().catch(() => null);
+  await chrome.windows.create({ url: APP + '/confirm?id=' + id, type: 'popup', width: W, height: H, focused: true,
+    ...(b?.width && { left: Math.round(b.left + (b.width - W) / 2), top: Math.round(b.top + (b.height - H) / 2) }) });
+  return id;
 }
 
 const isHttp = url => /^https?:$/.test(parse(url)?.protocol ?? '');

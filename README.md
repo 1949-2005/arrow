@@ -66,7 +66,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - **Delete** (or the Delete key) removes them from the list. For finished ones, Arrow asks if it should also delete the files.
   - **Delete completed** removes all finished downloads from the list. The files stay on disk.
   - **Options** opens the settings. **Scheduler** opens them at "Start scheduled downloads at".
-- Select like in a file list: click, Ctrl+click to add or remove one, Shift+click for a range. With the keyboard: Up and Down move, Shift+Up/Down extend, Ctrl+A selects all, Space adds or removes one. Enter or a double-click opens a finished file.
+- Select like in a file list: click, Ctrl+click to add or remove one, Shift+click for a range. With the keyboard: Up and Down move, Shift+Up/Down extend, Ctrl+A selects all, Space adds or removes one. Enter or a double-click opens a finished file. A double-click on an unfinished download opens its progress window.
 - The left side sorts the list by category (Compressed, Documents, Music, Programs, Video, Other, by file type) and by status (Unfinished, Finished, Scheduled). Click one to show only those downloads. Arrow remembers your choice. In a narrow window the left side is hidden and the list shows everything.
 - The pane under the list shows the selected download: its link and folder, how much is downloaded, speed, time left, connections, whether it can resume, and one bar piece per connection. It has Open, Show in folder and Change link (for a paused or failed download whose link expired).
 - Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Arrow tells you how many links that makes before it adds them. At most 1000 at a time.
@@ -75,8 +75,16 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - With the extension:
   - While the app runs, browser downloads go to Arrow automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
   - Right-click a link or a video and choose "Download with Arrow".
-  - Play a video, then click the extension icon. It shows the media it found (the number on the icon tells how many). Click Download.
-  - Point at a video on a web page. A "Download with Arrow" button appears at its top right. Click it. On YouTube, choose the quality first. If it says "No video found yet", let the video play for a few seconds, then click again.
+  - Point at a video on a web page. A "Download with Arrow" button appears at its top right. Click it. If it says "No video found yet", let the video play for a few seconds, then click again.
+  - Each of these opens the **Download File Info** window, like IDM:
+    - It shows the link, the size (when the server tells it) and where the file goes.
+    - For YouTube, choose **Video · MP4** or **Audio · MP3**, and the quality for video. Arrow remembers your choice.
+    - **Category** changes the folder. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
+    - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** adds it as paused: start it later with Resume. **Cancel** (or Esc) drops it.
+    - If the window says "Couldn't read the file details", you can still try to start it.
+    - The download shows in the list only after you click Start Download or Download Later. A window left open for 30 minutes forgets its download.
+  - The progress window shows the status, size, speed, time left and one bar piece per connection. Pause, Resume or Cancel the download there. When it is done, click **Open**, **Open folder** or **Close**.
+  - Play a video, then click the extension icon. It shows the media it found (the number on the icon tells how many). Click Download. The Download File Info window opens for these too.
   - To hide that button, open the extension popup and switch off "Show download button on videos".
 
 ## YouTube videos
@@ -86,7 +94,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - `winget install yt-dlp.FFmpeg`
   - If one is already installed, winget tells you so.
 - Three ways to start:
-  - In Brave, open a YouTube video page. Click the Arrow icon, choose the quality, and click **Download this video**.
+  - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**. Choose the type and quality in the Download File Info window.
   - Paste the link in Arrow's Add URL window. A quality picker appears under the links.
   - Right-click a YouTube link and choose "Download with Arrow". This uses the best quality.
 - Qualities: Best quality, 1080p, 720p, 480p, MP3 (audio only).

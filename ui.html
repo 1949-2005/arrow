@@ -507,7 +507,12 @@ function details() {
 }
 
 function refresh() {
-  return api('/api/state').then(st => { state = st; $('#offline').hidden = true; render(st); }, () => { $('#offline').hidden = false; });
+  return api('/api/state').then(st => {
+    st.downloads = st.downloads.filter(d => d.status !== 'pending'); // still in their Download File Info window: not in the list yet
+    state = st;
+    $('#offline').hidden = true;
+    render(st);
+  }, () => { $('#offline').hidden = false; });
 }
 
 // Selection rules live in selectRows (helpers block)
@@ -521,7 +526,12 @@ $('#list').onclick = e => {
   const tr = e.target.closest('tr');
   if (tr) select(tr.dataset.id, e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'only');
 };
-$('#list').ondblclick = e => { const tr = e.target.closest('tr'); if (tr) openDone(rows.get(tr.dataset.id)?.d); };
+// Double-click: a finished file opens, an unfinished download shows its progress window
+$('#list').ondblclick = e => {
+  const d = rows.get(e.target.closest('tr')?.dataset.id)?.d;
+  if (d?.status === 'done') openDone(d);
+  else if (d) window.open('/progress?id=' + d.id, 'arrow-progress-' + d.id, 'popup,width=560,height=470');
+};
 $('#list').onkeydown = e => {
   const v = visible().map(r => r.d.id), to = keyTarget(e.key, v, cursor);
   if (!v.length) return;

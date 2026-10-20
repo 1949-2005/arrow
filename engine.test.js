@@ -45,6 +45,10 @@ const server = http.createServer(async (req, res) => {
     for (let p = start; p <= end && !closed; p += 65536) { res.write(data.subarray(p, Math.min(p + 65536, end + 1))); await sleep(15); }
     return res.end();
   }
+  if (u === '/dispo') { // ignores Range, like many servers
+    res.writeHead(200, { 'content-disposition': 'attachment; filename="Q3 report.pdf"', 'content-type': 'application/pdf; charset=binary', 'content-length': 10 });
+    return res.end('0123456789');
+  }
   if (u === '/redirect') { res.writeHead(302, { location: `http://localhost:${server.address().port}/file.bin` }); return res.end(); }
   if (u === '/norange.bin') { res.writeHead(200); return res.end(data); }
   if (u === '/master.m3u8') return res.end('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=900\nhi/index.m3u8\n');
@@ -275,6 +279,143 @@ test('when all downloads finish: Cancel keeps the PC on; choosing while idle wai
   assert.equal(m.view().powerIn, null, 'nothing finished since the choice was made');
   assert.deepEqual(ops, []);
 }));
+
+// The Download File Info window: downloads from the extension wait as 'pending' until it answers.
+test('pending: never started; the probe reads name and size with a one-byte range', async () => {
+  ranges.length = 0;
+  const d = mgr.add({ url: base + '/file.bin', confirm: true });
+  assert.equal(d.status, 'pending');
+  await until(() => d.probe);
+  mgr.pump();
+  await sleep(50);
+  assert.equal(d.status, 'pending');
+  assert.ok(!mgr.running.has(d.id));
+  assert.deepEqual(ranges, ['bytes=0-0']);
+  assert.deepEqual(d.probe, { name: 'file.bin', category: 'Other', size: data.length, type: null, error: null });
+  assert.equal(d.file, undefined, 'no file before the window answers');
+  assert.deepEqual(mgr.view().downloads.find(x => x.id === d.id).probe, d.probe);
+  mgr.confirm(d.id, { action: 'cancel' });
+});
+
+test('pending probe: Content-Disposition name, Content-Length size and type; a failure keeps its error', async () => {
+  const a = mgr.add({ url: base + '/dispo', confirm: true });
+  await until(() => a.probe);
+  assert.deepEqual(a.probe, { name: 'Q3 report.pdf', category: 'Documents', size: 10, type: 'application/pdf', error: null });
+  const b = mgr.add({ url: base + '/denied/secret.zip', confirm: true });
+  await until(() => b.probe);
+  assert.deepEqual(b.probe, { name: 'secret.zip', category: 'Compressed', size: null, type: null, error: 'HTTP 404' });
+  const c = mgr.add({ url: 'http://127.0.0.1:1/x/notes.txt', confirm: true }); // connection refused
+  await until(() => c.probe);
+  assert.equal(c.probe.name, 'notes.txt');
+  assert.ok(c.probe.error, 'keeps the network error');
+  for (const d of [a, b, c]) mgr.confirm(d.id, { action: 'cancel' });
+});
+
+test('pending probe: YouTube names come from the tab title, HLS from the link', async () => {
+  const v = mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', title: '(3) Me at the zoo - YouTube', confirm: true });
+  await until(() => v.probe);
+  assert.deepEqual(v.probe, { name: 'Me at the zoo.mp4', category: 'Video', size: null, type: null, error: null });
+  const a = mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', quality: 'mp3', confirm: true });
+  await until(() => a.probe);
+  assert.deepEqual([a.probe.name, a.probe.category], ['video.mp3', 'Music']);
+  const h = mgr.add({ url: base + '/live/stream.m3u8', confirm: true });
+  await until(() => h.probe);
+  assert.deepEqual([h.probe.name, h.probe.category], ['stream.ts', 'Video']);
+  for (const d of [v, a, h]) mgr.confirm(d.id, { action: 'cancel' });
+});
+
+test('confirm start: the chosen path is used as it is, its folders are created', async () => {
+  const d = mgr.add({ url: base + '/file.bin', confirm: true });
+  const file = path.join(dir, 'picked', 'deep', 'My file.bin');
+  mgr.confirm(d.id, { action: 'start', path: file });
+  assert.equal(d.file, file);
+  assert.equal(d.name, 'My file.bin');
+  assert.equal(d.tmp, file + '.fdl');
+  assert.equal(sha(await finished(d)), sha(data));
+  assert.equal(d.file, file);
+});
+
+test('confirm start: HLS keeps the chosen path too', async () => {
+  const d = mgr.add({ url: base + '/master.m3u8', title: 'My Video', confirm: true });
+  const file = path.join(dir, 'picked', 'clip.ts');
+  mgr.confirm(d.id, { action: 'start', path: file });
+  assert.equal(sha(await finished(d)), sha(Buffer.concat(parts)));
+  assert.equal(d.file, file);
+});
+
+test('confirm: taken names are numbered, file names are cleaned, bad paths are refused', async () => {
+  const folder = path.join(dir, 'taken');
+  await fs.mkdir(folder, { recursive: true });
+  await fs.writeFile(path.join(folder, 'a.zip'), 'x');
+  await fs.writeFile(path.join(folder, 'a (1).zip.fdl'), 'x');
+  const d = mgr.add({ url: base + '/file.bin', confirm: true });
+  for (const bad of [undefined, '', 'a.zip', 'folder\\a.zip', '\\a.zip', folder + '\\']) {
+    assert.throws(() => mgr.confirm(d.id, { action: 'later', path: bad }), /Save As needs a full path/, String(bad));
+  }
+  assert.throws(() => mgr.confirm(d.id, { action: 'go', path: path.join(folder, 'a.zip') }), /unknown action/);
+  assert.equal(d.status, 'pending');
+  mgr.confirm(d.id, { action: 'later', path: path.join(folder, 'a.zip') });
+  assert.equal(d.file, path.join(folder, 'a (2).zip'));
+  const e = mgr.add({ url: base + '/file.bin', confirm: true });
+  mgr.confirm(e.id, { action: 'later', path: path.join(folder, 'a (2).zip') }); // another download's name
+  assert.equal(e.name, 'a (2) (1).zip');
+  const f = mgr.add({ url: base + '/file.bin', confirm: true });
+  mgr.confirm(f.id, { action: 'later', path: path.join(folder, 'CON.txt') });
+  assert.equal(f.name, '_CON.txt');
+  for (const x of [d, e, f]) await mgr.act(x.id, 'remove');
+});
+
+test('confirm later pauses, cancel removes, and only a pending download can be confirmed', async () => {
+  const d = mgr.add({ url: base + '/file.bin', confirm: true });
+  mgr.confirm(d.id, { action: 'later', path: path.join(dir, 'later', 'f.bin') });
+  assert.equal(d.status, 'paused');
+  assert.equal(d.probe, undefined);
+  await sleep(50);
+  assert.ok(!mgr.running.has(d.id), 'later must not start it');
+  assert.throws(() => mgr.confirm(d.id, { action: 'start', path: path.join(dir, 'f.bin') }), /no longer waiting/);
+  const c = mgr.add({ url: base + '/file.bin', confirm: true });
+  mgr.confirm(c.id, { action: 'cancel' });
+  assert.ok(!mgr.list.includes(c));
+  assert.throws(() => mgr.confirm(c.id, { action: 'cancel' }), /no longer waiting/);
+  assert.throws(() => mgr.confirm('nope', { action: 'cancel' }), /no longer waiting/);
+  await mgr.act(d.id, 'remove');
+});
+
+test('confirm: a YouTube download gets the extension of its quality', () => {
+  const folder = path.join(dir, 'yt');
+  const v = mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', confirm: true });
+  // later, never start: that would run the real yt-dlp
+  mgr.confirm(v.id, { action: 'later', path: path.join(folder, 'Me at the zoo.mp4'), quality: 'mp3' });
+  assert.deepEqual([v.quality, v.name, v.status], ['mp3', 'Me at the zoo.mp3', 'paused']);
+  const w = mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', quality: 'mp3', confirm: true });
+  mgr.confirm(w.id, { action: 'later', path: path.join(folder, 'clip'), quality: '720' });
+  assert.deepEqual([w.quality, w.name], ['720', 'clip.mp4']);
+  const x = mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', confirm: true });
+  assert.throws(() => mgr.confirm(x.id, { action: 'later', path: path.join(folder, 'a.mp4'), quality: '4k' }), /unknown quality/);
+  for (const d of [v, w, x]) mgr.list.splice(mgr.list.indexOf(d), 1);
+});
+
+test('pending downloads are never saved, are dropped on load, and expire after 30 minutes', async () => {
+  const file = path.join(dir, 'pending.json');
+  const m = new Manager(file); // never loaded: no timer, these tests tick by hand
+  m.update({ dir: path.join(dir, 'out') });
+  const p = m.add({ url: base + '/file.bin', confirm: true }), kept = m.add({ url: base + '/file.bin', scheduled: true });
+  await m.save();
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).list.map(d => d.id), [kept.id]);
+  m.saveSync();
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).list.map(d => d.id), [kept.id]);
+
+  await fs.writeFile(file, JSON.stringify({ settings: {}, list: [{ ...kept, id: 'old', status: 'pending' }, kept] }));
+  const m2 = new Manager(file);
+  await m2.load();
+  assert.deepEqual(m2.list.map(d => d.id), [kept.id]);
+
+  m.tick();
+  assert.ok(m.list.includes(p), 'not 30 minutes old yet');
+  p.added -= m.pendingMs;
+  m.tick();
+  assert.deepEqual(m.list, [kept]);
+});
 
 test('file names cannot escape the folder', () => {
   assert.equal(sanitize('../../a:b?.exe'), '_.._a_b_.exe');

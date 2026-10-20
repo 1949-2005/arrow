@@ -79,6 +79,8 @@ export class Manager {
   powerDelayMs = 60000;
   power = () => {}; // server.js puts the real sleep/shutdown here; tests and other users of Manager stay harmless
   worked = false; // a download started since the last tick, so even one that ended between ticks counts
+  browse = async () => null; // server.js puts the Windows Save dialog here; tests use a stub
+  pendingMs = 30 * 60000; // a Download File Info window left open longer than this loses its download
 
   constructor(stateFile) {
     this.stateFile = stateFile;
@@ -92,6 +94,7 @@ export class Manager {
     } catch (e) {
       if (e.code !== 'ENOENT') throw e; // never overwrite a state file we could not read
     }
+    this.list = this.list.filter(d => d.status !== 'pending'); // its Download File Info window is gone
     for (const d of this.list) if (d.status === 'downloading') d.status = 'queued';
     this.update({});
     setInterval(() => this.tick(), 1000).unref();
@@ -115,7 +118,8 @@ export class Manager {
     this.pump();
   }
 
-  add({ url, name, title, headers, scheduled, quality }) {
+  // confirm: the extension's downloads wait as 'pending' until the Download File Info window starts them
+  add({ url, name, title, headers, scheduled, quality, confirm }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
@@ -131,13 +135,69 @@ export class Manager {
       cookieHost: u.hostname,
       kind: yt ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
       ...(yt && { quality }),
-      status: scheduled ? 'scheduled' : 'queued',
+      status: confirm ? 'pending' : scheduled ? 'scheduled' : 'queued',
       added: Date.now(),
     };
     this.list.push(d);
+    if (confirm) this.probe(d);
     this.dirty = true;
     this.pump();
     return d;
+  }
+
+  // Defaults for the Download File Info window: name, category, size. Never throws; a failed probe keeps its error for the window.
+  async probe(d) {
+    let name, size = null, type = null, error = null;
+    if (d.kind === 'video') { // the extension sends the tab title: "(3) Title - YouTube"
+      const t = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '');
+      name = sanitize(t || 'video') + (d.quality === 'mp3' ? '.mp3' : '.mp4');
+    } else if (d.kind === 'hls') {
+      name = this.baseName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + '.ts');
+    } else {
+      let found = nameFromUrl(d.url);
+      try {
+        const res = await this.get(d.url, d, AbortSignal.timeout(15000), 'bytes=0-0');
+        res.body?.cancel().catch(() => {});
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        found = nameFromDisposition(res.headers.get('content-disposition') ?? '') || nameFromUrl(res.finalUrl);
+        const total = /\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '')?.[1];
+        size = total != null ? Number(total) : Number(res.headers.get('content-length')) || null;
+        type = res.headers.get('content-type')?.split(';')[0].trim() || null;
+      } catch (e) {
+        error = e.cause?.message || e.message;
+      }
+      name = this.baseName(d, found);
+    }
+    const ext = path.extname(name).slice(1).toLowerCase();
+    const category = Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext)) ?? 'Other';
+    if (d.status === 'pending') d.probe = { name, category, size, type, error };
+  }
+
+  // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
+  confirm(id, { action, path: file, quality } = {}) {
+    const d = this.list.find(x => x.id === id);
+    if (d?.status !== 'pending') throw new Error('This download is no longer waiting to start.');
+    if (action === 'cancel') {
+      this.list.splice(this.list.indexOf(d), 1);
+      return;
+    }
+    if (action !== 'start' && action !== 'later') throw new Error('unknown action');
+    if (d.kind === 'video' && quality != null) {
+      if (!QUALITIES.includes(String(quality))) throw new Error(`unknown quality "${quality}"`);
+      d.quality = String(quality);
+    }
+    const p = String(file ?? '').trim();
+    // a drive or a network share, and a file name after the last separator
+    if (!/^([a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/])/i.test(p) || /[\\/]$/.test(p)) throw new Error('Save As needs a full path with a file name, like C:\\Downloads\\file.zip');
+    let name = sanitize(path.basename(p));
+    if (d.kind === 'video') name = name.slice(0, name.length - path.extname(name).length) + (d.quality === 'mp3' ? '.mp3' : '.mp4');
+    const dir = path.dirname(p);
+    try { mkdirSync(dir, { recursive: true }); } catch (e) { throw new Error('Could not create the folder: ' + e.message); }
+    this.setFile(d, this.uniqueFile(dir, name));
+    delete d.probe;
+    d.status = action === 'start' ? 'queued' : 'paused';
+    this.dirty = true;
+    this.pump();
   }
 
   async act(id, op, url) {
@@ -242,20 +302,35 @@ export class Manager {
     throw new Error('too many redirects');
   }
 
-  assignName(d, suggested) {
-    if (d.file) return;
+  // The file name: the download's own name, else its title, else the server's, with the server's extension
+  baseName(d, suggested) {
     suggested ||= 'download';
     let name = suggested;
     if (d.title) name = d.title + path.extname(suggested);
     if (d.name) name = path.extname(d.name) ? d.name : d.name + path.extname(suggested);
-    name = sanitize(name);
-    const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+    return sanitize(name);
+  }
+
+  // A file already chosen in the Download File Info window (confirm()) is kept.
+  assignName(d, suggested) {
+    if (d.file) return;
+    const name = this.baseName(d, suggested), ext = path.extname(name);
     const cat = this.settings.categories && Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext.slice(1).toLowerCase()));
     const dir = cat ? path.join(this.settings.dir, cat) : this.settings.dir;
     mkdirSync(dir, { recursive: true });
+    this.setFile(d, this.uniqueFile(dir, name));
+  }
+
+  // A name taken on disk, half downloaded (.fdl) or by another download gets " (1)", " (2)", …
+  uniqueFile(dir, name) {
+    const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
     const taken = f => existsSync(f) || existsSync(f + '.fdl') || this.list.some(x => x.file === f);
     let file = path.join(dir, name);
     for (let n = 1; taken(file); n++) file = path.join(dir, `${base} (${n})${ext}`);
+    return file;
+  }
+
+  setFile(d, file) {
     d.file = file;
     d.name = path.basename(file);
     d.tmp = file + '.fdl';
@@ -394,6 +469,8 @@ export class Manager {
   }
 
   tick() {
+    const stale = d => d.status === 'pending' && Date.now() - d.added >= this.pendingMs;
+    if (this.list.some(stale)) this.list = this.list.filter(d => !stale(d));
     for (const ctl of this.running.values()) {
       ctl.speed = ctl.speed * 0.3 + (ctl.bytes - ctl.last) * 0.7;
       ctl.last = ctl.bytes;
@@ -425,7 +502,7 @@ export class Manager {
     this.dirty = false;
     try {
       const tmp = this.stateFile + '.tmp';
-      await fs.writeFile(tmp, JSON.stringify({ settings: this.settings, list: this.list }));
+      await fs.writeFile(tmp, this.json());
       await fs.rename(tmp, this.stateFile);
     } catch (e) {
       this.dirty = true;
@@ -435,8 +512,13 @@ export class Manager {
     }
   }
 
+  // pending downloads are never saved: they live only as long as their Download File Info window
+  json() {
+    return JSON.stringify({ settings: this.settings, list: this.list.filter(d => d.status !== 'pending') });
+  }
+
   saveSync() {
-    writeFileSync(this.stateFile + '.tmp', JSON.stringify({ settings: this.settings, list: this.list }));
+    writeFileSync(this.stateFile + '.tmp', this.json());
     renameSync(this.stateFile + '.tmp', this.stateFile);
   }
 
@@ -447,7 +529,7 @@ export class Manager {
         const ctl = this.running.get(d.id);
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
-          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, added: d.added,
+          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, added: d.added, probe: d.probe,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,

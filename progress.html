@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FastDL</title>
+<style>
+  /* IDM's download progress window, as the approved mockup (brand/progress-mockup.html); the page is the whole window */
+  :root {
+    --window: #ECECEF; --toolbar: #F6F6F8; --panel: #FFFFFF; --line: #D9D9DE; --text: #1D1D1F; --muted: #6E6E73;
+    --hover: rgba(0,0,0,.06); --accent: #0F766E; --on-accent: #FFFFFF; --fill: #0F766E; --bar: #E2E2E7; --done: #1E8E3E; --err: #D70015;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --window: #1E1E20; --toolbar: #2A2A2D; --panel: #232326; --line: #3A3A3E; --text: #F5F5F7; --muted: #A1A1A6;
+      --hover: rgba(255,255,255,.07); --fill: #14B8A6; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--panel); color: var(--text);
+    font: 13px/1.4 "SF Pro Text", "SF Pro", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .win { min-height: 100%; display: flex; flex-direction: column; background: var(--panel); }
+  .main { flex: 1; }
+  .head { display: flex; align-items: center; gap: 12px; padding: 16px 20px 14px; border-bottom: 1px solid var(--line); background: var(--toolbar); }
+  .head img { width: 36px; height: 36px; }
+  .head > div { min-width: 0; }
+  .head h1 { margin: 0; font: 600 16px "SF Pro Display", "SF Pro", -apple-system, system-ui, sans-serif; }
+  .head p { margin: 1px 0 0; color: var(--muted); font-size: 12px; max-width: 440px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .head svg.ok { width: 36px; height: 36px; color: var(--done); flex: none; }
+  dl { margin: 0; padding: 14px 20px 4px; display: grid; grid-template-columns: 120px 1fr; gap: 7px 12px; }
+  dt { color: var(--muted); font-size: 12.5px; }
+  dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  dd b { font-weight: 600; }
+  dd.err { color: var(--err); }
+  .bars { padding: 10px 20px 4px; }
+  .big { height: 12px; border-radius: 6px; background: var(--bar); overflow: hidden; }
+  .big i { display: block; height: 100%; background: var(--fill); border-radius: 6px; }
+  .big.done i { background: var(--done); }
+  .lbl { color: var(--muted); font-size: 11.5px; margin: 10px 0 4px; }
+  .segs { position: relative; height: 8px; border-radius: 3px; background: var(--bar); overflow: hidden; }
+  .segs i { position: absolute; top: 0; bottom: 0; background: var(--fill); border-right: 2px solid var(--panel); }
+  .btn { font: inherit; height: 30px; padding: 0 14px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--hover); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  :focus-visible { outline: 2px solid var(--fill); outline-offset: 2px; }
+  .foot { display: flex; align-items: center; gap: 8px; padding: 14px 20px 16px; margin-top: 14px; border-top: 1px solid var(--line); background: var(--toolbar); }
+  .foot .spacer { flex: 1; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="head">
+    <img src="/favicon.ico" alt="" id="logo">
+    <svg class="ok" id="ok" hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+    <div><h1 id="title">Loading…</h1><p id="name"></p></div>
+  </div>
+  <div class="main">
+    <dl id="running" hidden>
+      <dt>URL</dt><dd id="url"></dd>
+      <dt>Status</dt><dd id="status"></dd>
+      <dt>File size</dt><dd><b id="size"></b></dd>
+      <dt>Downloaded</dt><dd><b id="got"></b> <span id="pct"></span></dd>
+      <dt>Transfer rate</dt><dd><b id="rate"></b></dd>
+      <dt>Time left</dt><dd><b id="eta"></b></dd>
+      <dt>Resume capability</dt><dd id="resume"></dd>
+    </dl>
+    <dl id="finished" hidden>
+      <dt>Saved to</dt><dd id="saved"></dd>
+      <dt>File size</dt><dd><b id="dsize"></b></dd>
+      <dt>URL</dt><dd id="durl"></dd>
+    </dl>
+    <div class="bars" id="bars" hidden>
+      <div class="big" id="big" role="progressbar" aria-label="Downloaded" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+      <div id="conn"><div class="lbl">Connections</div><div class="segs" id="segs" aria-hidden="true"></div></div>
+    </div>
+  </div>
+  <div class="foot" id="footRun" hidden><button type="button" class="btn" id="toggle">Pause</button><span class="spacer"></span><button type="button" class="btn" id="cancel">Cancel</button></div>
+  <div class="foot" id="footDone" hidden><button type="button" class="btn" id="folder">Open folder</button><span class="spacer"></span><button type="button" class="btn" id="close">Close</button><button type="button" class="btn primary" id="open">Open</button></div>
+  <div class="foot" id="footGone" hidden><span class="spacer"></span><button type="button" class="btn" id="close2">Close</button></div>
+  <div class="sr" aria-live="polite" id="live"></div>
+</div>
+
+<script id="helpers">
+// No DOM in this block: ui.test.js runs it in Node. d is a download from /api/state.
+const PHASE = { video: 'Downloading video', audio: 'Downloading audio', merging: 'Merging', converting: 'Converting to MP3' };
+const size = n => n == null || !isFinite(n) ? 'Unknown' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+const time = s => !isFinite(s) ? '' : s < 60 ? Math.ceil(s) + ' s' : s < 3600 ? Math.floor(s / 60) + ' min ' + Math.floor(s % 60) + ' s' : Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min';
+// HLS knows its size only from the segments done so far
+const total = d => d.kind === 'hls' && d.status !== 'done' ? (d.hls?.done ? d.hls.bytes / d.hls.done * d.hls.total : null) : d.size;
+const fraction = d => d.status === 'done' ? 1 : d.kind === 'hls' ? (d.hls ? d.hls.done / d.hls.total : 0) : d.size ? Math.min(1, d.got / d.size) : 0;
+
+// Header: "Downloading · 45%", "Paused · 45%", "Queued", "Merging", "Error", …
+function heading(d) {
+  const pct = Math.floor(fraction(d) * 100) + '%';
+  if (d.status === 'downloading') return d.phase === 'merging' ? 'Merging' : d.phase === 'converting' ? 'Converting' : 'Downloading · ' + pct;
+  if (d.status === 'paused') return 'Paused · ' + pct;
+  return { queued: 'Queued', scheduled: 'Scheduled', error: 'Error', done: 'Download complete', pending: 'Waiting', removed: 'Removing' }[d.status] ?? d.status;
+}
+
+// Status row: "Receiving data… (8 connections)", the video phases, Queued, Paused, Error: …
+function statusText(d) {
+  if (d.status === 'error') return 'Error: ' + d.error;
+  if (d.status === 'downloading') {
+    if (d.kind === 'video') return PHASE[d.phase] ?? 'Starting…';
+    return 'Receiving data…' + (d.connections ? ` (${d.connections} connection${d.connections === 1 ? '' : 's'})` : '');
+  }
+  return d.status === 'paused' ? 'Paused' : heading(d);
+}
+
+// Bar pieces [left, width] as fractions: one per connection for http, one fill for HLS and video
+const pieces = d => d.kind === 'http' && d.segments && d.size ? d.segments.map(([start, , pos]) => [start / d.size, (pos - start) / d.size]) : [[0, fraction(d)]];
+const canPause = d => ['downloading', 'queued', 'scheduled'].includes(d.status);
+</script>
+<script>
+const $ = s => document.querySelector(s);
+const id = new URLSearchParams(location.search).get('id');
+let d = null, said = '', gone = false;
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  return j;
+}
+const act = (op, then) => api('/api/action', { id, op }).then(then ?? refresh, e => alert(e.message));
+const say = text => { if (text !== said) $('#live').textContent = said = text; }; // only on changes, so screen readers aren't flooded
+const set = (sel, text) => { if ($(sel).textContent !== text) $(sel).textContent = text; };
+
+function render() {
+  if (!d) {
+    gone = true;
+    set('#title', 'This download was removed.');
+    say('This download was removed.');
+    for (const s of ['#running', '#finished', '#bars', '#footRun', '#footDone']) $(s).hidden = true;
+    $('#footGone').hidden = false;
+    return;
+  }
+  const done = d.status === 'done', pct = fraction(d) * 100, name = d.name || d.title || d.url;
+  set('#title', heading(d));
+  set('#name', name);
+  $('#name').title = d.file || name;
+  document.title = `${Math.floor(pct)}% · ${name}`;
+  say(done ? 'Download complete' : d.status === 'downloading' ? statusText(d).replace(/ \(.*/, '') : statusText(d));
+  $('#logo').hidden = done;
+  $('#ok').toggleAttribute('hidden', !done); // an <svg> has no .hidden property
+  $('#running').hidden = $('#footRun').hidden = done;
+  $('#finished').hidden = $('#footDone').hidden = !done;
+  $('#bars').hidden = false;
+  $('#big').classList.toggle('done', done);
+  $('#big').setAttribute('aria-valuenow', Math.floor(pct));
+  $('#big i').style.width = pct + '%';
+  $('#conn').hidden = done;
+  if (done) {
+    set('#saved', d.file ?? '');
+    set('#dsize', size(d.size));
+    set('#durl', d.url);
+    return;
+  }
+  const t = total(d), running = d.status === 'downloading';
+  set('#url', d.url);
+  $('#url').title = d.url;
+  set('#status', statusText(d));
+  $('#status').className = d.status === 'error' ? 'err' : '';
+  set('#size', size(t == null ? null : Math.round(t)));
+  set('#got', size(d.got));
+  set('#pct', `(${Math.floor(pct * 10) / 10}%)`);
+  set('#rate', running ? size(d.speed) + '/s' : '—');
+  set('#eta', running && d.speed && t ? time((t - d.got) / d.speed) : '—');
+  set('#resume', d.resumable === true ? 'Yes' : d.resumable === false ? 'No' : '—');
+  const html = pieces(d).map(([a, w]) => `<i style="left:${a * 100}%;width:max(1px, ${w * 100}%)"></i>`).join('');
+  if ($('#segs').dataset.html !== html) $('#segs').innerHTML = $('#segs').dataset.html = html;
+  set('#toggle', canPause(d) ? 'Pause' : 'Resume');
+}
+
+async function refresh() {
+  if (gone) return;
+  try {
+    d = (await api('/api/state')).downloads.find(x => x.id === id) ?? null;
+  } catch {
+    return set('#title', 'FastDL is not running.');
+  }
+  render();
+}
+
+$('#toggle').onclick = () => act(canPause(d) ? 'pause' : 'resume');
+$('#cancel').onclick = () => { if (confirm('Cancel this download? The partial file is deleted.')) act('remove', () => window.close()); };
+$('#folder').onclick = () => act('folder');
+$('#open').onclick = () => act('open');
+$('#close').onclick = $('#close2').onclick = () => window.close();
+
+refresh();
+setInterval(refresh, 700);
+</script>
+</body>
+</html>

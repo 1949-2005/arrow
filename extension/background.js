@@ -1,12 +1,10 @@
-import { send, appAlive, pickMedia } from './common.js';
+import { sendConfirm, appAlive, pickMedia } from './common.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  send({ url: info.linkUrl || info.srcUrl, referrer: tab?.url });
-});
+chrome.contextMenus.onClicked.addListener((info, tab) => sendConfirm({ url: info.linkUrl || info.srcUrl, referrer: tab?.url }));
 
 // Take over downloads the browser starts. When the app is closed, the browser keeps the download.
 chrome.downloads.onCreated.addListener(async item => {
@@ -16,8 +14,8 @@ chrome.downloads.onCreated.addListener(async item => {
   if (!intercept || !(await appAlive())) return;
   await chrome.downloads.cancel(item.id);
   await chrome.downloads.erase({ id: item.id });
-  const ok = await send({ url, referrer: item.referrer, name: item.filename?.split(/[\\/]/).pop() || undefined });
-  if (!ok) chrome.downloads.download({ url }); // app refused it: give it back to the browser
+  const id = await sendConfirm({ url, referrer: item.referrer, name: item.filename?.split(/[\\/]/).pop() || undefined });
+  if (!id) chrome.downloads.download({ url }); // app refused it: give it back to the browser
 });
 
 // Video grabber: remember media and HLS playlists each tab loads.
@@ -76,7 +74,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   const k = 'tab' + sender.tab.id;
   chain.then(() => chrome.storage.session.get(k)).then(async got => {
     const pick = pickMedia({ pageUrl, src, title, quality, media: got[k] ?? [] });
-    reply(pick.error ? pick : await send(pick) ? { ok: true } : { error: 'Arrow is not running.' });
+    if (pick.error) return reply(pick);
+    reply(await sendConfirm(pick) ? { ok: true } : { error: 'Arrow is not running.' });
   }).catch(() => reply({ error: 'Arrow is not running.' }));
   return true; // reply comes later
 });

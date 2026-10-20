@@ -1,4 +1,4 @@
-import { APP, send, appAlive, isYouTubeVideo } from './common.js';
+import { APP, sendConfirm, appAlive, isYouTubeVideo } from './common.js';
 
 const $ = s => document.querySelector(s);
 const size = n => !n ? '' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
@@ -19,13 +19,10 @@ const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
 $('#yt').hidden = !isYouTubeVideo(tab.url);
 if (!$('#yt').hidden) {
-  const { quality = 'best' } = await chrome.storage.local.get('quality');
-  $('#quality').value = quality;
-  $('#quality').onchange = e => chrome.storage.local.set({ quality: e.target.value });
-  $('#ytdl').onclick = async () => {
+  $('#ytdl').onclick = async () => { // type and quality are picked in the Download File Info window
     const b = $('#ytdl');
     b.disabled = true;
-    const ok = await send({ url: tab.url, quality: $('#quality').value });
+    const ok = !!await sendConfirm({ url: tab.url });
     b.textContent = ok ? 'Sent ✓' : 'Failed. Is Arrow running?';
     b.disabled = ok;
   };
@@ -46,7 +43,7 @@ for (const m of list) {
   b.textContent = 'Download';
   b.onclick = async () => {
     b.disabled = true;
-    b.textContent = await send({ url: m.url, referrer: tab.url, title: tab.title }) ? 'Sent ✓' : 'Failed';
+    b.textContent = await sendConfirm({ url: m.url, referrer: tab.url, title: tab.title }) ? 'Sent ✓' : 'Failed';
   };
   li.append(label, info, b);
   $('#media').append(li);

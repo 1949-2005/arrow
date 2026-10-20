@@ -9,7 +9,8 @@ import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, openW
 
 const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
 await mgr.load();
-const page = readFileSync(path.join(here, 'ui.html'), 'utf8').replaceAll('FastDL', brand.name);
+const html = f => readFileSync(path.join(here, f), 'utf8').replaceAll('FastDL', brand.name);
+const pages = { '/': html('ui.html'), '/confirm': html('confirm.html'), '/progress': html('progress.html') };
 const startupLink = path.join(startupDir, brand.name + '.lnk');
 const run = promisify(execFile);
 
@@ -31,6 +32,18 @@ mgr.power = op => {
     : powershell('Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState("Suspend", $false, $false)')
   ).catch(e => console.error(`could not ${op === 'shutdown' ? 'shut down' : 'sleep'}:`, e.message));
 };
+
+// Browse… in the Download File Info window: Windows' own Save dialog. Its hidden TopMost owner puts it in front of the browser.
+// No overwrite prompt: confirm() numbers taken names instead. Cancel gives null.
+async function saveDialog(file) {
+  const { stdout } = await powershell('[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; '
+    + '$d = New-Object System.Windows.Forms.SaveFileDialog; $d.OverwritePrompt = $false; $d.InitialDirectory = $env:FDL_DIR; $d.FileName = $env:FDL_NAME; '
+    + 'if ($d.ShowDialog((New-Object System.Windows.Forms.Form -Property @{ TopMost = $true })) -eq "OK") { $d.FileName }',
+  { FDL_DIR: file ? path.dirname(file) : mgr.settings.dir, FDL_NAME: file ? path.basename(file) : '' });
+  return stdout.trim() || null;
+}
+// FASTDL_BROWSE_STUB (tests): a folder "picked" in place of the real dialog, which would open on the user's screen
+mgr.browse = process.env.FASTDL_BROWSE_STUB ? async file => path.join(process.env.FASTDL_BROWSE_STUB, path.basename(file)) : saveDialog;
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
@@ -60,43 +73,47 @@ const server = http.createServer(async (req, res) => {
   const extension = /^(chrome|moz)-extension:\/\//.test(origin ?? '');
   if (origin && origin !== `http://${host}` && !extension) return send(res, 403, { error: 'bad origin' });
   // Any installed extension gets here, so it may only queue downloads: settings could aim the folder at Startup, "open" runs files.
-  const route = `${req.method} ${req.url}`;
+  const url = req.url.split('?')[0]; // /confirm?id=… and /progress?id=…
+  const route = `${req.method} ${url}`;
   if (extension && route !== 'GET /api/ping' && route !== 'POST /api/add') return send(res, 403, { error: 'not allowed from extensions' });
   try {
-    if (req.method === 'GET' && req.url === '/') return send(res, 200, page, 'text/html; charset=utf-8');
-    if (req.method === 'GET' && req.url === '/favicon.ico') { // the brand icon, so the app window and its taskbar button show it
+    if (req.method === 'GET' && pages[url]) return send(res, 200, pages[url], 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/favicon.ico') { // the brand icon, so the app window and its taskbar button show it
       return readFile(path.join(here, brand.icon)).then(b => send(res, 200, b, 'image/x-icon'), () => send(res, 404, { error: 'not found' }));
     }
-    if (req.method === 'GET' && req.url === '/api/ping') return send(res, 200, { app: 'fastdl' });
-    if (req.method === 'GET' && req.url === '/api/state') {
+    if (req.method === 'GET' && url === '/api/ping') return send(res, 200, { app: 'fastdl' });
+    if (req.method === 'GET' && url === '/api/state') {
       const v = mgr.view();
       return send(res, 200, { ...v, settings: { ...v.settings, startup: existsSync(startupLink) } });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
-    if (req.url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
+    if (url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
+    // The Download File Info window (confirm.html)
+    if (url === '/api/confirm') { mgr.confirm(body.id, body); return send(res, 200, { ok: true }); }
+    if (url === '/api/browse') return send(res, 200, { path: await mgr.browse(String(body.path ?? '')) });
     // The tray menu (tray.ps1)
-    if (req.url === '/api/open') { openWindow(); return send(res, 200, { ok: true }); }
-    if (req.url === '/api/pause-all') { mgr.pauseAll(); return send(res, 200, { ok: true }); }
-    if (req.url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
-    if (req.url === '/api/settings') {
+    if (url === '/api/open') { openWindow(); return send(res, 200, { ok: true }); }
+    if (url === '/api/pause-all') { mgr.pauseAll(); return send(res, 200, { ok: true }); }
+    if (url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
+    if (url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
       return send(res, 200, mgr.settings);
     }
-    if (req.url === '/api/action' && body.op === 'folder') {
+    if (url === '/api/action' && body.op === 'folder') {
       const d = mgr.list.find(x => x.id === body.id);
       if (!d?.file) throw new Error('file not created yet');
       explorer(d.status === 'done' ? `/select,"${d.file}"` : `"${path.dirname(d.file)}"`);
       return send(res, 200, { ok: true });
     }
-    if (req.url === '/api/action' && body.op === 'open') {
+    if (url === '/api/action' && body.op === 'open') {
       const d = mgr.list.find(x => x.id === body.id);
       if (d?.status !== 'done') throw new Error('only finished downloads can be opened');
       explorer(`"${d.file}"`);
       return send(res, 200, { ok: true });
     }
-    if (req.url === '/api/action') { await mgr.act(body.id, body.op, body.url); return send(res, 200, { ok: true }); }
+    if (url === '/api/action') { await mgr.act(body.id, body.op, body.url); return send(res, 200, { ok: true }); }
     send(res, 404, { error: 'not found' });
   } catch (e) {
     send(res, 400, { error: e.message });
