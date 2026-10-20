@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { downloadHls } from './hls.js';
+import { downloadHls, parsePlaylist, soundTemps } from './hls.js';
 import { downloadVideo, youtubeId, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf } from './ytdlp.js';
 
 const MIN_SPLIT = 512 * 1024; // a connection is only split off when each half keeps at least this much
@@ -171,7 +171,14 @@ export class Manager {
         error = e.message;
       }
     } else if (d.kind === 'hls') {
-      name = this.baseName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + '.ts');
+      let ext = '.ts'; // MP4 pieces, or a separate sound track that ffmpeg joins (X), give an .mp4
+      try {
+        const { map, audio } = await parsePlaylist(this, d, AbortSignal.timeout(15000));
+        if (map || audio) ext = '.mp4';
+      } catch (e) {
+        error = e.cause?.message || e.message;
+      }
+      name = this.baseName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + ext);
     } else {
       let found = nameFromUrl(d.url);
       try {
@@ -249,7 +256,7 @@ export class Manager {
       const wasDone = d.status === 'done';
       if (ctl) { d.status = 'removed'; ctl.ac.abort(); await ctl.done; }
       this.list.splice(this.list.indexOf(d), 1);
-      if (d.tmp) await fs.rm(d.tmp, { force: true });
+      if (d.tmp) for (const f of [d.tmp, ...(d.kind === 'hls' ? soundTemps(d) : [])]) await fs.rm(f, { force: true });
       await removeTmp(d);
       if (op === 'removeFile' && wasDone) await fs.rm(d.file, { force: true });
     } else throw new Error('unknown action');

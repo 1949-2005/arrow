@@ -464,9 +464,9 @@ const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta
 const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step })', { URL });
 
 test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
-  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy\) return;\n\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/);
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy\) return;\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/); // \s+: git may check out CRLF
   assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
-  assert.match(contentSrc, /if \(!e\.isTrusted\) return;\n\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
+  assert.match(contentSrc, /if \(!e\.isTrusted\) return;\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
   assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
   assert.match(contentSrc, /grab\(\{ pageUrl, title: res\.title \|\| undefined, format: o\.key \}\)/);
   assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: pick\.pageUrl \?\? location\.href, title: pick\.title \?\? document\.title, \.\.\.\(pick\.format && \{ format: pick\.format \}\) \}/);

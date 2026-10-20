@@ -1,7 +1,7 @@
 # File map
 
 - `engine.js` — core: pending downloads (probe, `confirm()`), queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, "when all downloads finish" countdown, `state.json` persistence, `view()` for the UI
-- `hls.js` — HLS (.m3u8): best-variant pick, AES-128 decryption, parallel segment fetch written in order
+- `hls.js` — HLS (.m3u8): best-variant pick and its separate sound track (X), AES-128 decryption, parallel segment fetch written in order, ffmpeg join of video and sound
 - `ytdlp.js` — YouTube via yt-dlp + ffmpeg: URL check, format list with real sizes (`listFormats`, cached 15 min), format key / quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
 - `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html`, `confirm.html` and `progress.html` (with the brand name) and the brand icon as favicon; Browse… (Windows Save dialog through PowerShell, `FASTDL_BROWSE_STUB` in tests); Host/Origin checks live here; extensions only get ping, add and formats; tray routes (open, pause all, quit); Windows integration: Start with Windows shortcut, sleep/shutdown commands
 - `desktop.js` — the Windows desktop app: `brand.json` reading, port/URL, `powershell()`, `shortcut()`, browser lookup and app window, `start()` (one instance, server, tray, window); `node desktop.js [--tray]`
@@ -18,7 +18,7 @@
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); opens the Download File Info window for each
   - `content.js` — "Download with Arrow" button over page videos (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches
-- `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry
+- `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files, answers `-J`)

@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, execFile } from 'node:child_process';
@@ -52,6 +52,12 @@ export function findFfmpeg() {
     .map(p => path.join(p, 'bin', 'ffmpeg.exe'))].find(existsSync);
   if (!f) throw new Error('ffmpeg is not installed. Run: winget install yt-dlp.FFmpeg');
   return path.dirname(f);
+}
+
+// The program itself (HLS joins a separate sound track with it); FASTDL_FFMPEG may name it or its folder.
+export function ffmpegExe() {
+  const f = findFfmpeg();
+  return statSync(f).isDirectory() ? path.join(f, exe('ffmpeg')) : f;
 }
 
 function formatArgs(d) {

@@ -130,6 +130,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - Auto-sorting into Video, Music, Compressed, Documents and Programs folders.
 - If a file name already exists, the new file gets (1), (2) and so on.
 - HLS video streams (.m3u8), also AES-128 encrypted ones. They are saved as .ts (or .mp4).
+  - Some sites (like X) send the sound as a separate track. Arrow downloads it too and joins it to the video with ffmpeg, into one .mp4. This needs ffmpeg: `winget install yt-dlp.FFmpeg`.
 - "Change link" for links that have expired.
 - Open and Show in folder buttons for finished files.
 - A desktop notification when a download finishes.
@@ -164,7 +165,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - If Arrow stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
 - Clipboard monitoring only looks at the clipboard when you switch to the Arrow window, not while you work in other windows. It only offers links that end in a file type from the sorting folders (Video, Music, Compressed, Documents, Programs).
 - Sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
-- HLS video is saved as .ts. Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
+- HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
 
 ## Privacy and safety

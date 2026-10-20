@@ -3,17 +3,24 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import { existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { Manager, sanitize } from './engine.js';
+import { parsePlaylist, soundTemps } from './hls.js';
+import { ffmpegExe } from './ytdlp.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let ffmpeg = null; // the real one: it makes and joins the sound-track test video
+try { ffmpeg = ffmpegExe(); } catch {}
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const data = crypto.randomBytes(6 * 1024 * 1024);
 const key = crypto.randomBytes(16);
 const parts = [crypto.randomBytes(100000), crypto.randomBytes(120000), crypto.randomBytes(90000)];
 const ranges = [];
 const cookies = [];
+const genHits = [];
 
 function encrypt(buf, seq) {
   const iv = Buffer.alloc(16);
@@ -23,7 +30,7 @@ function encrypt(buf, seq) {
 }
 
 let open = 0; // live connections to /limited.bin
-let stalledOnce = false, busyOnce = false, segStalledOnce = false;
+let stalledOnce = false, busyOnce = false, segStalledOnce = false, genSlow = false;
 
 const server = http.createServer(async (req, res) => {
   let u = req.url;
@@ -68,6 +75,19 @@ const server = http.createServer(async (req, res) => {
   }
   const seg = /^\/hi\/seg(\d)\.ts$/.exec(u);
   if (seg) return res.end(encrypt(parts[seg[1]], 7 + Number(seg[1])));
+  if (u === '/tracks/master.m3u8') { // sound in separate tracks, per quality; the "hi" group has a default
+    return res.end('#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="lo",NAME="lo",URI="lo-sound.m3u8"\n'
+      + '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="hi",NAME="fr",URI="fr.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="hi",NAME="en",DEFAULT=YES,URI="en.m3u8"\n'
+      + '#EXT-X-STREAM-INF:BANDWIDTH=900,AUDIO="hi"\nhi.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="lo"\nlo.m3u8\n');
+  }
+  const track = /^\/tracks\/([\w-]+)\.m3u8$/.exec(u);
+  if (track) return res.end(`#EXTM3U\n#EXTINF:4,\n${track[1]}.ts\n#EXT-X-ENDLIST\n`);
+  if (u.startsWith('/gen/')) { // ffmpeg-made HLS, see makeHls()
+    genHits.push(u);
+    if (genSlow && /\/1\/seg/.test(u)) await sleep(300); // slow sound pieces, so a pause can land between them
+    const f = await fs.readFile(path.join(dir, u)).catch(() => null);
+    if (f) return res.end(f);
+  }
   res.writeHead(404).end();
 });
 
@@ -213,6 +233,73 @@ test('HLS: a segment that goes silent mid-body is cut off and retried', async ()
     assert.ok(segStalledOnce);
   } finally {
     mgr.stallMs = 30000;
+  }
+});
+
+test("HLS: the chosen quality's separate sound track is found (its group's default)", async () => {
+  const { segs, audio } = await parsePlaylist(mgr, { url: base + '/tracks/master.m3u8', headers: {} }, AbortSignal.timeout(5000));
+  assert.equal(segs[0].url, base + '/tracks/hi.ts');
+  assert.equal(audio.segs[0].url, base + '/tracks/en.ts');
+  assert.equal((await parsePlaylist(mgr, { url: base + '/master.m3u8', headers: {} }, AbortSignal.timeout(5000))).audio, null);
+});
+
+// A 3 s clip as HLS with its sound in a separate track, like X serves it; served under /gen/
+function makeHls(type) {
+  const folder = path.join(dir, 'gen', type);
+  mkdirSync(folder, { recursive: true });
+  execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=10:duration=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3',
+    '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '10', '-c:a', 'aac', '-b:a', '64k', '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod',
+    '-hls_segment_type', type, '-var_stream_map', 'v:0,agroup:aud a:0,agroup:aud', '-master_pl_name', 'master.m3u8',
+    '-hls_segment_filename', `%v/seg%d.${type === 'fmp4' ? 'm4s' : 'ts'}`, '%v/index.m3u8'], { cwd: folder });
+  return `${base}/gen/${type}/master.m3u8`;
+}
+const ffprobe = (...args) => execFileSync(path.join(path.dirname(ffmpeg), 'ffprobe' + path.extname(ffmpeg)), ['-v', 'error', ...args]).toString().trim();
+// JSON's top-level list: in csv, MPEG-TS files also list each stream again under their program
+const streams = file => JSON.parse(ffprobe('-show_entries', 'stream=codec_type', '-of', 'json', file)).streams.map(s => s.codec_type);
+
+test('HLS: a separate sound track (X) is downloaded too and joined into an .mp4 by ffmpeg', { skip: !ffmpeg && 'needs ffmpeg' }, async () => {
+  for (const type of ['fmp4', 'mpegts']) {
+    const url = makeHls(type);
+    const p = mgr.add({ url, confirm: true });
+    await until(() => p.probe);
+    assert.equal(p.probe.name, 'master.mp4', type);
+    await mgr.confirm(p.id, { action: 'cancel' });
+
+    const d = mgr.add({ url, title: 'With sound ' + type });
+    await finished(d);
+    assert.equal(d.name, `With sound ${type}.mp4`);
+    assert.deepEqual(streams(d.file), ['video', 'audio'], type);
+    assert.equal(d.size, (await fs.stat(d.file)).size);
+    assert.ok(![d.tmp, ...soundTemps(d)].some(existsSync), 'temp files are gone');
+  }
+  // a .ts name picked in the Download File Info window gets a real MPEG-TS file
+  const p = mgr.add({ url: `${base}/gen/fmp4/master.m3u8`, confirm: true });
+  const file = path.join(dir, 'picked', 'kept name.ts');
+  await mgr.confirm(p.id, { action: 'start', path: file });
+  await finished(p);
+  assert.deepEqual(streams(file), ['video', 'audio']);
+  assert.equal(ffprobe('-show_entries', 'format=format_name', '-of', 'csv=p=0', file), 'mpegts');
+});
+
+test('HLS with a separate sound track: paused in the sound track, it resumes there', { skip: !ffmpeg && 'needs ffmpeg' }, async () => {
+  const url = makeHls('fmp4');
+  mgr.update({ connections: 1 });
+  genSlow = true;
+  try {
+    const d = mgr.add({ url, title: 'Paused with sound' });
+    await until(() => d.hls?.parts?.[1]?.done > 0);
+    await mgr.act(d.id, 'pause');
+    await until(() => !mgr.running.has(d.id));
+    assert.ok(d.hls.parts[1].done < d.hls.total - d.hls.parts[0].done, 'paused before the sound track ended');
+    genSlow = false;
+    genHits.length = 0;
+    await mgr.act(d.id, 'resume');
+    await finished(d);
+    assert.deepEqual(streams(d.file), ['video', 'audio']);
+    assert.ok(!genHits.some(u => /\/0\/(seg|init)/.test(u)), `video pieces fetched again: ${genHits}`);
+  } finally {
+    genSlow = false;
+    mgr.update({ connections: 4 });
   }
 });
 

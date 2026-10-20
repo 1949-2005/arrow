@@ -106,7 +106,7 @@ function heading(d) {
 function statusText(d) {
   if (d.status === 'error') return 'Error: ' + d.error;
   if (d.status === 'downloading') {
-    if (d.kind === 'video') return PHASE[d.phase] ?? 'Starting…';
+    if (d.kind === 'video' || d.phase) return PHASE[d.phase] ?? 'Starting…'; // HLS has a phase only while ffmpeg joins its sound
     return 'Receiving data…' + (d.connections ? ` (${d.connections} connection${d.connections === 1 ? '' : 's'})` : '');
   }
   return d.status === 'paused' ? 'Paused' : heading(d);
