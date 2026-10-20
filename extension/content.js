@@ -50,8 +50,9 @@ function main() {
     @media (prefers-reduced-motion: reduce) { .box, .box.on { transition: none; } .spin { animation: none !important; } }
     [hidden] { display: none !important; }
     button { all: unset; box-sizing: border-box; cursor: pointer; }
-    button:focus-visible { outline: 2px solid #14B8A6; outline-offset: -2px; }
-    .panel { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(17,24,39,.9);
+    button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+    /* the logo's graphite (#3B3C3D) and white */
+    .panel { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(59,60,61,.92);
       border: 1px solid rgba(255,255,255,.18); box-shadow: 0 4px 14px rgba(0,0,0,.35); color: #fff;
       cursor: move; user-select: none; touch-action: none; }
     .grip { width: 6px; height: 16px; margin: 0 3px 0 4px; opacity: .45;
@@ -64,26 +65,27 @@ function main() {
     .icon { display: grid; place-items: center; width: 26px; height: 28px; border-radius: 7px; color: rgba(255,255,255,.7); }
     .icon:hover { background: rgba(255,255,255,.12); color: #fff; }
     .icon svg { width: 14px; height: 14px; }
-    .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(17,24,39,.96); border: 1px solid rgba(255,255,255,.18);
+    .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(59,60,61,.97); border: 1px solid rgba(255,255,255,.18);
       box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
     .menu { width: 292px; max-height: 392px; overflow: auto; padding: 6px; }
     h3 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: rgba(255,255,255,.55); }
     .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 13px; }
     .item:hover, .item:focus { background: rgba(255,255,255,.1); }
-    .item:focus { outline: 2px solid #14B8A6; outline-offset: -2px; }
+    .item:focus { outline: 2px solid #fff; outline-offset: -2px; }
     .q { font-weight: 600; min-width: 56px; }
-    .tag { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(20,184,166,.22); color: #5EEAD4; }
+    .tag { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.16); color: #fff; }
     .sz { margin-left: auto; color: rgba(255,255,255,.6); }
     .note { display: flex; align-items: center; gap: 8px; padding: 10px; color: rgba(255,255,255,.75); line-height: 1.4; }
     .spin { flex: none; box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25);
-      border-top-color: #14B8A6; animation: spin .8s linear infinite; }
+      border-top-color: #fff; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .help { width: 300px; padding: 14px 16px 12px; cursor: default; }
     .help h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; }
     .help p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: rgba(255,255,255,.8); }
     .help b { font-weight: 600; color: #fff; }
-    .ok { display: block; margin: 10px 0 0 auto; height: 28px; padding: 0 18px; border-radius: 7px; background: #0F766E; line-height: 28px; font-weight: 600; }
-    .ok:hover { background: #0B5F58; }
+    .ok { display: block; margin: 10px 0 0 auto; height: 28px; padding: 0 18px; border-radius: 7px; background: #fff; color: #3B3C3D; line-height: 28px; font-weight: 600; }
+    .ok:hover { background: #E2E2E5; }
+    .ok:focus-visible { outline-color: #9A9B9D; outline-offset: 2px; } /* a white ring would vanish on the white button */
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* heard, not seen */`;
 
   let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;

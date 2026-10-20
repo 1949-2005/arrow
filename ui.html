@@ -8,21 +8,25 @@
   :root {
     --window: #ECECEF; --toolbar: #F6F6F8; --sidebar: #E9E9EC; --panel: #FFFFFF; --alt: #F7F7F9;
     --line: #D9D9DE; --text: #1D1D1F; --muted: #6E6E73; --hover: rgba(0,0,0,.06);
-    --accent: #0F766E; --on-accent: #FFFFFF; --fill: #0F766E; --soft: #D6EEEA; --bar: #E2E2E7;
+    /* the logo's graphite and white: graphite leads in light, white in dark */
+    --accent: #3B3C3D; --on-accent: #FFFFFF; --sel: #3B3C3D; --on-sel: #FFFFFF; --fill: #3B3C3D; --soft: #DCDCE0; --bar: #E2E2E7;
     --done: #1E8E3E; --err: #D70015; --c-video: #AF52DE; --c-music: #E0245E; --c-doc: #0A6CDB; --c-zip: #D97706; --c-app: #5856D6; --c-other: #8E8E93;
+    accent-color: var(--fill); /* checkboxes */
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --window: #1E1E20; --toolbar: #2A2A2D; --sidebar: #252528; --panel: #1B1B1D; --alt: #212124;
       --line: #3A3A3E; --text: #F5F5F7; --muted: #A1A1A6; --hover: rgba(255,255,255,.07);
-      --fill: #14B8A6; --soft: #12403C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
+      --accent: #ECECEE; --on-accent: #1D1D1F; --sel: #505154; --on-sel: #FFFFFF;
+      --fill: #ECECEE; --soft: #38383C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
       --c-video: #BF5AF2; --c-music: #FF375F; --c-doc: #4DA3FF; --c-zip: #FFB340; --c-app: #7D7AFF; --c-other: #98989D;
     }
   }
   :root[data-theme="dark"] {
     --window: #1E1E20; --toolbar: #2A2A2D; --sidebar: #252528; --panel: #1B1B1D; --alt: #212124;
     --line: #3A3A3E; --text: #F5F5F7; --muted: #A1A1A6; --hover: rgba(255,255,255,.07);
-    --fill: #14B8A6; --soft: #12403C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
+    --accent: #ECECEE; --on-accent: #1D1D1F; --sel: #505154; --on-sel: #FFFFFF;
+    --fill: #ECECEE; --soft: #38383C; --bar: #3A3A3E; --done: #30D158; --err: #FF453A;
     --c-video: #BF5AF2; --c-music: #FF375F; --c-doc: #4DA3FF; --c-zip: #FFB340; --c-app: #7D7AFF; --c-other: #98989D;
   }
   * { box-sizing: border-box; }
@@ -73,9 +77,10 @@
   tbody tr.alt { background: var(--alt); }
   tbody tr { cursor: default; }
   tbody tr:focus-visible { outline-offset: -2px; }
-  tbody tr[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
-  tbody tr[aria-selected="true"]:focus-visible { outline-color: var(--on-accent); }
-  tbody tr[aria-selected="true"] .muted, tbody tr[aria-selected="true"] .ft, tbody tr[aria-selected="true"] .st { color: var(--on-accent) !important; }
+  /* its own color: in dark a white row would glare, so selection is a softer graphite than the white buttons */
+  tbody tr[aria-selected="true"] { background: var(--sel); color: var(--on-sel); }
+  tbody tr[aria-selected="true"]:focus-visible { outline-color: var(--on-sel); }
+  tbody tr[aria-selected="true"] .muted, tbody tr[aria-selected="true"] .ft, tbody tr[aria-selected="true"] .st { color: var(--on-sel) !important; }
   td.name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
   td.stc { max-width: 300px; }
   .fn { display: flex; align-items: center; gap: 8px; min-width: 0; }
