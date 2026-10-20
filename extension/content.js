@@ -99,10 +99,11 @@ function main() {
   };
   const h = (...a) => make(null, ...a);
   const s = (...a) => make('http://www.w3.org/2000/svg', ...a);
-  // The Arrow logo, a paper-plane arrow, with strokes thick enough for 18 px
+  // The Arrow logo (assets/logo.svg's paper-plane arrow, without its tile), with strokes thick enough for 18 px
   const logo = () => s('svg', { class: 'logo', viewBox: '0 0 512 512', fill: 'none', stroke: 'currentColor', 'stroke-width': 40,
     'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'aria-hidden': 'true' },
-  s('path', { d: 'M86 98 L434 256 L86 414 Z' }), s('path', { d: 'M86 98 L192 256 L434 256' }), s('path', { d: 'M192 256 L434 256 L86 414 Z', fill: 'currentColor' }));
+  s('path', { d: 'M71.5 87.5 L437.5 255.5 L71.5 423.5 Z' }), s('path', { d: 'M71.5 87.5 L183.5 255.5' }),
+  s('path', { d: 'M183.5 255.5 L437.5 255.5 L71.5 423.5 Z', fill: 'currentColor' }));
   const icon = (...paths) => s('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', 'stroke-linecap': 'round',
     'stroke-linejoin': 'round', 'aria-hidden': 'true' }, ...paths.map(d => s('path', { d })));
 

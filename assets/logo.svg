@@ -1,14 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0F766E"/>
-      <stop offset="1" stop-color="#19C2AE"/>
-    </linearGradient>
-  </defs>
-  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
-  <rect x="70" y="50" width="14" height="56" rx="7" fill="#fff" opacity=".5"/>
-  <rect x="172" y="38" width="14" height="44" rx="7" fill="#fff" opacity=".5"/>
-  <rect x="106" y="38" width="44" height="104" rx="12" fill="#fff"/>
-  <path d="M64 130 H192 L128 196 Z" fill="#fff" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
-  <rect x="70" y="214" width="116" height="16" rx="8" fill="#fff"/>
+  <rect x="0.25" y="0.25" width="255.5" height="255.5" rx="58" fill="#fff" stroke="#000" stroke-opacity=".14" stroke-width="0.5"/>
+  <g transform="translate(36 25.8) scale(0.4)" fill="none" stroke="#3B3C3D" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M71.5 87.5 L437.5 255.5 L71.5 423.5 Z"/>
+    <path d="M71.5 87.5 L183.5 255.5"/>
+    <path d="M183.5 255.5 L437.5 255.5 L71.5 423.5 Z" fill="#3B3C3D"/>
+  </g>
 </svg>

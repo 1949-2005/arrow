@@ -217,6 +217,11 @@ test('extension files are syntactically valid and the manifest points at real fi
   for (const f of [m.background.service_worker, m.action.default_popup, ...m.content_scripts[0].js]) {
     assert.ok(fs.existsSync(new URL('./extension/' + f, import.meta.url)), f);
   }
+  // the logo: PNGs of the size each key names
+  for (const [size, f] of [...Object.entries(m.icons), ...Object.entries(m.action.default_icon)]) {
+    const png = fs.readFileSync(new URL('./extension/' + f, import.meta.url));
+    assert.deepEqual([png.subarray(1, 4).toString(), png.readUInt32BE(16), png.readUInt32BE(20)], ['PNG', Number(size), Number(size)], f);
+  }
   assert.match(fs.readFileSync(new URL('./extension/popup.html', import.meta.url), 'utf8'), /<script type="module" src="popup.js">/);
 });
 

@@ -17,6 +17,7 @@
   - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending and opens the Download File Info window), `pickMedia()` (what the video button downloads)
   - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); opens the Download File Info window for each
   - `content.js` — IDM-style download panel over page videos: Download this video, ? (help), × (hide on that video), drag to move (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
+  - `icons/` — the logo for the toolbar and the extensions page (16, 32, 48, 128 px)
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
@@ -27,7 +28,7 @@
 - `desktop.test.js` — browser order, brand name rules, second start and port conflict (`node desktop.js --tray` against a stand-in server), `tray.ps1` syntax
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder (Windows)
 - `ui.test.js` — batch links, the clipboard link check, categories and date labels, by running `ui.html`'s helpers script in Node; `view()`'s `categories` and `added`; the helpers of `confirm.html` (Save As paths) and `progress.html` (status texts, bar pieces)
-- `assets/logo.svg` — app logo source (teal download arrow); `logo.png` (512 px) and `logo.ico` (16–256 px) are rendered from it. `brand.json` points at `logo.ico`, which goes into the exe and the tray as is
+- `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into the exe and the tray as is
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `installed.json` — made by `install.js` (gitignored)

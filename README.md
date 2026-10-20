@@ -42,7 +42,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 - `brand.json` holds the app's name (Arrow) and its icon file (`assets/logo.ico`).
 - They are used for the exe, the window title, the window and taskbar icon, the icon next to the clock, the shortcuts and the file properties.
-- The browser extension has the name in its own files (`manifest.json`, `popup.html`, `popup.js`, `background.js`). A test checks that they match `brand.json`.
+- The browser extension has the name in its own files (`manifest.json`, `popup.html`, `popup.js`, `background.js`). A test checks that they match `brand.json`. Its icon is in `extension/icons/`.
 - To change the name or icon: quit the app, edit `brand.json` (and the extension's files), then double-click `install.cmd` again. It removes the shortcuts with the old name.
 - The name may use letters, digits, spaces and `. _ ( ) + ! -` (40 at most).
 
