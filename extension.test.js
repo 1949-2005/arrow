@@ -474,6 +474,8 @@ test('content.js: other sites send on one trusted click; YouTube opens the forma
   assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
   assert.match(contentSrc, /if \(!e\.isTrusted\) return;\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
   assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
+  // the list starts when the panel shows on YouTube, once per page, and a dead extension can't break the panel
+  assert.match(contentSrc, /if \(yt && prefetched !== location\.href\) \{\s+prefetched = location\.href;[^\n]*\s+try \{ chrome\.runtime\.sendMessage\(\{ type: 'formats', pageUrl: location\.href \}\)\.catch\(\(\) => \{\}\); \} catch \{\}/);
   assert.match(contentSrc, /grab\(\{ pageUrl, title: res\.title \|\| undefined, format: o\.key \}\)/);
   assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: pick\.pageUrl \?\? location\.href, title: pick\.title \?\? document\.title, \.\.\.\(pick\.format && \{ format: pick\.format \}\) \}/);
   assert.match(contentSrc, /'Download anyway'/);

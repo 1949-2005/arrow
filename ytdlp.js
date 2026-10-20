@@ -107,7 +107,9 @@ async function readFormats(mgr, id) {
   const cmd = mgr.ytdlp ?? [findYtdlp()];
   let out;
   try {
-    ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', '--', `https://www.youtube.com/watch?v=${id}`],
+    // skip=hls,dash: the list only offers https formats, so the stream manifests are not fetched (about 0.6 s less)
+    ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', '--extractor-args', 'youtube:skip=hls,dash',
+      '--', `https://www.youtube.com/watch?v=${id}`],
       { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }));
   } catch (e) {
     const line = /^ERROR:.*$/m.exec(e.stderr ?? '')?.[0];

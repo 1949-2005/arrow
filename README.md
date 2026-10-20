@@ -100,6 +100,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
     - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
     - **AUDIO**: M4A and MP3.
     - Click one. The Download File Info window opens with that format.
+    - Getting the list takes yt-dlp about 3 seconds (about 8 after YouTube updates its player). Arrow starts it as soon as you point at the video, so it is often ready when you click. It keeps the list for 15 minutes.
   - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**.
   - Right-click a YouTube link and choose "Download with Arrow".
   - Paste the link in Arrow's Add URL window. A quality picker appears under the links.

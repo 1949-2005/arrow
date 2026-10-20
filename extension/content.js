@@ -89,7 +89,7 @@ function main() {
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* heard, not seen */`;
 
   let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;
-  let offset = { x: 0, y: 0 }, drag = null, dragged = false;
+  let offset = { x: 0, y: 0 }, drag = null, dragged = false, prefetched = null;
   const dismissed = new WeakMap(); // video → the page it was hidden on with ×: YouTube reuses one <video> for every video
 
   // DOM building without innerHTML, which Trusted Types pages (YouTube) may refuse.
@@ -290,6 +290,11 @@ function main() {
     else { btn.removeAttribute('aria-haspopup'); btn.removeAttribute('aria-expanded'); }
     box.classList.add('on');
     place();
+    // yt-dlp needs a few seconds for YouTube's list: start it when the panel shows, so a click often finds it ready
+    if (yt && prefetched !== location.href) {
+      prefetched = location.href; // once per page; the app keeps the list 15 min
+      try { chrome.runtime.sendMessage({ type: 'formats', pageUrl: location.href }).catch(() => {}); } catch {} // extension reloaded: the click says so
+    }
   }
 
   // 1.5 s after the pointer left the video and the panel (counted from leaving, not from the last move).
