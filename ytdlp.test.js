@@ -126,7 +126,7 @@ test('pause kills yt-dlp and its children; resume continues the .part files', as
   const seen = [];
   const watch = setInterval(() => { const v = view(d); seen.push([v.got, v.size, v.phase]); }, 5);
   try {
-    await until(() => d.got >= 50000, 'some progress');
+    await until(() => d.got >= 50000, 'some progress'); // the fake waits there for the pause
     const ctl = mgr.running.get(d.id);
     await mgr.act(d.id, 'pause');
     await ctl.done;
