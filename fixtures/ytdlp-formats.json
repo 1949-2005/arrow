@@ -1,0 +1,29 @@
+{
+  "id": "{{ID}}",
+  "title": "Fake vidéo: {{ID}}",
+  "duration": 19,
+  "is_live": false,
+  "formats": [
+    { "format_id": "sb0", "ext": "mhtml", "protocol": "mhtml", "vcodec": "none", "acodec": "none", "url": "{{BASE}}/sb0" },
+    { "format_id": "233", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "none", "acodec": "mp4a.40.5", "url": "{{BASE}}/233.m3u8" },
+    { "format_id": "249", "ext": "webm", "protocol": "https", "vcodec": "none", "acodec": "opus", "filesize": 9000, "url": "{{BASE}}/249" },
+    { "format_id": "140-drc", "ext": "m4a", "protocol": "https", "vcodec": "none", "acodec": "mp4a.40.2", "filesize": 29000, "url": "{{BASE}}/140-drc" },
+    { "format_id": "140", "ext": "m4a", "protocol": "https", "vcodec": "none", "acodec": "mp4a.40.2", "filesize": 30000, "url": "{{BASE}}/140" },
+    { "format_id": "251", "ext": "webm", "protocol": "https", "vcodec": "none", "acodec": "opus", "filesize": 25000, "url": "{{BASE}}/251" },
+    { "format_id": "330", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 192, "height": 108, "fps": 30, "dynamic_range": "SDR", "filesize": 100, "url": "{{BASE}}/330" },
+    { "format_id": "269", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "avc1.4D400C", "acodec": "none", "width": 256, "height": 144, "fps": 30, "dynamic_range": "SDR", "url": "{{BASE}}/269.m3u8" },
+    { "format_id": "160", "ext": "mp4", "protocol": "https", "vcodec": "avc1.4D400C", "acodec": "none", "width": 256, "height": 144, "fps": 30, "dynamic_range": "SDR", "filesize": 10000, "url": "{{BASE}}/160" },
+    { "format_id": "278", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 256, "height": 144, "fps": 30, "dynamic_range": "SDR", "filesize": 9000, "url": "{{BASE}}/278" },
+    { "format_id": "394", "ext": "mp4", "protocol": "https", "vcodec": "av01.0.00M.08", "acodec": "none", "width": 256, "height": 144, "fps": 30, "dynamic_range": "SDR", "filesize": 8000, "url": "{{BASE}}/394" },
+    { "format_id": "18", "ext": "mp4", "protocol": "https", "vcodec": "avc1.42001E", "acodec": "mp4a.40.2", "width": 640, "height": 360, "fps": 30, "dynamic_range": "SDR", "filesize": 99999, "url": "{{BASE}}/18" },
+    { "format_id": "134", "ext": "mp4", "protocol": "https", "vcodec": "avc1.4D401E", "acodec": "none", "width": 640, "height": 360, "fps": 30, "dynamic_range": "SDR", "filesize_approx": 50000, "url": "{{BASE}}/approx/134", "http_headers": { "User-Agent": "Mozilla/5.0 (fake yt-dlp)", "Accept": "*/*" } },
+    { "format_id": "243", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 640, "height": 360, "fps": 30, "dynamic_range": "SDR", "url": "{{BASE}}/none/243" },
+    { "format_id": "136", "ext": "mp4", "protocol": "https", "vcodec": "avc1.4D401F", "acodec": "none", "width": 1280, "height": 720, "fps": 30, "dynamic_range": "SDR", "filesize": 200000, "url": "{{BASE}}/136" },
+    { "format_id": "398", "ext": "mp4", "protocol": "https", "vcodec": "av01.0.05M.08", "acodec": "none", "width": 1280, "height": 720, "fps": 30, "dynamic_range": "SDR", "filesize": 150000, "url": "{{BASE}}/398" },
+    { "format_id": "299", "ext": "mp4", "protocol": "https", "vcodec": "avc1.64002a", "acodec": "none", "width": 1920, "height": 1080, "fps": 60, "dynamic_range": "SDR", "filesize": 500000, "url": "{{BASE}}/299" },
+    { "format_id": "303", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 1920, "height": 1080, "fps": 60, "dynamic_range": "SDR", "filesize": 400000, "url": "{{BASE}}/303" },
+    { "format_id": "271", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 2560, "height": 1440, "fps": 30, "dynamic_range": "SDR", "filesize_approx": 690000, "url": "{{BASE}}/approx/271" },
+    { "format_id": "313", "ext": "webm", "protocol": "https", "vcodec": "vp9", "acodec": "none", "width": 3840, "height": 2160, "fps": 30, "dynamic_range": "SDR", "filesize": 900000, "url": "{{BASE}}/313" },
+    { "format_id": "337", "ext": "webm", "protocol": "https", "vcodec": "vp09.02.51.10", "acodec": "none", "width": 3840, "height": 2160, "fps": 30, "dynamic_range": "HDR10", "filesize": 990000, "url": "{{BASE}}/337" }
+  ]
+}

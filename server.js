@@ -72,10 +72,10 @@ const server = http.createServer(async (req, res) => {
   if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: 'bad host' });
   const extension = /^(chrome|moz)-extension:\/\//.test(origin ?? '');
   if (origin && origin !== `http://${host}` && !extension) return send(res, 403, { error: 'bad origin' });
-  // Any installed extension gets here, so it may only queue downloads: settings could aim the folder at Startup, "open" runs files.
+  // Any installed extension gets here, so it may only queue downloads and list a YouTube video's formats: settings could aim the folder at Startup, "open" runs files.
   const url = req.url.split('?')[0]; // /confirm?id=… and /progress?id=…
   const route = `${req.method} ${url}`;
-  if (extension && route !== 'GET /api/ping' && route !== 'POST /api/add') return send(res, 403, { error: 'not allowed from extensions' });
+  if (extension && !['GET /api/ping', 'POST /api/add', 'POST /api/formats'].includes(route)) return send(res, 403, { error: 'not allowed from extensions' });
   try {
     if (req.method === 'GET' && pages[url]) return send(res, 200, pages[url], 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/favicon.ico') { // the brand icon, so the app window and its taskbar button show it
@@ -89,8 +89,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
     if (url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
+    // The video button's format list: YouTube single-video links only (youtubeId())
+    if (url === '/api/formats') return send(res, 200, await mgr.formats(String(body.url ?? '')));
     // The Download File Info window (confirm.html)
-    if (url === '/api/confirm') { mgr.confirm(body.id, body); return send(res, 200, { ok: true }); }
+    if (url === '/api/confirm') { await mgr.confirm(body.id, body); return send(res, 200, { ok: true }); }
     if (url === '/api/browse') return send(res, 200, { path: await mgr.browse(String(body.path ?? '')) });
     // The tray menu (tray.ps1)
     if (url === '/api/open') { openWindow(); return send(res, 200, { ok: true }); }

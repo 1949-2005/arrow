@@ -23,7 +23,7 @@ const isYouTubeHost = h => h === 'youtu.be' || h === 'youtube.com' || h.endsWith
 // The browser's user agent is left out: servers drop clients that claim to be Chrome but aren't.
 // YouTube login cookies never leave the browser: the app does not need them for public videos.
 // confirm: the app keeps it waiting for the Download File Info window. Returns the download's id, or null.
-export async function send({ url, referrer, name, title, quality, confirm }) {
+export async function send({ url, referrer, name, title, quality, format, confirm }) {
   const headers = {};
   if (referrer) headers.referer = referrer;
   const host = parse(url)?.hostname ?? '';
@@ -32,7 +32,7 @@ export async function send({ url, referrer, name, title, quality, confirm }) {
   const res = await fetch(APP + '/api/add', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url, name, title, headers, quality, confirm }),
+    body: JSON.stringify({ url, name, title, headers, quality, format, confirm }),
   }).catch(() => null);
   return res?.ok ? (await res.json().catch(() => null))?.id ?? null : null;
 }
@@ -53,8 +53,9 @@ const isHttp = url => /^https?:$/.test(parse(url)?.protocol ?? '');
 
 // What the video button downloads. `media` is the tab's list from the grabber ({url, type, size}).
 // blob: and MSE players have no usable src, so the grabber's HLS playlist or biggest video file stands in.
-export function pickMedia({ pageUrl, src, title, quality, media = [] }) {
-  if (isYouTubeVideo(pageUrl)) return { url: pageUrl, quality };
+// On YouTube, format is the key picked in the video button's format list, title the video's title from that list.
+export function pickMedia({ pageUrl, src, title, quality, format, media = [] }) {
+  if (isYouTubeVideo(pageUrl)) return { url: pageUrl, quality, format, title };
   if (isHttp(src)) return { url: src, referrer: pageUrl, title };
   const ok = media.filter(m => isHttp(m.url));
   const found = ok.find(m => m.type === 'HLS stream')

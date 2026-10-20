@@ -295,9 +295,9 @@ function clipboardLink(text, exts) {
 }
 
 // Sidebar category: from the file extension (engine.js CATEGORIES, sent as state.categories), else Other.
-// YouTube downloads are Video, or Music as MP3; HLS is always Video.
+// YouTube downloads are Video, or Music for M4A/MP3 (format key, or the legacy quality mp3); HLS is always Video.
 function category(d, categories) {
-  if (d.kind === 'video') return d.quality === 'mp3' ? 'Music' : 'Video';
+  if (d.kind === 'video') return /^(m4a|mp3)/.test(d.format ?? d.quality) ? 'Music' : 'Video';
   if (d.kind === 'hls') return 'Video';
   const ext = /\.(\w+)$/.exec(d.file || d.name || String(d.url).split(/[?#]/)[0])?.[1].toLowerCase();
   return Object.keys(categories).find(c => categories[c].includes(ext)) ?? 'Other';

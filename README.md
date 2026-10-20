@@ -78,7 +78,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - Point at a video on a web page. A "Download with Arrow" button appears at its top right. Click it. If it says "No video found yet", let the video play for a few seconds, then click again.
   - Each of these opens the **Download File Info** window, like IDM:
     - It shows the link, the size (when the server tells it) and where the file goes.
-    - For YouTube, choose **Video · MP4** or **Audio · MP3**, and the quality for video. Arrow remembers your choice.
+    - For YouTube, choose the **Format** (MP4, WEBM, M4A or MP3). Each one shows its real size. The file name is the video's title.
     - **Category** changes the folder. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
     - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** adds it as paused: start it later with Resume. **Cancel** (or Esc) drops it.
     - If the window says "Couldn't read the file details", you can still try to start it.
@@ -93,12 +93,20 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - `winget install yt-dlp.yt-dlp`
   - `winget install yt-dlp.FFmpeg`
   - If one is already installed, winget tells you so.
-- Three ways to start:
-  - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**. Choose the type and quality in the Download File Info window.
+- Ways to start:
+  - Point at the YouTube video and click **Download with Arrow**. A list of formats opens, with the real size of each:
+    - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
+    - **AUDIO**: M4A and MP3.
+    - Click one. The Download File Info window opens with that format.
+  - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**.
+  - Right-click a YouTube link and choose "Download with Arrow".
   - Paste the link in Arrow's Add URL window. A quality picker appears under the links.
-  - Right-click a YouTube link and choose "Download with Arrow". This uses the best quality.
-- Qualities: Best quality, 1080p, 720p, 480p, MP3 (audio only).
-- Videos are saved as MP4 in the `Video` folder. MP3 files go to the `Music` folder.
+- The Download File Info window has one **Format** list, with real sizes. While Arrow reads the list, it says "Getting formats…". Only Cancel works until then.
+- Sizes are real: Arrow asks YouTube. A format without a known size is not shown. The final file can be a few KB bigger (merging, MP3 header).
+- MP3 is made at 192 kbps. So Arrow knows its size before the download.
+- The file name is the video's title: `<title>.mp4`, `.webm`, `.m4a` or `.mp3`.
+- Videos go to the `Video` folder. M4A and MP3 files go to the `Music` folder.
+- If Arrow can't read the format list, the window offers only "MP4 · best quality" and "MP3 · audio".
 - Arrow prefers H.264 video. It plays everywhere. Very high resolutions (like 4K) may use VP9 or AV1. VLC plays them.
 - Pause and Resume work. One progress bar covers video and sound. "Merging" is the last step.
 - If YouTube downloads start to fail, run `winget upgrade yt-dlp.yt-dlp`.
@@ -125,7 +133,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - "Change link" for links that have expired.
 - Open and Show in folder buttons for finished files.
 - A desktop notification when a download finishes.
-- YouTube videos and MP3 audio, with a quality choice (needs yt-dlp and ffmpeg).
+- YouTube videos (MP4, WEBM) and audio (M4A, MP3), with real sizes (needs yt-dlp and ffmpeg).
 - Browser cookies are passed along, so downloads that need a login work.
 - Batch links with number ranges, like `img[001-120].jpg`.
 - Clipboard monitoring (off by default).

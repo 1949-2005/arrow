@@ -2,13 +2,25 @@ import fs from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { markOfTheWeb, sanitize } from './engine.js';
 
+// Legacy choices, kept for downloads saved before the format list (and the Add URL dialog).
 export const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
+// A format key names exactly what gets downloaded: mp4:137+140, webm:248+251, m4a:140, mp3.
+// The ids are yt-dlp format_ids ("140", "140-drc"); keys are also checked against the video's list before use.
+export const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+\+[\w-]+|m4a:[\w-]+|mp3)$/;
+const MP3_KBPS = 192; // constant bitrate, so the MP3's size is known up front: duration × 24000 bytes
+const FORMATS_MS = 15 * 60000;
+const run = promisify(execFile);
 const HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'];
 const HINT = ' (if YouTube changed something: winget upgrade yt-dlp.yt-dlp)';
 const LIVE = 'Live streams are not supported';
+const errorText = line => line.replace(/^ERROR:\s*(\[[^\]]+\]\s*([\w-]+:\s*)?)?/, '');
+
+// The file extension of a format key, or of a legacy quality.
+export const extOf = (format, quality) => '.' + (format ?? (quality === 'mp3' ? 'mp3' : 'mp4')).split(':')[0];
 
 // YouTube link → video ID, null for other sites. Channels, playlists and the like are refused.
 export function youtubeId(u) {
@@ -42,15 +54,23 @@ export function findFfmpeg() {
   return path.dirname(f);
 }
 
-export function ytdlpArgs(d, settings, ffmpeg) {
+function formatArgs(d) {
+  if (d.format != null && !FORMAT_KEY.test(d.format)) throw new Error(`unknown format "${d.format}"`);
+  const [kind, ids] = (d.format ?? '').split(':');
+  if (kind === 'mp3' || (!d.format && d.quality === 'mp3')) return ['-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', MP3_KBPS + 'K'];
+  if (kind === 'mp4' || kind === 'webm') return ['-f', ids, '--merge-output-format', kind];
+  if (kind === 'm4a') return ['-f', ids];
   const q = d.quality ?? 'best';
+  // at equal resolution prefer H.264: AV1/VP9 inside MP4 doesn't play in every player
+  return ['-f', 'bv*+ba/b', '-S', q === 'best' ? 'res,vcodec:h264,ext:mp4:m4a' : `res:${q},vcodec:h264,ext:mp4:m4a`, '--merge-output-format', 'mp4'];
+}
+
+export function ytdlpArgs(d, settings, ffmpeg) {
   return [
     // --ignore-config: a user yt-dlp.conf could add cookies or change the output names we parse
     '--ignore-config', '--no-playlist', '--match-filter', '!is_live', '--newline', '--no-colors',
     '--ffmpeg-location', ffmpeg, '-P', d.tmpDir, '-o', 'media.%(ext)s',
-    ...(q === 'mp3' ? ['-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0']
-      // at equal resolution prefer H.264: AV1/VP9 inside MP4 doesn't play in every player
-      : ['-f', 'bv*+ba/b', '-S', q === 'best' ? 'res,vcodec:h264,ext:mp4:m4a' : `res:${q},vcodec:h264,ext:mp4:m4a`, '--merge-output-format', 'mp4']),
+    ...formatArgs(d),
     ...(settings.speedLimitKB > 0 ? ['--limit-rate', `${settings.speedLimitKB}K`] : []),
     // --print implies --quiet, which would hide the progress lines
     '--no-quiet',
@@ -60,6 +80,79 @@ export function ytdlpArgs(d, settings, ffmpeg) {
     '--print', 'after_move:FDLFILE %(filepath)j',
     '--', d.url,
   ];
+}
+
+// The video's formats with their real sizes, as the format list shows them. Cached per video for 15 minutes;
+// callers that come while yt-dlp is still running share that run.
+export async function listFormats(mgr, url) {
+  const id = youtubeId(new URL(url));
+  if (!id) throw new Error('Only YouTube video links have a format list');
+  const hit = mgr.formatCache.get(id);
+  if (hit && Date.now() - hit.at < FORMATS_MS) return hit.list;
+  const list = readFormats(mgr, id).catch(e => {
+    if (mgr.formatCache.get(id)?.list === list) mgr.formatCache.delete(id);
+    throw e;
+  });
+  mgr.formatCache.set(id, { at: Date.now(), list });
+  return list;
+}
+
+async function readFormats(mgr, id) {
+  const cmd = mgr.ytdlp ?? [findYtdlp()];
+  let out;
+  try {
+    ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', '--', `https://www.youtube.com/watch?v=${id}`],
+      { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }));
+  } catch (e) {
+    const line = /^ERROR:.*$/m.exec(e.stderr ?? '')?.[0];
+    throw new Error(line ? errorText(line) : e.killed ? 'yt-dlp took too long to answer' : e.message);
+  }
+  const info = JSON.parse(out);
+  if (info.is_live) throw new Error(LIVE);
+  return { title: String(info.title ?? ''), options: await formatOptions(info, mgr) };
+}
+
+// The exact size of a format without filesize: a one-byte range request with the format's own headers.
+async function exactSize(mgr, f) {
+  const headers = Object.fromEntries(Object.entries(f.http_headers ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]).filter(([k]) => k !== 'cookie'));
+  try {
+    const res = await mgr.get(f.url, { headers, cookieHost: null }, AbortSignal.timeout(15000), 'bytes=0-0');
+    res.body?.cancel().catch(() => {});
+    return res.status === 206 ? Number(/\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '')?.[1]) || null : null;
+  } catch {
+    return null;
+  }
+}
+
+// yt-dlp's -J → [{key, group, label, tag?, size}]. Every size is real: yt-dlp's filesize, else the range answer,
+// else the format is left out. MP4/WEBM sizes are the video plus the audio stream.
+export async function formatOptions(info, mgr) {
+  const p = f => Math.min(f.width ?? f.height, f.height); // shorts are 1080x1920: YouTube calls that 1080p
+  const usable = (info.formats ?? []).filter(f => f.protocol === 'https' && f.url && /^[\w-]+$/.test(f.format_id ?? ''));
+  const video = usable.filter(f => f.vcodec && f.vcodec !== 'none' && f.acodec === 'none' && ['mp4', 'webm'].includes(f.ext)
+    && (!f.dynamic_range || f.dynamic_range === 'SDR') && p(f) >= 144);
+  const audio = usable.filter(f => f.vcodec === 'none' && f.acodec && f.acodec !== 'none');
+  const sized = new Map(await Promise.all([...video, ...audio.filter(f => ['m4a', 'webm'].includes(f.ext))]
+    .map(async f => [f, f.filesize > 0 ? f.filesize : await exactSize(mgr, f)])));
+  const ok = list => list.filter(f => sized.get(f) > 0);
+  const tag = h => h >= 720 && h <= 1080 ? 'HD' : h === 1440 ? '2K' : h === 2160 ? '4K' : null;
+  // yt-dlp lists formats worst first, so the last one is the best
+  const m4a = ok(audio.filter(f => f.ext === 'm4a')).at(-1), opus = ok(audio.filter(f => f.ext === 'webm')).at(-1);
+  const options = [];
+  for (const [group, ext, a] of [['MP4', 'mp4', m4a], ['WEBM', 'webm', opus]]) {
+    if (!a) continue;
+    const vids = ok(video.filter(f => f.ext === ext));
+    for (const h of [...new Set(vids.map(p))].sort((x, y) => y - x)) {
+      const same = vids.filter(f => p(f) === h);
+      // at equal height prefer H.264: AV1/VP9 inside MP4 doesn't play in every player
+      const v = (ext === 'mp4' && same.filter(f => f.vcodec.startsWith('avc1')).at(-1)) || same.at(-1);
+      options.push({ key: `${ext}:${v.format_id}+${a.format_id}`, group, label: `${h}p${v.fps >= 50 ? '60' : ''}`,
+        ...(tag(h) && { tag: tag(h) }), size: sized.get(v) + sized.get(a) });
+    }
+  }
+  if (m4a) options.push({ key: `m4a:${m4a.format_id}`, group: 'Audio', label: 'M4A', size: sized.get(m4a) });
+  if (audio.length && info.duration > 0) options.push({ key: 'mp3', group: 'Audio', label: 'MP3', size: Math.round(info.duration * MP3_KBPS * 1000 / 8) });
+  return options;
 }
 
 export async function removeTmp(d) {
@@ -112,10 +205,14 @@ export async function downloadVideo(d, ctl, mgr) {
     } else if ((m = /^FDLFILE (.*)$/.exec(line))) {
       try { file = JSON.parse(m[1]); } catch {}
     } else if (line.startsWith('ERROR:')) {
-      error ??= line.replace(/^ERROR:\s*(\[[^\]]+\]\s*([\w-]+:\s*)?)?/, '');
+      error ??= errorText(line);
     } else if (/does not pass filter \(!is_live\)/.test(line)) live = true;
   };
 
+  // a key from an old list or another client: only keys this video offers reach -f
+  if (d.format && !(await listFormats(mgr, d.url)).options.some(o => o.key === d.format)) {
+    throw new Error(`This video no longer offers the format ${d.format}. Download it again.`);
+  }
   if (signal.aborted) return;
   const proc = spawn(cmd[0], [...cmd.slice(1), ...ytdlpArgs(d, mgr.settings, ffmpeg)],
     { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });

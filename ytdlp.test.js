@@ -4,9 +4,19 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
 import { ytdlpArgs, youtubeId } from './ytdlp.js';
+
+// Stands in for googlevideo.com: answers the one-byte range request for formats that have no exact filesize
+const ranges = [];
+const media = http.createServer((req, res) => {
+  ranges.push({ url: req.url, range: req.headers.range, ua: req.headers['user-agent'], accept: req.headers.accept });
+  const total = { '/approx/134': 51234, '/approx/271': 700000 }[req.url];
+  if (!total) return res.writeHead(404).end();
+  res.writeHead(206, { 'content-range': `bytes 0-0/${total}`, 'content-length': 1 }).end('x');
+});
 
 // fixtures/fake-ytdlp.mjs stands in for yt-dlp: no network
 const FAKE = [process.execPath, path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-ytdlp.mjs')];
@@ -18,13 +28,18 @@ let dir, mgr, logFile;
 before(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-yt-'));
   logFile = process.env.FAKE_YTDLP_LOG = path.join(dir, 'fake.log');
+  await new Promise(r => media.listen(0, '127.0.0.1', r));
+  process.env.FAKE_YTDLP_BASE = `http://127.0.0.1:${media.address().port}`;
   mgr = new Manager(path.join(dir, 'state.json'));
   await mgr.load();
   mgr.update({ dir: path.join(dir, 'out'), maxActive: 5 });
   mgr.ytdlp = FAKE;
   mgr.ffmpeg = dir;
 });
-after(() => fs.rm(dir, { recursive: true, force: true, maxRetries: 5 }));
+after(() => {
+  media.close();
+  return fs.rm(dir, { recursive: true, force: true, maxRetries: 5 });
+});
 
 async function until(check, what, ms = 15000) {
   for (const end = Date.now() + ms; !check();) {
@@ -56,13 +71,21 @@ test('YouTube links are normalized; channels and playlists are refused', () => {
   assert.equal(m.add({ url: 'https://example.com/a.bin', scheduled: true, quality: 'zzz' }).kind, 'http', 'quality is ignored for other sites');
 });
 
-test('quality → yt-dlp arguments', () => {
-  const run = (quality, speedLimitKB = 0) => ytdlpArgs({ quality, tmpDir: 'T', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, { speedLimitKB }, 'F');
+test('format keys and legacy qualities → yt-dlp arguments', () => {
+  const run = (quality, speedLimitKB = 0, format) => ytdlpArgs({ quality, format, tmpDir: 'T', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, { speedLimitKB }, 'F');
   const has = (args, ...seq) => assert.ok(args.some((_, i) => seq.every((s, j) => args[i + j] === s)), `${seq.join(' ')} in ${args.join(' ')}`);
   const sel = ['-f', 'bv*+ba/b', '-S'];
   has(run('best'), ...sel, 'res,vcodec:h264,ext:mp4:m4a', '--merge-output-format', 'mp4');
   for (const q of ['1080', '720', '480']) has(run(q), ...sel, `res:${q},vcodec:h264,ext:mp4:m4a`, '--merge-output-format', 'mp4');
-  has(run('mp3'), '-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0');
+  const mp3 = ['-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '192K']; // constant bitrate: the size shown is the size made
+  has(run('mp3'), ...mp3);
+  has(run('best', 0, 'mp3'), ...mp3);
+  has(run('best', 0, 'mp4:137+140'), '-f', '137+140', '--merge-output-format', 'mp4');
+  has(run('best', 0, 'webm:248+251'), '-f', '248+251', '--merge-output-format', 'webm');
+  const m4a = run('mp3', 0, 'm4a:140-drc');
+  has(m4a, '-f', '140-drc');
+  assert.ok(!m4a.includes('-x') && !m4a.includes('--merge-output-format') && !m4a.includes('-S'));
+  for (const bad of ['bv*+ba', 'mp4:137', 'mp4:137+140/b', 'mkv:1+2', 'm4a:140 -x', 'mp3:1']) assert.throws(() => run('best', 0, bad), /unknown format/, bad);
   const base = run('best');
   has(base, '--no-playlist', '--match-filter', '!is_live', '--newline', '--no-colors', '--ffmpeg-location', 'F', '-P', 'T', '-o', 'media.%(ext)s');
   assert.equal(base.at(-1), 'https://www.youtube.com/watch?v=jNQXAC9IVRw');
@@ -95,10 +118,119 @@ test('video download: title, size and progress from yt-dlp, filed under Video, t
   assert.equal(path.basename(again.file), 'Fake vidéo_ okVideo0001 (1).mp4', 'names stay unique');
 });
 
+// The expected list for fixtures/ytdlp-formats.json
+const OPTIONS = [
+  { key: 'mp4:299+140', group: 'MP4', label: '1080p60', tag: 'HD', size: 530000 },
+  { key: 'mp4:136+140', group: 'MP4', label: '720p', tag: 'HD', size: 230000 }, // H.264 over the later AV1 398
+  { key: 'mp4:134+140', group: 'MP4', label: '360p', size: 81234 }, // approx-only 134: 51234 from the range answer
+  { key: 'mp4:160+140', group: 'MP4', label: '144p', size: 40000 }, // H.264 over AV1 394; 108p and the m3u8 269 left out
+  { key: 'webm:313+251', group: 'WEBM', label: '2160p', tag: '4K', size: 925000 }, // the HDR 337 left out
+  { key: 'webm:271+251', group: 'WEBM', label: '1440p', tag: '2K', size: 725000 }, // approx-only 271: 700000 from the range answer
+  { key: 'webm:303+251', group: 'WEBM', label: '1080p60', tag: 'HD', size: 425000 }, // no 360p: 243 has no size at all
+  { key: 'webm:278+251', group: 'WEBM', label: '144p', size: 34000 },
+  { key: 'm4a:140', group: 'Audio', label: 'M4A', size: 30000 },
+  { key: 'mp3', group: 'Audio', label: 'MP3', size: 456000 }, // 19 s × 192 kbit/s
+];
+const lists = async id => (await logLines()).filter(l => l === 'list ' + id).length;
+
+test('format list: real sizes only, H.264 first, labels and tags, one option per height', async () => {
+  ranges.length = 0;
+  assert.deepEqual(await mgr.formats('https://youtu.be/okList00001'), { title: 'Fake vidéo: okList00001', options: OPTIONS });
+  // only the formats without filesize were asked, one byte each, with their own headers
+  assert.deepEqual(ranges.map(r => r.url).sort(), ['/approx/134', '/approx/271', '/none/243']);
+  assert.ok(ranges.every(r => r.range === 'bytes=0-0'));
+  assert.deepEqual(ranges.find(r => r.url === '/approx/134').ua, 'Mozilla/5.0 (fake yt-dlp)');
+  assert.deepEqual(ranges.find(r => r.url === '/approx/134').accept, '*/*');
+});
+
+test('format list: one yt-dlp run for callers at the same time, then cached for 15 minutes', async () => {
+  const url = 'https://www.youtube.com/watch?v=okCache0001';
+  const [a, b] = await Promise.all([mgr.formats(url), mgr.formats('https://youtu.be/okCache0001')]);
+  assert.equal(a, b);
+  assert.equal(await lists('okCache0001'), 1);
+  assert.equal(await mgr.formats(url), a);
+  assert.equal(await lists('okCache0001'), 1, 'cached');
+  mgr.formatCache.get('okCache0001').at -= 15 * 60000;
+  assert.deepEqual(await mgr.formats(url), a);
+  assert.equal(await lists('okCache0001'), 2, 'fetched again once expired');
+});
+
+test('format list: yt-dlp errors come back as messages and are not cached; only single YouTube videos', async () => {
+  await assert.rejects(mgr.formats('https://youtu.be/errListing1'), { message: "Private video. Sign in if you've been granted access to this video" });
+  await assert.rejects(mgr.formats('https://youtu.be/errListing1'));
+  assert.equal(await lists('errListing1'), 2);
+  await assert.rejects(mgr.formats('https://youtu.be/liveListin1'), { message: 'Live streams are not supported' });
+  await assert.rejects(mgr.formats('https://example.com/watch?v=okList00001'), /Only YouTube video links/);
+  await assert.rejects(mgr.formats('https://www.youtube.com/playlist?list=PL1'), /not a channel or playlist/);
+});
+
+test('pending YouTube download: the name is yt-dlp\'s title with the chosen format\'s extension, the list goes to the window', async () => {
+  const v = mgr.add({ url: 'https://youtu.be/okProbe0001', title: '(3) Tab title - YouTube', confirm: true });
+  await until(() => v.probe, 'the first probe');
+  await until(() => !v.probe.listing, 'the list');
+  assert.deepEqual(v.probe, { name: 'Fake vidéo_ okProbe0001.mp4', category: 'Video', size: 530000, type: null, error: null, options: OPTIONS, format: 'mp4:299+140' });
+  const a = mgr.add({ url: 'https://youtu.be/okProbe0001', format: 'm4a:140', confirm: true });
+  await until(() => a.probe && !a.probe.listing, 'the list');
+  assert.deepEqual([a.probe.name, a.probe.category, a.probe.size, a.probe.format], ['Fake vidéo_ okProbe0001.m4a', 'Music', 30000, 'm4a:140']);
+  const m = mgr.add({ url: 'https://youtu.be/okProbe0001', quality: 'mp3', confirm: true }); // legacy quality
+  await until(() => m.probe && !m.probe.listing, 'the list');
+  assert.deepEqual([m.probe.name, m.probe.size, m.probe.format], ['Fake vidéo_ okProbe0001.mp3', 456000, 'mp3']);
+  const x = mgr.add({ url: 'https://youtu.be/okProbe0001', format: 'mp4:999+140', confirm: true }); // not offered
+  await until(() => x.probe && !x.probe.listing, 'the list');
+  assert.deepEqual([x.probe.format, x.format], ['mp4:299+140', undefined]);
+  const e = mgr.add({ url: 'https://youtu.be/errProbe001', title: '(3) Tab title - YouTube', confirm: true });
+  await until(() => e.probe && !e.probe.listing, 'the failed list');
+  assert.deepEqual(e.probe, { name: 'Tab title.mp4', category: 'Video', size: null, type: null, error: "Private video. Sign in if you've been granted access to this video", options: [], format: null });
+  for (const d of [v, a, m, x, e]) await mgr.confirm(d.id, { action: 'cancel' });
+});
+
+test('confirm: the format sets the extension; keys this video does not offer are refused; legacy qualities still work', async () => {
+  const folder = path.join(dir, 'yt');
+  const v = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
+  await mgr.confirm(v.id, { action: 'later', path: path.join(folder, 'Clip.mp4'), format: 'webm:303+251' });
+  assert.deepEqual([v.format, v.name, v.status], ['webm:303+251', 'Clip.webm', 'paused']);
+  assert.equal(mgr.view().downloads.find(x => x.id === v.id).format, 'webm:303+251');
+  const w = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
+  await mgr.confirm(w.id, { action: 'later', path: path.join(folder, 'Song'), format: 'm4a:140' });
+  assert.equal(w.name, 'Song.m4a');
+  const x = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
+  for (const bad of ['mp4:999+140', 'mp4:137', 'bv*+ba/b', 'mp3 ']) {
+    await assert.rejects(mgr.confirm(x.id, { action: 'later', path: path.join(folder, 'a.mp4'), format: bad }), /unknown format/, bad);
+  }
+  assert.equal(x.status, 'pending');
+  await mgr.confirm(x.id, { action: 'later', path: path.join(folder, 'Me at the zoo.mp4'), quality: 'mp3' });
+  assert.deepEqual([x.quality, x.name], ['mp3', 'Me at the zoo.mp3']);
+  const y = mgr.add({ url: 'https://youtu.be/okConfirm01', quality: 'mp3', confirm: true });
+  await mgr.confirm(y.id, { action: 'later', path: path.join(folder, 'clip'), quality: '720' });
+  assert.deepEqual([y.quality, y.name], ['720', 'clip.mp4']);
+  await assert.rejects(mgr.confirm(y.id, { action: 'later', path: path.join(folder, 'a.mp4'), quality: '4k' }), /no longer waiting/);
+  const z = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
+  await assert.rejects(mgr.confirm(z.id, { action: 'later', path: path.join(folder, 'a.mp4'), quality: '4k' }), /unknown quality/);
+  assert.throws(() => mgr.add({ url: 'https://youtu.be/okConfirm01', format: 'bv*+ba' }), /unknown format/);
+  for (const d of [v, w, x, y, z]) await mgr.act(d.id, 'remove');
+});
+
+test('format downloads: m4a filed under Music, webm under Video; a key the video does not offer never reaches yt-dlp', async () => {
+  const a = mgr.add({ url: 'https://youtu.be/okFormat001', format: 'm4a:140' });
+  await settled(a);
+  assert.equal(a.status, 'done', a.error);
+  assert.equal(a.file, path.join(mgr.settings.dir, 'Music', 'Fake vidéo_ okFormat001.m4a'));
+  const w = mgr.add({ url: 'https://youtu.be/okFormat001', format: 'webm:278+251' });
+  await settled(w);
+  assert.equal(w.file, path.join(mgr.settings.dir, 'Video', 'Fake vidéo_ okFormat001.webm'));
+  const runs = (await logLines()).filter(l => l.startsWith('run ')).length;
+  const x = mgr.add({ url: 'https://youtu.be/okFormat001', format: 'mp4:999+140' });
+  await settled(x);
+  assert.equal(x.status, 'error');
+  assert.match(x.error, /no longer offers the format mp4:999\+140/);
+  assert.equal((await logLines()).filter(l => l.startsWith('run ')).length, runs, 'no download run');
+  await mgr.act(x.id, 'remove');
+});
+
 test('a path chosen in the Download File Info window is kept, with the quality picked there', async () => {
   const d = mgr.add({ url: 'https://youtu.be/okAudio0002', confirm: true });
   const file = path.join(dir, 'chosen', 'My song.mp3');
-  mgr.confirm(d.id, { action: 'start', path: path.join(dir, 'chosen', 'My song.mp4'), quality: 'mp3' });
+  await mgr.confirm(d.id, { action: 'start', path: path.join(dir, 'chosen', 'My song.mp4'), quality: 'mp3' });
   await settled(d);
   assert.equal(d.status, 'done', d.error);
   assert.equal(d.file, file);

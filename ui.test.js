@@ -9,7 +9,7 @@ const helpers = /<script id="helpers">([\s\S]*?)<\/script>/.exec(html)[1];
 const { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll } = new Function(helpers + '\nreturn { expandBatch, clipboardLink, category, dateLabel, selectRows, keyTarget, selectAll };')();
 // confirm.html (Download File Info) and progress.html keep theirs the same way
 const helpersOf = (file, names) => new Function(/<script id="helpers">([\s\S]*?)<\/script>/.exec(fs.readFileSync(new URL(file, import.meta.url), 'utf8'))[1] + `\nreturn { ${names} };`)();
-const confirmJs = helpersOf('./confirm.html', 'folderFor, splitPath, joinPath, withExt, size, subtitle');
+const confirmJs = helpersOf('./confirm.html', 'folderFor, splitPath, joinPath, withExt, size, subtitle, formatText, formatExt, formatCategory');
 const progressJs = helpersOf('./progress.html', 'size, time, total, fraction, heading, statusText, pieces, canPause');
 
 test('batch links: a numeric range becomes every link in it, zero padding kept', () => {
@@ -72,6 +72,9 @@ test('category: by file extension, YouTube by quality, HLS as Video, else Other'
   assert.equal(cat({ name: 'README' }), 'Other');
   assert.equal(cat({ kind: 'video', quality: 'best' }), 'Video');
   assert.equal(cat({ kind: 'video', quality: 'mp3' }), 'Music');
+  assert.equal(cat({ kind: 'video', quality: 'best', format: 'm4a:140' }), 'Music');
+  assert.equal(cat({ kind: 'video', quality: 'best', format: 'mp3' }), 'Music');
+  assert.equal(cat({ kind: 'video', quality: 'mp3', format: 'webm:248+251' }), 'Video', 'the format key wins');
   assert.equal(cat({ kind: 'hls', url: 'https://x.com/live/index.m3u8' }), 'Video');
 });
 
@@ -182,6 +185,16 @@ test('Download File Info: Save As folder follows the category, Other and categor
   assert.equal(withExt('Me at the zoo.mp4', '.mp3'), 'Me at the zoo.mp3');
   assert.equal(withExt('clip', '.mp4'), 'clip.mp4');
   assert.equal(withExt('v1.2 final.mp4', ''), 'v1.2 final');
+});
+
+test('Download File Info: Format option text, extension and category of a key', () => {
+  const { formatText, formatExt, formatCategory } = confirmJs;
+  assert.equal(formatText({ key: 'mp4:137+140', group: 'MP4', label: '1080p', tag: 'HD', size: 126353408 }), 'MP4 · 1080p · 120.5 MB');
+  assert.equal(formatText({ key: 'webm:303+251', group: 'WEBM', label: '1080p60', size: 102860390 }), 'WEBM · 1080p60 · 98.1 MB');
+  assert.equal(formatText({ key: 'm4a:140', group: 'Audio', label: 'M4A', size: 3565158 }), 'M4A · audio · 3.4 MB');
+  assert.equal(formatText({ key: 'mp3', group: 'Audio', label: 'MP3', size: 456000 }), 'MP3 · audio · 445.3 KB');
+  assert.deepEqual(['mp4:137+140', 'webm:248+251', 'm4a:140-drc', 'mp3', 'best'].map(formatExt), ['.mp4', '.webm', '.m4a', '.mp3', '.mp4']);
+  assert.deepEqual(['mp4:137+140', 'webm:248+251', 'm4a:140', 'mp3', 'best'].map(formatCategory), ['Video', 'Video', 'Music', 'Music', 'Video']);
 });
 
 test('Download File Info: header line and size text', () => {

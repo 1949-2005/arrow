@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { downloadHls } from './hls.js';
-import { downloadVideo, youtubeId, removeTmp, QUALITIES } from './ytdlp.js';
+import { downloadVideo, youtubeId, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf } from './ytdlp.js';
 
 const MIN_SPLIT = 512 * 1024; // a connection is only split off when each half keeps at least this much
 // Honest name on purpose: some servers drop clients that claim to be Chrome but don't look like it.
@@ -81,6 +81,7 @@ export class Manager {
   worked = false; // a download started since the last tick, so even one that ended between ticks counts
   browse = async () => null; // server.js puts the Windows Save dialog here; tests use a stub
   pendingMs = 30 * 60000; // a Download File Info window left open longer than this loses its download
+  formatCache = new Map(); // YouTube video id → {at, list}, see listFormats()
 
   constructor(stateFile) {
     this.stateFile = stateFile;
@@ -119,11 +120,13 @@ export class Manager {
   }
 
   // confirm: the extension's downloads wait as 'pending' until the Download File Info window starts them
-  add({ url, name, title, headers, scheduled, quality, confirm }) {
+  // format: a key from formats(); checked against the video's list before yt-dlp gets it (confirm(), downloadVideo())
+  add({ url, name, title, headers, scheduled, quality, format, confirm }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
     if (yt && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
+    if (yt && format != null && !FORMAT_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`);
     const d = {
       id: crypto.randomUUID(),
       url: yt ? `https://www.youtube.com/watch?v=${yt}` : u.href,
@@ -135,6 +138,7 @@ export class Manager {
       cookieHost: u.hostname,
       kind: yt ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
       ...(yt && { quality }),
+      ...(yt && format != null && { format }),
       status: confirm ? 'pending' : scheduled ? 'scheduled' : 'queued',
       added: Date.now(),
     };
@@ -147,10 +151,25 @@ export class Manager {
 
   // Defaults for the Download File Info window: name, category, size. Never throws; a failed probe keeps its error for the window.
   async probe(d) {
-    let name, size = null, type = null, error = null;
-    if (d.kind === 'video') { // the extension sends the tab title: "(3) Title - YouTube"
-      const t = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '');
-      name = sanitize(t || 'video') + (d.quality === 'mp3' ? '.mp3' : '.mp4');
+    let name, size = null, type = null, error = null, list = null;
+    const catOf = n => Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(path.extname(n).slice(1).toLowerCase())) ?? 'Other';
+    if (d.kind === 'video') {
+      // Until yt-dlp's list is in, the window shows "Getting formats…" with the tab title ("(3) Title - YouTube") as the name.
+      const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '') || 'video';
+      name = sanitize(tab + extOf(d.format, d.quality));
+      if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, listing: true };
+      try {
+        const { title, options } = await this.formats(d.url);
+        if (d.format && !options.some(o => o.key === d.format)) delete d.format; // not offered: the window picks again
+        const want = d.format ?? (d.quality === 'mp3' ? 'mp3' : null);
+        const pick = options.find(o => o.key === want) ?? options.find(o => o.group === 'MP4') ?? options[0];
+        if (title) d.title = sanitize(title);
+        name = sanitize((title || tab) + extOf(pick?.key ?? d.format, d.quality));
+        size = pick?.size ?? null;
+        list = { options, format: pick?.key ?? null };
+      } catch (e) {
+        error = e.message;
+      }
     } else if (d.kind === 'hls') {
       name = this.baseName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + '.ts');
     } else {
@@ -168,29 +187,40 @@ export class Manager {
       }
       name = this.baseName(d, found);
     }
-    const ext = path.extname(name).slice(1).toLowerCase();
-    const category = Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext)) ?? 'Other';
-    if (d.status === 'pending') d.probe = { name, category, size, type, error };
+    if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...(d.kind === 'video' && { options: [], format: null, ...list }) };
+  }
+
+  formats(url) {
+    return listFormats(this, url);
   }
 
   // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
-  confirm(id, { action, path: file, quality } = {}) {
+  // format: a key from the video's list (fetched again when the cache expired); quality: a legacy choice.
+  async confirm(id, { action, path: file, quality, format } = {}) {
+    const gone = 'This download is no longer waiting to start.';
     const d = this.list.find(x => x.id === id);
-    if (d?.status !== 'pending') throw new Error('This download is no longer waiting to start.');
+    if (d?.status !== 'pending') throw new Error(gone);
     if (action === 'cancel') {
       this.list.splice(this.list.indexOf(d), 1);
       return;
     }
     if (action !== 'start' && action !== 'later') throw new Error('unknown action');
-    if (d.kind === 'video' && quality != null) {
-      if (!QUALITIES.includes(String(quality))) throw new Error(`unknown quality "${quality}"`);
-      d.quality = String(quality);
-    }
+    const video = d.kind === 'video';
+    if (video && quality != null && !QUALITIES.includes(String(quality))) throw new Error(`unknown quality "${quality}"`);
     const p = String(file ?? '').trim();
     // a drive or a network share, and a file name after the last separator
     if (!/^([a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/])/i.test(p) || /[\\/]$/.test(p)) throw new Error('Save As needs a full path with a file name, like C:\\Downloads\\file.zip');
+    if (video && format != null) {
+      format = String(format);
+      if (!FORMAT_KEY.test(format) || !(await this.formats(d.url)).options.some(o => o.key === format)) throw new Error(`unknown format "${format}"`);
+      if (d.status !== 'pending' || !this.list.includes(d)) throw new Error(gone); // answered or cancelled meanwhile
+      d.format = format;
+    } else if (video && quality != null) {
+      d.quality = String(quality);
+      delete d.format;
+    }
     let name = sanitize(path.basename(p));
-    if (d.kind === 'video') name = name.slice(0, name.length - path.extname(name).length) + (d.quality === 'mp3' ? '.mp3' : '.mp4');
+    if (video) name = name.slice(0, name.length - path.extname(name).length) + extOf(d.format, d.quality);
     const dir = path.dirname(p);
     try { mkdirSync(dir, { recursive: true }); } catch (e) { throw new Error('Could not create the folder: ' + e.message); }
     this.setFile(d, this.uniqueFile(dir, name));
@@ -529,7 +559,7 @@ export class Manager {
         const ctl = this.running.get(d.id);
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
-          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, added: d.added, probe: d.probe,
+          resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, format: d.format, added: d.added, probe: d.probe,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,

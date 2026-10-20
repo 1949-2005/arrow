@@ -1,4 +1,4 @@
-import { sendConfirm, appAlive, pickMedia } from './common.js';
+import { APP, sendConfirm, appAlive, pickMedia, isYouTubeVideo } from './common.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
@@ -61,19 +61,41 @@ chrome.tabs.onRemoved.addListener(forget);
 // The video button (content.js). Only our own content scripts can send this, but the frame may be hostile,
 // so every field is checked before it reaches the app.
 const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
+const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+\+[\w-]+|m4a:[\w-]+|mp3)$/; // the app checks it against the video's list too
 const isStr = (x, max = 8192) => typeof x === 'string' && x.length <= max;
 const httpUrl = x => isStr(x) && /^https?:\/\//i.test(x) && URL.canParse(x);
 
+// The video button's format list (YouTube), from the app's POST /api/formats; one request per page while this worker lives.
+const formatLists = new Map();
+function formats(url) {
+  let list = formatLists.get(url);
+  if (!list) {
+    list = fetch(APP + '/api/formats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
+      .then(r => r.json())
+      .then(j => Array.isArray(j?.options) ? { title: String(j.title ?? ''), options: j.options } : { error: String(j?.error || 'Arrow could not list the formats.') },
+        () => ({ error: 'Arrow is not running.' }));
+    formatLists.set(url, list);
+    list.then(r => { if (r.error) formatLists.delete(url); }); // failures are asked again next time
+  }
+  return list;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (msg?.type !== 'video' || sender.id !== chrome.runtime.id || !sender.tab) return;
-  const { src, pageUrl, title, quality } = msg;
-  if (!isStr(src) || !httpUrl(pageUrl) || !isStr(title, 1000) || (quality !== undefined && !QUALITIES.includes(quality))) {
+  if (!['video', 'formats'].includes(msg?.type) || sender.id !== chrome.runtime.id || !sender.tab) return;
+  if (msg.type === 'formats') {
+    if (!httpUrl(msg.pageUrl) || !isYouTubeVideo(msg.pageUrl)) return reply({ error: 'Bad request.' });
+    formats(msg.pageUrl).then(reply);
+    return true; // reply comes later
+  }
+  const { src, pageUrl, title, quality, format } = msg;
+  if (!isStr(src) || !httpUrl(pageUrl) || !isStr(title, 1000) || (quality !== undefined && !QUALITIES.includes(quality))
+    || (format !== undefined && !(isStr(format, 200) && FORMAT_KEY.test(format)))) {
     reply({ error: 'Bad request.' });
     return;
   }
   const k = 'tab' + sender.tab.id;
   chain.then(() => chrome.storage.session.get(k)).then(async got => {
-    const pick = pickMedia({ pageUrl, src, title, quality, media: got[k] ?? [] });
+    const pick = pickMedia({ pageUrl, src, title, quality, format, media: got[k] ?? [] });
     if (pick.error) return reply(pick);
     reply(await sendConfirm(pick) ? { ok: true } : { error: 'Arrow is not running.' });
   }).catch(() => reply({ error: 'Arrow is not running.' }));

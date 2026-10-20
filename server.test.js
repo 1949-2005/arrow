@@ -51,10 +51,18 @@ const call = (url, { origin, body } = {}) => fetch(base + url, {
 });
 const scheduled = { url: 'http://127.0.0.1:1/x', scheduled: true }; // never starts: no network, no files
 
-test('extensions may only ping and add', async () => {
+test('extensions may only ping, add and list YouTube formats', async () => {
   const origin = 'chrome-extension://abc';
   assert.equal((await call('/api/ping', { origin })).status, 200);
   assert.equal((await call('/api/add', { origin, body: scheduled })).status, 200);
+  // /api/formats is open to them, for YouTube single-video links only (a real one would run yt-dlp: not here)
+  for (const [url, error] of [['https://example.com/v.mp4', /Only YouTube video links/], ['https://www.youtube.com/@channel', /not a channel or playlist/], ['nope', /Invalid URL/]]) {
+    const res = await call('/api/formats', { origin, body: { url } });
+    assert.equal(res.status, 400, url);
+    assert.match((await res.json()).error, error);
+  }
+  const site = await call('/api/formats', { origin: 'https://evil.example', body: { url: 'https://youtu.be/jNQXAC9IVRw' } });
+  assert.equal(site.status, 403, 'other websites never reach it');
   const forbidden = [['/api/settings', { dir, startup: true, whenDone: 'shutdown' }], ['/api/action', { id: 'x', op: 'open' }], ['/api/state'],
     ['/api/open', {}], ['/api/pause-all', {}], ['/api/quit', {}], ['/api/confirm', { id: 'x', action: 'start', path: 'C:\\Users\\Public\\a.exe' }],
     ['/api/browse', { path: 'C:\\a.zip' }], ['/api/state?x=1']];

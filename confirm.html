@@ -44,35 +44,20 @@
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
   :focus-visible { outline: 2px solid var(--fill); outline-offset: 2px; }
-  .seg { justify-self: start; display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--toolbar); }
-  .seg label { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 6px; color: var(--text); cursor: pointer; font-size: 12.5px; }
-  .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .seg input:checked + label { background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.15); font-weight: 600; }
-  .seg input:focus-visible + label { outline: 2px solid var(--fill); outline-offset: 1px; }
-  svg.i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #format { min-width: 250px; }
   .size { font-weight: 600; }
   .foot { display: flex; align-items: center; gap: 8px; padding: 14px 20px 16px; margin-top: 10px; border-top: 1px solid var(--line); background: var(--toolbar); }
   .foot .spacer { flex: 1; }
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></symbol>
-  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
-</svg>
-
 <div class="win">
   <div class="head"><img src="/favicon.ico" alt=""><div><h1>Download File Info</h1><p id="sub"></p></div></div>
   <form id="f" novalidate>
     <span class="lbl">URL</span><span class="url" id="url"></span>
     <span class="hint warn" id="note" hidden></span>
-    <span class="lbl" id="typeLbl" data-yt hidden>Type</span>
-    <div class="seg" role="radiogroup" aria-labelledby="typeLbl" data-yt hidden>
-      <input type="radio" name="type" id="tVideo" value="video" checked><label for="tVideo"><svg class="i" aria-hidden="true"><use href="#i-video"/></svg>Video · MP4</label>
-      <input type="radio" name="type" id="tAudio" value="audio"><label for="tAudio"><svg class="i" aria-hidden="true"><use href="#i-music"/></svg>Audio · MP3</label>
-    </div>
-    <label for="quality" data-q hidden>Quality</label>
-    <div data-q hidden><select id="quality"><option value="best">Best quality</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></div>
+    <label for="format" data-yt hidden>Format</label>
+    <div data-yt hidden><select id="format"></select></div>
     <label for="cat">Category</label>
     <div><select id="cat"><option>Compressed</option><option>Documents</option><option>Music</option><option>Programs</option><option>Video</option><option>Other</option></select></div>
     <label for="file">Save As</label>
@@ -98,6 +83,11 @@ const splitPath = p => { const i = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('
 const joinPath = (folder, name) => folder.replace(/[\\/]+$/, '') + '\\' + name;
 const withExt = (name, ext) => name.replace(/\.[^.\\/]*$/, '') + ext;
 const size = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+// YouTube formats (the probe's options from /api/formats): option text, extension and category of a key.
+// 'best' and 'mp3' are the legacy choices offered when the list could not be read.
+const formatText = o => [o.group === 'Audio' ? o.label : o.group, o.group === 'Audio' ? 'audio' : o.label, size(o.size)].join(' · ');
+const formatExt = key => key === 'best' ? '.mp4' : '.' + key.split(':')[0];
+const formatCategory = key => /^(m4a|mp3)/.test(key) ? 'Music' : 'Video';
 // Header line: the name (a YouTube title without its extension) · the host without www.
 function subtitle(d, name) {
   let host = '';
@@ -108,8 +98,7 @@ function subtitle(d, name) {
 <script>
 const $ = s => document.querySelector(s);
 const id = new URLSearchParams(location.search).get('id');
-let d, settings, busy = false;
-const store = (k, v) => { try { v === undefined ? (v = localStorage.getItem(k)) : localStorage.setItem(k, v); } catch {} return v; };
+let d, settings, busy = false, listing = false;
 
 async function api(path, body) {
   let r;
@@ -123,40 +112,56 @@ function error(text) {
   $('#err').textContent = text ?? '';
   $('#err').hidden = !text;
 }
-const audio = () => $('#tAudio').checked;
 
-// Type switches the extension and the category (Video ↔ Music); Quality is for video only.
-function setType(fromUser) {
-  const yt = d.kind === 'video';
-  for (const e of document.querySelectorAll('[data-q]')) e.hidden = !yt || audio();
-  if (!yt || !fromUser) return;
-  store('fastdl-type', audio() ? 'audio' : 'video');
-  const [, name] = splitPath($('#file').value);
-  $('#cat').value = audio() ? 'Music' : 'Video';
-  $('#file').value = joinPath(folderFor(settings, $('#cat').value), withExt(name, audio() ? '.mp3' : '.mp4'));
+const option = () => d.probe.options?.find(o => o.key === $('#format').value);
+
+// The Format list: optgroups MP4 / WEBM / Audio with real sizes; "Getting formats…" while the probe lists them.
+function fillFormats(p) {
+  const sel = $('#format');
+  const opt = (text, value) => { const o = document.createElement('option'); o.textContent = text; o.value = value; return o; };
+  sel.replaceChildren();
+  if (p.listing) sel.append(opt('Getting formats…', ''));
+  else if (!p.options.length) sel.append(opt('MP4 · best quality', 'best'), opt('MP3 · audio', 'mp3')); // the list failed: yt-dlp picks
+  else for (const g of ['MP4', 'WEBM', 'Audio']) {
+    const items = p.options.filter(o => o.group === g);
+    if (!items.length) continue;
+    const og = document.createElement('optgroup');
+    og.label = g;
+    og.append(...items.map(o => opt(formatText(o), o.key)));
+    sel.append(og);
+  }
+  sel.value = p.format ?? sel.options[0].value;
+}
+
+function showSize(p) {
+  const o = d.kind === 'video' ? option() : null, n = d.kind === 'video' ? o?.size : p.size;
+  $('#size').textContent = n != null ? size(n) : d.kind === 'video' ? 'Known once the download starts' : 'Unknown';
+  $('#size').className = n != null ? 'size' : '';
+}
+
+// Format swaps the extension, the category (Video ↔ Music) and the size.
+function setFormat() {
+  const key = $('#format').value, [, name] = splitPath($('#file').value);
+  $('#cat').value = formatCategory(key);
+  $('#file').value = joinPath(folderFor(settings, $('#cat').value), withExt(name, formatExt(key)));
+  showSize(d.probe);
 }
 
 function fill(p) {
   const yt = d.kind === 'video';
+  listing = !!p.listing;
   for (const e of document.querySelectorAll('[data-yt]')) e.hidden = !yt;
-  let name = p.name, cat = p.category;
-  if (yt) {
-    $(store('fastdl-type') === 'audio' ? '#tAudio' : '#tVideo').checked = true;
-    $('#quality').value = store('fastdl-quality') || 'best';
-    if (!$('#quality').value) $('#quality').value = 'best';
-    name = withExt(name, audio() ? '.mp3' : '.mp4');
-    cat = audio() ? 'Music' : 'Video';
-  }
-  setType(false);
-  $('#cat').value = cat;
-  $('#file').value = joinPath(folderFor(settings, cat), name);
-  $('#sub').textContent = subtitle(d, name);
-  $('#size').textContent = yt ? 'Known once the download starts' : p.size != null ? size(p.size) : 'Unknown';
-  $('#size').className = !yt && p.size != null ? 'size' : '';
+  if (yt) fillFormats(p);
+  $('#cat').value = p.category;
+  $('#file').value = joinPath(folderFor(settings, p.category), p.name);
+  $('#sub').textContent = subtitle(d, p.name);
+  showSize(p);
   $('#note').textContent = p.error ? `Couldn't read the file details (${p.error}). You can still try to start it.` : '';
   $('#note').hidden = !p.error;
   lock(false);
-  $('#start').focus();
+  // while yt-dlp lists the formats only Cancel works; the rest fills in when the list is there
+  for (const s of ['#format', '#cat', '#file', '#browse', '#later', '#start']) $(s).disabled = listing;
+  $(listing ? '#cancel' : '#start').focus();
 }
 
 function lock(on, action) {
@@ -179,18 +184,19 @@ async function load() {
       return;
     }
     $('#url').textContent = $('#url').title = d.url;
-    if (d.probe) return fill(d.probe);
+    if (d.probe && !d.probe.listing) return fill(d.probe);
+    if (d.probe && !listing) fill(d.probe);
     await new Promise(r => setTimeout(r, t < 20 ? 150 : 500)); // the probe takes a moment, at most 15 s
   }
 }
 
 async function answer(action) {
-  if (busy) return;
+  if (busy || (listing && action !== 'cancel')) return;
   if (!d || d.status !== 'pending' || !d.probe) return action === 'cancel' && window.close();
   lock(true, action);
   error(null);
   try {
-    await api('/api/confirm', { id, action, path: $('#file').value, quality: d.kind === 'video' ? (audio() ? 'mp3' : $('#quality').value) : undefined });
+    await api('/api/confirm', { id, action, path: $('#file').value, ...(d.kind === 'video' && (option() ? { format: option().key } : { quality: $('#format').value })) });
   } catch (e) {
     if (action === 'cancel') return window.close(); // already gone
     error(e.message);
@@ -206,10 +212,8 @@ $('#later').onclick = () => answer('later');
 $('#cancel').onclick = () => answer('cancel');
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.preventDefault(); answer('cancel'); }
-  else if (e.key === 'Enter' && e.target.type === 'radio') { e.preventDefault(); answer('start'); } // radios don't submit forms on Enter
 });
-for (const r of document.querySelectorAll('[name=type]')) r.onchange = () => setType(true);
-$('#quality').onchange = () => store('fastdl-quality', $('#quality').value);
+$('#format').onchange = setFormat;
 $('#cat').onchange = () => { $('#file').value = joinPath(folderFor(settings, $('#cat').value), splitPath($('#file').value)[1]); };
 $('#browse').onclick = async () => {
   if (busy) return;

@@ -36,14 +36,16 @@ globalThis.chrome = {
 
 let tabUrl = 'https://x.com/';
 
-// Fake fetch: `app` is 'up', 'down' (connection refused) or 'error' (/api/add answers 500).
+// Fake fetch: `app` is 'up', 'down' (connection refused) or 'error' (/api/add answers 500, /api/formats an error).
 let app = 'up';
 const requests = [];
+const LIST = { title: 'Me at the zoo', options: [{ key: 'mp4:160+140', group: 'MP4', label: '144p', size: 504566 }, { key: 'mp3', group: 'Audio', label: 'MP3', size: 456000 }] };
 globalThis.fetch = async (url, opts = {}) => {
   requests.push({ url, method: opts.method ?? 'GET', body: opts.body ? JSON.parse(opts.body) : undefined, headers: opts.headers });
   if (app === 'down') throw new TypeError('fetch failed');
-  const status = url.endsWith('/api/add') && app === 'error' ? 500 : 200;
-  return { ok: status < 300, status, json: async () => ({ id: 'dl-1' }) };
+  const status = /\/api\/(add|formats)$/.test(url) && app === 'error' ? 400 : 200;
+  const body = url.endsWith('/api/formats') ? (status === 200 ? LIST : { error: 'Private video' }) : { id: 'dl-1' };
+  return { ok: status < 300, status, json: async () => body };
 };
 
 await import('./extension/background.js');
@@ -224,7 +226,8 @@ test('the extension shows the app name from brand.json', () => {
   const m = JSON.parse(read('./extension/manifest.json'));
   assert.deepEqual([m.name, m.action.default_title], [name, name]);
   const files = ['popup.html', 'popup.js', 'background.js', 'content.js'].map(f => read('./extension/' + f)).join('\n');
-  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `'Sent to ${name} ✓'`]) assert.ok(files.includes(text), text);
+  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `'Sent to ${name} ✓'`,
+    `'${name} could not list the formats.'`]) assert.ok(files.includes(text), text);
 });
 
 test('isYouTubeVideo accepts single-video URLs only, on the exact YouTube hosts', () => {
@@ -359,8 +362,10 @@ test('popup "Show download button on videos" defaults on and saves to overlay', 
 
 test('pickMedia: YouTube page, http src, then the grabbed HLS or biggest video, else an error', () => {
   const yt = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', page = 'https://x.com/watch/1';
-  assert.deepEqual(pickMedia({ pageUrl: yt, src: 'blob:https://www.youtube.com/1', title: 'T', quality: '720', media: [] }), { url: yt, quality: '720' });
-  assert.deepEqual(pickMedia({ pageUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', src: '' }), { url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', quality: undefined });
+  // YouTube: the page, with the picked format and the title passed through (the app names the file from yt-dlp's title)
+  assert.deepEqual(pickMedia({ pageUrl: yt, src: 'blob:https://www.youtube.com/1', title: 'T', quality: '720', media: [] }), { url: yt, quality: '720', format: undefined, title: 'T' });
+  assert.deepEqual(pickMedia({ pageUrl: yt, src: '', title: 'Me at the zoo', format: 'mp3' }), { url: yt, quality: undefined, format: 'mp3', title: 'Me at the zoo' });
+  assert.deepEqual(pickMedia({ pageUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', src: '' }), { url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', quality: undefined, format: undefined, title: undefined });
   assert.deepEqual(pickMedia({ pageUrl: page, src: 'https://cdn.x.com/v.mp4', title: 'T', quality: '720', media: [{ url: 'https://x.com/a.m3u8', type: 'HLS stream' }] }),
     { url: 'https://cdn.x.com/v.mp4', referrer: page, title: 'T' });
   const media = [
@@ -399,9 +404,14 @@ test('video button message: sends the picked media with the page as referrer', a
   assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' }, confirm: true });
   assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
 
-  reset(); // YouTube: type and quality are picked in the Download File Info window
+  reset(); // YouTube without a pick ("Download anyway"): the window opens without a preselected format
   assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', headers: {}, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Clip', headers: {}, confirm: true });
+  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+
+  reset(); // a pick in the format list: format and title go to the app, the window opens with them
+  assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140' })), { ok: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140', headers: {}, confirm: true });
   assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
 
   reset();
@@ -423,18 +433,62 @@ test('video button message: other senders and bad fields are refused', async () 
   for (const bad of [
     { pageUrl: 'file:///C:/x.html' }, { pageUrl: 'javascript:alert(1)' }, { pageUrl: 42 }, { pageUrl: undefined },
     { src: 42 }, { src: undefined }, { title: { x: 1 } }, { title: 'x'.repeat(1001) }, { quality: 'best"; rm' }, { quality: 720 },
+    { format: 'bv*+ba/b' }, { format: 'mp4:137' }, { format: 137 }, { format: 'mp3 --exec x' },
   ]) assert.deepEqual(await videoMsg(vmsg(bad)), { error: 'Bad request.' }, JSON.stringify(bad));
   assert.equal(requests.length, 0);
 });
 
+test('formats message: YouTube pages only, proxied to /api/formats, one request per page', async () => {
+  reset();
+  const yt = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+  const msg = (pageUrl, sender) => videoMsg({ type: 'formats', pageUrl }, sender);
+  assert.deepEqual(await msg(yt), LIST);
+  assert.deepEqual(await msg(yt), LIST);
+  const asked = requests.filter(r => r.url.endsWith('/api/formats'));
+  assert.deepEqual(asked.map(r => [r.url, r.method, r.body]), [['http://127.0.0.1:9614/api/formats', 'POST', { url: yt }]], 'cached per page');
+  for (const bad of ['https://x.com/v', 'https://www.youtube.com/@channel', 'javascript:alert(1)', 42]) assert.deepEqual(await msg(bad), { error: 'Bad request.' }, String(bad));
+  assert.equal(await msg(yt, { id: 'other-ext', tab: { id: 5 } }), undefined);
+  assert.equal(await msg(yt, { id: 'ext-id' }), undefined);
+
+  reset('error'); // the app's error comes through, and is not cached
+  const other = 'https://youtu.be/dQw4w9WgXcQ';
+  assert.deepEqual(await msg(other), { error: 'Private video' });
+  reset('down');
+  assert.deepEqual(await msg(other), { error: 'Arrow is not running.' });
+  reset();
+  assert.deepEqual(await msg(other), LIST);
+});
+
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside })', { URL });
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step })', { URL });
 
-test('content.js: one click sends, no quality menu (the Download File Info window asks)', () => {
-  assert.doesNotMatch(contentSrc, /menu|QUALITIES|aria-expanded|1080|msg\.quality/);
-  assert.match(contentSrc, /if \(e\.isTrusted && !busy\) grab\(\);/);
-  assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: location\.href, title: document\.title \}/);
+test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy\) return;\n\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/);
+  assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
+  assert.match(contentSrc, /if \(!e\.isTrusted\) return;\n\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
+  assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
+  assert.match(contentSrc, /grab\(\{ pageUrl, title: res\.title \|\| undefined, format: o\.key \}\)/);
+  assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: pick\.pageUrl \?\? location\.href, title: pick\.title \?\? document\.title, \.\.\.\(pick\.format && \{ format: pick\.format \}\) \}/);
+  assert.match(contentSrc, /'Download anyway'/);
+  assert.match(contentSrc, /max-height: 392px; overflow: auto/);
+  assert.match(contentSrc, /prefers-reduced-motion: reduce\) \{[^}]*\} \.spin \{ animation: none !important; \}/);
+});
+
+test('content.js helpers: the YouTube check agrees with common.js, menu groups, sizes, arrow keys', () => {
+  for (const u of ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://youtu.be/dQw4w9WgXcQ?t=1', 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    'https://m.youtube.com/shorts/dQw4w9WgXcQ/', 'https://www.youtube.com/@channel', 'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/watch?v=short', 'ftp://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://x.com/', 'nope']) {
+    assert.equal(content.isYouTubePage(u), isYouTubeVideo(u), u);
+  }
+  const o = (group, label) => ({ key: label, group, label, size: 1 });
+  assert.deepEqual(JSON.parse(JSON.stringify(content.menuGroups([o('Audio', 'M4A'), o('MP4', '1080p'), o('MP4', '720p'), o('Audio', 'MP3')]))), [
+    { title: 'VIDEO · MP4', items: [o('MP4', '1080p'), o('MP4', '720p')] },
+    { title: 'AUDIO', items: [o('Audio', 'M4A'), o('Audio', 'MP3')] },
+  ]);
+  assert.equal(content.menuGroups([]).length, 0);
+  assert.deepEqual([content.sizeText(126353408), content.sizeText(456000), content.sizeText(900), content.sizeText(6291456000)], ['120.5 MB', '445.3 KB', '900 B', '5.86 GB']);
+  assert.deepEqual([content.step(-1, 3, 'ArrowDown'), content.step(-1, 3, 'ArrowUp'), content.step(2, 3, 'ArrowDown'), content.step(0, 3, 'ArrowUp'), content.step(1, 3, 'ArrowDown')], [0, 2, 0, 2, 2]);
 });
 
 test('content.js helpers: size and hit checks', () => {

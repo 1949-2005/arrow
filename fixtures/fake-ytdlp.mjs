@@ -3,6 +3,8 @@
 //   err…  ERROR line, exit 1     live…  filtered out as live, exit 0
 //   slow… slow, with a child process (like the PyInstaller launcher), continues its .part files.
 //         A fresh run waits 10 s at 50000 bytes, so a pause or remove always lands mid-stream.
+// -J prints fixtures/ytdlp-formats.json for the ID, its {{BASE}} links on FAKE_YTDLP_BASE (the test's range server).
+// -f without --merge-output-format (m4a keys) downloads one audio stream.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -12,12 +14,26 @@ const dir = args[args.indexOf('-P') + 1];
 const url = args.at(-1);
 const id = new URL(url).searchParams.get('v');
 const mp3 = args.includes('-x');
+const merge = args.includes('--merge-output-format') ? args[args.indexOf('--merge-output-format') + 1] : null;
 const slow = id.startsWith('slow');
 const out = s => process.stdout.write(s + '\n');
 const log = s => process.env.FAKE_YTDLP_LOG && fs.appendFileSync(process.env.FAKE_YTDLP_LOG, s + '\n');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const bytes = (seed, from, n) => Buffer.from(Array.from({ length: n }, (_, i) => (from + i + seed) % 251));
 
+if (args.includes('-J')) {
+  log(`list ${id}`);
+  await sleep(100); // long enough for two callers to overlap
+  if (id.startsWith('err')) {
+    process.stderr.write(`ERROR: [youtube] ${id}: Private video. Sign in if you've been granted access to this video\n`);
+    process.exitCode = 1;
+  } else {
+    const info = JSON.parse(fs.readFileSync(new URL('./ytdlp-formats.json', import.meta.url), 'utf8')
+      .replaceAll('{{ID}}', id).replaceAll('{{BASE}}', process.env.FAKE_YTDLP_BASE ?? 'http://127.0.0.1:1'));
+    info.is_live = id.startsWith('live');
+    out(JSON.stringify(info));
+  }
+} else {
 log(`run ${process.pid}`);
 out(`[youtube] Extracting URL: ${url}`);
 if (id.startsWith('err')) {
@@ -31,7 +47,7 @@ if (id.startsWith('err')) {
   const child = slow && spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore', detached: true });
   if (child) log(`child ${child.pid}`);
   const fresh = !fs.readdirSync(dir).length; // no .part files to continue
-  const streams = mp3 ? [['a1', 'none', 30000, 'webm']] : [['v1', 'avc1', slow ? 200000 : 40000, 'mp4'], ['a1', 'none', slow ? 100000 : 20000, 'm4a']];
+  const streams = mp3 ? [['a1', 'none', 30000, 'webm']] : !merge ? [['a1', 'none', 30000, 'm4a']] : [['v1', 'avc1', slow ? 200000 : 40000, 'mp4'], ['a1', 'none', slow ? 100000 : 20000, 'm4a']];
   // mp3 prints NA as the expected size, so the engine has to add up the streams
   out(`FDLINFO ${streams.map(s => s[0]).join('+')} ${mp3 ? 'NA' : streams.reduce((a, s) => a + s[2], 0)} "Fake vid\\u00e9o: ${id}"`);
   const files = [];
@@ -53,11 +69,12 @@ if (id.startsWith('err')) {
     fs.renameSync(part, file);
     out(`FDLP ${fid} ${vcodec} finished ${got} ${size}`);
   }
-  const final = path.join(dir, mp3 ? 'media.mp3' : 'media.mp4');
+  const final = path.join(dir, 'media.' + (mp3 ? 'mp3' : merge ?? 'm4a'));
   out(`FDLPP ${mp3 ? 'ExtractAudio' : 'Merger'}`);
   fs.writeFileSync(final, Buffer.concat(files.map(f => fs.readFileSync(f))));
   for (const f of files) fs.rmSync(f);
   out(`FDLPP MoveFiles`);
   out(`FDLFILE ${JSON.stringify(final)}`);
   if (child) child.kill();
+}
 }
