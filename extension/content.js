@@ -77,7 +77,7 @@ function main() {
   const CSS = `
     .box { position: fixed; top: 0; left: 0; transform: translateX(-100%); opacity: 0; visibility: hidden;
       display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
-      transition: opacity .12s, visibility 0s .12s; font: 600 13px/1 "SF Pro Text", -apple-system, "Segoe UI", system-ui, sans-serif; }
+      transition: opacity .12s, visibility 0s .12s; font: 600 13px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; } /* the app's font (Theme.Body), as its tray menu */
     .box.on { opacity: 1; visibility: visible; transition: opacity .12s; }
     @media (prefers-reduced-motion: reduce) { .box, .box.on { transition: none; } .spin { animation: none !important; } }
     [hidden] { display: none !important; }
