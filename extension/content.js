@@ -76,17 +76,16 @@ function main() {
     .icon svg { width: 14px; height: 14px; }
     .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(59,60,61,.97); border: 1px solid rgba(255,255,255,.18);
       box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
-    .menu { width: 320px; max-height: 392px; overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.28) transparent; }
+    .menu { width: min(440px, calc(var(--room, 448px) - 8px)); max-height: min(480px, 70vh); overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.28) transparent; }
     h3 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: rgba(255,255,255,.55); }
     .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 13px; }
     .item:hover, .item:focus { background: rgba(255,255,255,.1); }
     .item:focus { outline: 2px solid #fff; outline-offset: -2px; }
-    /* a format row: its line, then the file name, cut in the middle so the extension stays visible */
-    .fmt { flex-direction: column; align-items: stretch; gap: 3px; }
+    /* a format row: its line, then the whole file name, wrapped */
+    .fmt { flex-direction: column; align-items: stretch; gap: 4px; }
     .line { display: flex; align-items: center; gap: 10px; }
-    .name { display: flex; min-width: 0; font-size: 12px; line-height: 1.3; color: rgba(255,255,255,.6); }
-    .stem { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
-    .ext { flex: none; white-space: pre; }
+    .name { font-size: 13px; line-height: 1.5; color: rgba(255,255,255,.72); overflow-wrap: anywhere; }
+    .item:hover .name, .item:focus .name { color: #fff; }
     .q { font-weight: 600; min-width: 56px; }
     .tag { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.16); color: #fff; }
     .sz { margin-left: auto; color: rgba(255,255,255,.6); }
@@ -251,15 +250,14 @@ function main() {
     const pick = o => { closeMenu(); grab({ pageUrl, title: res.title || undefined, format: o.key }); };
     const groups = menuGroups(res?.options ?? []);
     if (groups.length) {
-      // each row shows the file it saves, as IDM does: stem and extension apart, so a long name is cut before ".mp4"
-      // shortcut: an Arabic title ending in Latin words shows "mp4." beside that part's start, not its end; cut in JS by measuring if users meet it
+      // each row shows the whole file it saves, as IDM does, wrapped over as many lines as it needs
       const title = res.title || document.title;
       const item = o => {
-        const name = fileName(title, o.key), dot = name.lastIndexOf('.'), cut = dot > 0 ? dot : name.length;
+        const name = fileName(title, o.key);
         const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size))),
-          h('div', { class: 'name', dir: 'auto' }, h('span', { class: 'stem' }, name.slice(0, cut)), h('span', { class: 'ext' }, name.slice(cut)))], () => pick(o));
+          h('div', { class: 'name', dir: 'auto' }, name)], () => pick(o));
         b.classList.add('fmt');
-        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size)}, ${name}`); // the flex split reads as "name .mp4"
+        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size)}, ${name}`); // one name for screen readers: format, size, file
         return b;
       };
       menu.setAttribute('aria-label', `Choose a format for ${title}`);
@@ -302,6 +300,7 @@ function main() {
     const { clientWidth, clientHeight } = document.documentElement; // the window without its scrollbars
     const p = panelAt(r, offset, panel.offsetWidth, panel.offsetHeight, clientWidth, clientHeight);
     box.style.left = p.left + 'px';
+    box.style.setProperty('--room', p.left + 'px'); // the panel's right edge: the room the menu has on its left
     box.style.top = p.top + 'px';
   }
 
