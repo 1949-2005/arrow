@@ -38,6 +38,15 @@ const menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: option
 const sizeText = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
 // Up/Down through n items, wrapping; from nothing focused (-1) Down goes to the first, Up to the last.
 const step = (i, n, key) => i < 0 ? (key === 'ArrowUp' ? n - 1 : 0) : (i + (key === 'ArrowUp' ? n - 1 : 1)) % n;
+// The file the app will save for a format key: engine.js sanitize(title + extOf(key)), ported (no imports in a classic script).
+function fileName(title, key) {
+  let name = (String(title ?? '').trim() ? title : 'download') + '.' + key.split(':')[0];
+  name = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^[\s.]+|[\s.]+$/g, '');
+  const dot = name.lastIndexOf('.'), ext = dot > 0 ? name.slice(dot) : ''; // path.extname
+  if (name.length > 180) name = name.slice(0, 180 - ext.length) + ext;
+  if (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name)) name = '_' + name;
+  return name || 'download';
+}
 
 if (typeof document !== 'undefined') main();
 
@@ -67,11 +76,17 @@ function main() {
     .icon svg { width: 14px; height: 14px; }
     .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(59,60,61,.97); border: 1px solid rgba(255,255,255,.18);
       box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
-    .menu { width: 292px; max-height: 392px; overflow: auto; padding: 6px; }
+    .menu { width: 320px; max-height: 392px; overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.28) transparent; }
     h3 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: rgba(255,255,255,.55); }
     .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 13px; }
     .item:hover, .item:focus { background: rgba(255,255,255,.1); }
     .item:focus { outline: 2px solid #fff; outline-offset: -2px; }
+    /* a format row: its line, then the file name, cut in the middle so the extension stays visible */
+    .fmt { flex-direction: column; align-items: stretch; gap: 3px; }
+    .line { display: flex; align-items: center; gap: 10px; }
+    .name { display: flex; min-width: 0; font-size: 12px; line-height: 1.3; color: rgba(255,255,255,.6); }
+    .stem { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+    .ext { flex: none; white-space: pre; }
     .q { font-weight: 600; min-width: 56px; }
     .tag { font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.16); color: #fff; }
     .sz { margin-left: auto; color: rgba(255,255,255,.6); }
@@ -101,11 +116,12 @@ function main() {
   };
   const h = (...a) => make(null, ...a);
   const s = (...a) => make('http://www.w3.org/2000/svg', ...a);
-  // The Arrow logo (assets/logo.svg's paper-plane arrow, without its tile), with strokes thick enough for 18 px
-  const logo = () => s('svg', { class: 'logo', viewBox: '0 0 512 512', fill: 'none', stroke: 'currentColor', 'stroke-width': 40,
-    'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'aria-hidden': 'true' },
-  s('path', { d: 'M71.5 87.5 L437.5 255.5 L71.5 423.5 Z' }), s('path', { d: 'M71.5 87.5 L183.5 255.5' }),
-  s('path', { d: 'M183.5 255.5 L437.5 255.5 L71.5 423.5 Z', fill: 'currentColor' }));
+  // The app icon's tile, as the toolbar and tray show it: assets/logo.svg at 16 px, with thicker strokes. Fixed colors in every state.
+  const logo = () => s('svg', { class: 'logo', viewBox: '0 0 256 256', 'aria-hidden': 'true' },
+    s('rect', { width: 256, height: 256, rx: 58, fill: '#FFFFFF' }),
+    s('g', { transform: 'translate(19.9 7.92) scale(0.47)', fill: 'none', stroke: '#3B3C3D', 'stroke-width': 52, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' },
+      s('path', { d: 'M71.5 87.5 L437.5 255.5 L71.5 423.5 Z' }), s('path', { d: 'M71.5 87.5 L183.5 255.5' }),
+      s('path', { d: 'M183.5 255.5 L437.5 255.5 L71.5 423.5 Z', fill: '#3B3C3D' })));
   const icon = (...paths) => s('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', 'stroke-linecap': 'round',
     'stroke-linejoin': 'round', 'aria-hidden': 'true' }, ...paths.map(d => s('path', { d })));
 
@@ -225,6 +241,7 @@ function main() {
   // The format list under the panel. pageUrl and title are kept from the moment it opened: YouTube changes pages without reloading.
   async function openMenu() {
     const n = ++asked, pageUrl = location.href;
+    menu.setAttribute('aria-label', 'Choose a format');
     menu.replaceChildren(h('div', { class: 'note' }, h('span', { class: 'spin' }), 'Getting formats…'));
     menu.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
@@ -234,9 +251,18 @@ function main() {
     const pick = o => { closeMenu(); grab({ pageUrl, title: res.title || undefined, format: o.key }); };
     const groups = menuGroups(res?.options ?? []);
     if (groups.length) {
-      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h('h3', { 'aria-hidden': 'true' }, g.title),
-        ...g.items.map(o => row([h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null,
-          h('span', { class: 'sz' }, sizeText(o.size))], () => pick(o))))));
+      // each row shows the file it saves, as IDM does: stem and extension apart, so a long name is cut before ".mp4"
+      const title = res.title || document.title;
+      const item = o => {
+        const name = fileName(title, o.key), dot = name.lastIndexOf('.'), cut = dot > 0 ? dot : name.length;
+        const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size))),
+          h('div', { class: 'name', dir: 'auto' }, h('span', { class: 'stem' }, name.slice(0, cut)), h('span', { class: 'ext' }, name.slice(cut)))], () => pick(o));
+        b.classList.add('fmt');
+        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size)}, ${name}`); // the flex split reads as "name .mp4"
+        return b;
+      };
+      menu.setAttribute('aria-label', `Choose a format for ${title}`);
+      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h('h3', { 'aria-hidden': 'true' }, g.title), ...g.items.map(item))));
       live.textContent = '';
     } else {
       const text = res?.error ?? (res ? 'No downloadable formats found.' : 'Reload the page and try again.');

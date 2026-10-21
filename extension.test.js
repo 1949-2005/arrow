@@ -476,7 +476,7 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
 
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step, panelAt })', { URL });
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step, panelAt, fileName })', { URL });
 
 test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
   // \s+: git may check out CRLF
@@ -515,6 +515,19 @@ test('content.js panel: ? and × take trusted clicks only, × hides it for this 
   assert.match(contentSrc, /if \(v && dismissed\.get\(v\) !== location\.href\) show\(v\);/);
   assert.match(contentSrc, /drag = e\.isTrusted && e\.button === 0 \?/);
   assert.match(contentSrc, /if \(!e\.isTrusted \|\| \(e\.target !== panel && e\.target !== grip\)\) return;\s+offset = \{ x: 0, y: 0 \};/, 'double-click on the edge puts it back');
+});
+
+test('content.js fileName: the name the engine saves for a title and format key', async () => {
+  const { sanitize } = await import('./engine.js');
+  const { extOf } = await import('./ytdlp.js');
+  const long = 'x'.repeat(300);
+  const cases = [['Me at the zoo', 'mp4:137+140'], ['What? A: B | C', 'webm:248+251'], ['أغنية جميلة جدا', 'm4a:140'], [long, 'mp3'], ['con', 'mp4:18+140'], ['  .hidden. ', 'mp3']];
+  for (const [t, k] of cases) assert.equal(content.fileName(t, k), sanitize(t + extOf(k)), t);
+  assert.deepEqual(cases.map(([t, k]) => content.fileName(t, k)).slice(0, 3), ['Me at the zoo.mp4', 'What_ A_ B _ C.webm', 'أغنية جميلة جدا.m4a']);
+  assert.equal(content.fileName(long, 'mp3'), 'x'.repeat(176) + '.mp3');
+  assert.equal(content.fileName('con', 'mp4:18+140'), '_con.mp4');
+  assert.equal(content.fileName('', 'mp4:18+140'), 'download.mp4');
+  assert.equal(content.fileName('   ', 'mp3'), 'download.mp3');
 });
 
 test('content.js panelAt: 8 px inside the top-right corner, moved by the drag, kept in the window', () => {
