@@ -2,6 +2,7 @@
 //   --tray       start without showing the main window (Start with Windows)
 //   --no-engine  never start the engine (tests)
 //   --check      no UI: ping the engine, read /api/state, print the result, exit 0 or 1
+// ARROW_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -29,6 +30,13 @@ namespace Arrow
             Api.AppName = Name;
             var api = new Api();
             if (args.Contains("--check")) return Check(api, args.Contains("--no-engine"));
+            Theme.Init(); // SystemEvents raises the theme switch on the thread that first touched it: this one
+            var shots = Environment.GetEnvironmentVariable("ARROW_SHOTS");
+            if (!string.IsNullOrEmpty(shots))
+            {
+                Application.Run(new MainForm(api, true, shots));
+                return 0;
+            }
 
             var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\" + Name + "-show");
             bool first;
@@ -36,6 +44,7 @@ namespace Arrow
             {
                 if (!first)
                 {
+                    AllowSetForegroundWindow(-1); // ASFW_ANY: lets the running instance come to the front
                     show.Set();
                     return 0;
                 }
@@ -46,7 +55,7 @@ namespace Arrow
                     return 1;
                 }
                 new Thread(() => { while (show.WaitOne()) { var h = ShowRequested; if (h != null) h(); } }) { IsBackground = true, Name = "show" }.Start();
-                Application.Run(new MainForm(api, !args.Contains("--tray")));
+                Application.Run(new MainForm(api, !args.Contains("--tray"), null));
                 return 0;
             }
         }
@@ -68,8 +77,11 @@ namespace Arrow
             return 1;
         }
 
-        // null when the engine answers, else the error to show
-        static string StartEngine(Api api)
+        [DllImport("user32.dll")]
+        static extern bool AllowSetForegroundWindow(int processId);
+
+        // null when the engine answers, else the error to show. Blocks up to 15 s: call it off the UI thread.
+        public static string StartEngine(Api api)
         {
             if (api.Ping()) return null;
             var engine = Path.Combine(Folder, Name + " Engine.exe");

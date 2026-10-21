@@ -11,8 +11,12 @@
 - `app/` — the native Windows app (C# 5 WinForms, compiled by Windows' own .NET Framework `csc.exe`) that replaces the web UI
   - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), and the helpers ported from the old web UI (numbers and dates in the user's regional format)
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
-  - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `AppIcon` (the brand .ico through user32 `LoadImage`)
-  - `MainForm.cs` — placeholder main window (connection status only)
+  - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `ARROW_SHOTS` screenshot mode; `AppIcon` (the brand .ico through user32 `LoadImage`)
+  - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
+  - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
+  - `Inspector.cs` — the right column: one download, several, or the overview; `ErrorBox`
+  - `MainForm.cs` — the main window (top bar with the paste bar, strips, sidebar, search and list, inspector, status bar), tray icon and menu, keyboard shortcuts, drag and drop, clipboard offers, `ui.json` (bounds, section), shots
+  - `Dialogs.cs` — the dialogs' static API used by the main window (Download File Info, progress, Add links, Options, Remove, Confirm, Change link, Error, About)
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
