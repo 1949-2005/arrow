@@ -32,8 +32,8 @@ globalThis.chrome = {
   webRequest: { onHeadersReceived: event('webRequest.onHeadersReceived') },
   windows: { create: rec('windows.create'), getLastFocused: rec('windows.getLastFocused', () => ({ left: 100, top: 40, width: 1400, height: 900 })) },
   cookies: { getAll: rec('cookies.getAll', () => [{ name: 'a', value: '1' }, { name: 'b', value: '2' }]) },
-  // the page's YouTube player (playerData()): pageResult, or a throw for 'throw'
-  scripting: { executeScript: rec('scripting.executeScript', () => { if (pageResult === 'throw') throw new Error('no frame'); return [{ result: pageResult }]; }) },
+  // the page's YouTube player (playerData()): pageResult, or a refusal for 'throw' (as the real API: a rejected promise)
+  scripting: { executeScript: (...a) => { calls.push(['scripting.executeScript', ...a]); return pageResult === 'throw' ? Promise.reject(new Error('no frame')) : Promise.resolve([{ result: pageResult }]); } },
 };
 let pageResult = null;
 
@@ -207,6 +207,24 @@ test('onInstalled creates the context menu', () => {
   assert.deepEqual(menu.contexts, ['link', 'video', 'audio', 'image']);
 });
 
+test('onInstalled (install, update) gives open web tabs the new content.js in place, all frames; failures are ignored', async () => {
+  for (const reason of ['install', 'update']) {
+    reset();
+    await listeners.onInstalled({ reason });
+    assert.deepEqual(called('tabs.query').map(c => c[1]), [{ url: ['http://*/*', 'https://*/*'] }], reason);
+    assert.deepEqual(called('scripting.executeScript').map(c => c[1]), [{ target: { tabId: 9, allFrames: true }, files: ['content.js'] }], reason);
+  }
+  reset();
+  pageResult = 'throw'; // a restricted or discarded tab
+  await listeners.onInstalled({ reason: 'update' });
+  await settle();
+  assert.equal(called('scripting.executeScript').length, 1);
+  pageResult = null;
+  reset(); // a browser update or a shared module: the tabs' copies are still connected
+  await listeners.onInstalled({ reason: 'chrome_update' });
+  assert.deepEqual([called('tabs.query').length, called('scripting.executeScript').length, called('contextMenus.create').length], [0, 0, 1]);
+});
+
 test('extension files are syntactically valid and the manifest points at real files', () => {
   for (const f of ['common.js', 'background.js', 'popup.js']) {
     execFileSync(process.execPath, ['--check', '--input-type=module'], { input: fs.readFileSync(new URL('./extension/' + f, import.meta.url)) });
@@ -234,7 +252,7 @@ test('the extension shows the app name from brand.json', () => {
   const m = JSON.parse(read('./extension/manifest.json'));
   assert.deepEqual([m.name, m.action.default_title], [name, name]);
   const files = ['popup.html', 'popup.js', 'background.js', 'content.js'].map(f => read('./extension/' + f)).join('\n');
-  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `const NAME = '${name}';`,
+  for (const text of [`<h1>${name}</h1>`, `>Open ${name}<`, `'Download with ${name}'`, `Is ${name} running?`, `'${name} is not running.'`, `'Download with ${name}'`, `var NAME = '${name}';`,
     `'${name} could not list the formats.'`]) assert.ok(files.includes(text), text);
 });
 
@@ -658,5 +676,35 @@ test('content.js helpers: size and hit checks', () => {
 
 test('content.js shows the app name from brand.json', () => {
   const { name } = JSON.parse(fs.readFileSync(new URL('./brand.json', import.meta.url), 'utf8'));
-  assert.ok(contentSrc.includes(`const NAME = '${name}';`), 'NAME'); // the panel's help title, "Sent to \u2026" and its label for screen readers
+  assert.ok(contentSrc.includes(`var NAME = '${name}';`), 'NAME'); // the panel's help title, "Sent to \u2026" and its label for screen readers
+});
+
+// Each copy of content.js gets its own JS world (vm context) over one shared document and window, as copies in a tab do.
+test('content.js: a new copy replaces the old one in place (update); a second run in the same world starts nothing', async () => {
+  const doc = new EventTarget(), win = new EventTarget();
+  const copy = () => {
+    const live = { events: 0, storage: new Set() };
+    const ctx = vm.createContext({
+      document: doc, URL, Event, AbortController, setTimeout, clearTimeout,
+      addEventListener: (type, fn, opts) => win.addEventListener(type, () => { live.events++; }, opts), // counts, honours opts.signal
+      chrome: { runtime: { id: 'ext-id', sendMessage: async () => null },
+        storage: { local: { get: async () => ({}) }, onChanged: { addListener: f => live.storage.add(f), removeListener: f => live.storage.delete(f) } } },
+    });
+    vm.runInContext(contentSrc, ctx);
+    return { ctx, live };
+  };
+  const events = () => { for (const t of ['mousemove', 'mouseout', 'pointerdown', 'scroll', 'resize']) win.dispatchEvent(new Event(t)); };
+  const old = copy();
+  events();
+  assert.deepEqual([old.live.events, old.live.storage.size], [5, 1]);
+  const fresh = copy(); // the update's copy, in a new world: the old one stops every handler
+  events();
+  assert.deepEqual([old.live.events, old.live.storage.size], [5, 0], 'old copy torn down');
+  assert.deepEqual([fresh.live.events, fresh.live.storage.size], [5, 1]);
+  vm.runInContext(contentSrc, fresh.ctx); // injected again where the new version already runs: no "already declared", no second panel
+  events();
+  assert.deepEqual([fresh.live.events, fresh.live.storage.size], [10, 1]);
+  const other = copy(); // the next update replaces that one too
+  events();
+  assert.deepEqual([fresh.live.events, fresh.live.storage.size, other.live.events], [10, 0, 5]);
 });

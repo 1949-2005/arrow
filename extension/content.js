@@ -4,17 +4,19 @@
 // through background.js); the picked one opens the Download File Info window with that format.
 // The panel can be dragged; a double-click on its edge puts it back, as in IDM.
 // Content scripts can't be ES modules, so the helpers below are plain functions; extension.test.js runs them in Node.
+// An update injects this file again into open tabs (background.js onInstalled). A tab that already runs the new version gets
+// it a second time in the same JS world, so the top level uses var and function only: const would throw "already declared".
 
-const NAME = 'Arrow';
-const LABEL = 'Download this video';
+var NAME = 'Arrow';
+var LABEL = 'Download this video';
 
 // Big enough to be a player, not a thumbnail preview or an icon.
-const bigEnough = r => r.width >= 200 && r.height >= 112;
-const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+var bigEnough = r => r.width >= 200 && r.height >= 112;
+var inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
 // The panel's top-right corner: 8 px inside the video's, moved by the drag offset, and kept in the window
 // (w, h: the panel's size; vw, vh: the window's).
-const panelAt = (r, off, w, h, vw, vh) => ({
+var panelAt = (r, off, w, h, vw, vh) => ({
   left: Math.min(Math.max(r.right - 8 + off.x, w), vw),
   top: Math.max(Math.min(r.top + 8 + off.y, vh - h), 0),
 });
@@ -31,15 +33,15 @@ function ytWatchUrl(href) {
   return /^[\w-]{11}$/.test(id ?? '') ? 'https://www.youtube.com/watch?v=' + id : null;
 }
 // A single YouTube video page, as common.js isYouTubeVideo() (extension.test.js checks they agree).
-const isYouTubePage = href => !!ytWatchUrl(href);
+var isYouTubePage = href => !!ytWatchUrl(href);
 
 // The format list's groups, in the app's order: [{title, items}], empty groups left out.
-const GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
-const menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: options.filter(o => o.group === g) })).filter(g => g.items.length);
+var GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
+var menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: options.filter(o => o.group === g) })).filter(g => g.items.length);
 // As confirm.html size(), so the list and the window show the same number
-const sizeText = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+var sizeText = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
 // Up/Down through n items, wrapping; from nothing focused (-1) Down goes to the first, Up to the last.
-const step = (i, n, key) => i < 0 ? (key === 'ArrowUp' ? n - 1 : 0) : (i + (key === 'ArrowUp' ? n - 1 : 1)) % n;
+var step = (i, n, key) => i < 0 ? (key === 'ArrowUp' ? n - 1 : 0) : (i + (key === 'ArrowUp' ? n - 1 : 1)) % n;
 // The file the app will save for a format key: engine.js sanitize(title + extOf(key)), ported (no imports in a classic script).
 function fileName(title, key) {
   let name = (String(title ?? '').trim() ? title : 'download') + '.' + key.split(':')[0];
@@ -52,11 +54,26 @@ function fileName(title, key) {
 
 // chrome.runtime.sendMessage, or null instead of an error. Once the extension reloads, this tab's copy of the script is cut
 // off and sendMessage throws at once ("Extension context invalidated"), with no promise for .catch to catch.
-const send = msg => { try { return chrome.runtime.sendMessage(msg).catch(() => null); } catch { return Promise.resolve(null); } };
+var send = msg => { try { return chrome.runtime.sendMessage(msg).catch(() => null); } catch { return Promise.resolve(null); } };
 
-if (typeof document !== 'undefined') main();
+// The second run in the same world (see above) leaves the running copy alone: one panel.
+if (typeof document !== 'undefined' && !globalThis.arrowMain) {
+  globalThis.arrowMain = true;
+  main();
+}
 
 function main() {
+  // After an update, this tab's previous copy runs in another JS world, cut off from the extension. A new copy says so on the
+  // shared document before it listens itself; the old one then removes its panel and stops every handler (life.abort()).
+  const START = 'arrow-start-' + chrome.runtime.id, life = new AbortController(), on = { signal: life.signal };
+  document.dispatchEvent(new Event(START));
+  document.addEventListener(START, () => {
+    life.abort();
+    clearTimeout(sentTimer);
+    setEnabled(false);
+    try { chrome.storage.onChanged.removeListener(onStorage); } catch {} // cut off: may throw
+  }, on);
+
   const CSS = `
     .box { position: fixed; top: 0; left: 0; transform: translateX(-100%); opacity: 0; visibility: hidden;
       display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
@@ -111,7 +128,7 @@ function main() {
     .ok:focus-visible { outline-color: #9A9B9D; outline-offset: 2px; } /* a white ring would vanish on the white button */
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* heard, not seen */`;
 
-  let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;
+  let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, sentTimer = 0, busy = false, enabled = false, asked = 0;
   let offset = { x: 0, y: 0 }, drag = null, dragged = false;
   const prefetched = new Set(); // YouTube videos whose format list was already asked for
   // video → the YouTube video (else page) it was hidden on with ×: YouTube reuses one <video> for every video and preview
@@ -240,8 +257,9 @@ function main() {
     say('Sending…');
     const msg = { type: 'video', src: video?.currentSrc ?? '', pageUrl: pick.pageUrl ?? location.href, title: pick.title ?? document.title, ...(pick.format && { format: pick.format }) };
     const res = await send(msg); // null after the extension reloads
+    if (life.signal.aborted) return; // replaced by a newer copy meanwhile
     say(res?.ok ? `Sent to ${NAME} ✓` : res?.error ?? 'Reload the page and try again.');
-    setTimeout(() => { busy = false; say(LABEL); }, 2500);
+    sentTimer = setTimeout(() => { busy = false; say(LABEL); }, 2500);
   }
 
   // A menu row; only trusted clicks (mouse, or Enter on the focused row) pick it.
@@ -399,15 +417,15 @@ function main() {
     const v = host && e.composedPath().includes(host) ? video : videoAt(e.clientX, e.clientY);
     if (v && (!dismissed.has(v) || dismissed.get(v) !== (targetOf(v).url ?? location.href))) show(v);
     else if (video) hide();
-  }, { passive: true, capture: true });
-  addEventListener('mouseout', e => { if (!e.relatedTarget && video) hide(); }, true); // pointer left the frame
-  addEventListener('pointerdown', e => { if (host && !e.composedPath().includes(host)) { closeMenu(); closeHelp(); } }, true); // a click elsewhere
-  addEventListener('scroll', place, { passive: true, capture: true });
-  addEventListener('resize', place, { passive: true });
+  }, { passive: true, capture: true, ...on });
+  addEventListener('mouseout', e => { if (!e.relatedTarget && video) hide(); }, { capture: true, ...on }); // pointer left the frame
+  addEventListener('pointerdown', e => { if (host && !e.composedPath().includes(host)) { closeMenu(); closeHelp(); } }, { capture: true, ...on }); // a click elsewhere
+  addEventListener('scroll', place, { passive: true, capture: true, ...on });
+  addEventListener('resize', place, { passive: true, ...on });
 
-  function setEnabled(on) {
-    enabled = on;
-    if (on || !host) return;
+  function setEnabled(want) {
+    enabled = want && !life.signal.aborted;
+    if (enabled || !host) return;
     clearTimeout(hideTimer);
     hideTimer = 0;
     asked++;
@@ -416,7 +434,8 @@ function main() {
     busy = false;
   }
   chrome.storage.local.get('overlay').then(({ overlay = true }) => setEnabled(overlay));
-  chrome.storage.onChanged.addListener((change, area) => {
+  function onStorage(change, area) {
     if (area === 'local' && 'overlay' in change) setEnabled(change.overlay.newValue !== false);
-  });
+  }
+  chrome.storage.onChanged.addListener(onStorage);
 }

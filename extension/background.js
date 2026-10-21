@@ -1,7 +1,13 @@
 import { APP, sendConfirm, appAlive, pickMedia, isYouTubeVideo, youTubeId, playerData, optionsFromPlayer } from './common.js';
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
+  if (reason !== 'install' && reason !== 'update') return;
+  // Open tabs keep the previous content.js, cut off from the extension: give them the new one, which replaces it in place
+  // (no reload). Restricted and discarded tabs refuse; they get it on their next load.
+  for (const tab of await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }).catch(() => [])) {
+    chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['content.js'] }).catch(() => {});
+  }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => sendConfirm({ url: info.linkUrl || info.srcUrl, referrer: tab?.url }));
