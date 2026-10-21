@@ -19,17 +19,19 @@ const panelAt = (r, off, w, h, vw, vh) => ({
   top: Math.max(Math.min(r.top + 8 + off.y, vh - h), 0),
 });
 
-// A single YouTube video page, as common.js isYouTubeVideo() (extension.test.js checks they agree).
-function isYouTubePage(href) {
+// A single YouTube video's clean watch URL (no playlist or tracking parameters), else null.
+function ytWatchUrl(href) {
   let u;
-  try { u = new URL(href); } catch { return false; }
-  if (!/^https?:$/.test(u.protocol)) return false;
+  try { u = new URL(href); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
   const id = u.hostname === 'youtu.be' ? u.pathname.slice(1)
     : !['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(u.hostname) ? ''
     : u.pathname === '/watch' ? u.searchParams.get('v')
     : /^\/(?:shorts|live|embed)\/([^/]+)\/?$/.exec(u.pathname)?.[1];
-  return /^[\w-]{11}$/.test(id ?? '');
+  return /^[\w-]{11}$/.test(id ?? '') ? 'https://www.youtube.com/watch?v=' + id : null;
 }
+// A single YouTube video page, as common.js isYouTubeVideo() (extension.test.js checks they agree).
+const isYouTubePage = href => !!ytWatchUrl(href);
 
 // The format list's groups, in the app's order: [{title, items}], empty groups left out.
 const GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
@@ -106,8 +108,12 @@ function main() {
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* heard, not seen */`;
 
   let host, root, box, panel, grip, btn, label, chev, helpBtn, help, okBtn, menu, live, video, hideTimer = 0, busy = false, enabled = false, asked = 0;
-  let offset = { x: 0, y: 0 }, drag = null, dragged = false, prefetched = null;
-  const dismissed = new WeakMap(); // video → the page it was hidden on with ×: YouTube reuses one <video> for every video
+  let offset = { x: 0, y: 0 }, drag = null, dragged = false;
+  const prefetched = new Set(); // YouTube videos whose format list was already asked for
+  // video → the YouTube video (else page) it was hidden on with ×: YouTube reuses one <video> for every video and preview
+  const dismissed = new WeakMap();
+  // The YouTube video the shown <video> plays (its watch URL), or null: the format list's pageUrl. Set only by show().
+  let target = null, targetOwn = false, seen = {};
 
   // DOM building without innerHTML, which Trusted Types pages (YouTube) may refuse.
   const make = (ns, tag, attrs = {}, ...kids) => {
@@ -153,10 +159,11 @@ function main() {
     live = h('div', { class: 'sr', 'aria-live': 'polite' });
     root.append(h('style', {}, CSS), box, live);
     // keyboard Enter/Space on a <button> fires a trusted click too; scripted clicks are not trusted
+    btn.addEventListener('pointerenter', () => prefetch(target));
     btn.addEventListener('click', e => {
       if (!e.isTrusted || busy || dragged) return;
       closeHelp();
-      if (!isYouTubePage(location.href)) grab();
+      if (!target) grab();
       else if (menu.hidden) openMenu();
       else closeMenu();
     });
@@ -167,7 +174,7 @@ function main() {
     });
     closeBtn.addEventListener('click', e => {
       if (!e.isTrusted || dragged) return;
-      if (video) dismissed.set(video, location.href);
+      if (video) dismissed.set(video, target ?? location.href);
       hide(true);
     });
     okBtn.addEventListener('click', () => { closeHelp(); helpBtn.focus(); });
@@ -242,7 +249,7 @@ function main() {
 
   // The format list under the panel. pageUrl and title are kept from the moment it opened: YouTube changes pages without reloading.
   async function openMenu() {
-    const n = ++asked, pageUrl = location.href;
+    const n = ++asked, pageUrl = target;
     menu.setAttribute('aria-label', 'Choose a format');
     menu.replaceChildren(h('div', { class: 'note' }, h('span', { class: 'spin' }), 'Getting formats…'));
     menu.hidden = false;
@@ -309,23 +316,52 @@ function main() {
     box.style.top = p.top + 'px';
   }
 
+  // The YouTube video a <video> plays: {url, own}. The page's own player plays the page's video; a feed's inline preview
+  // (home, search, channel) sits over its thumbnail, whose link is in the stack under the middle of the preview's visible
+  // part. Worked out again only when the <video>, its place or the page changes: YouTube moves one preview <video>
+  // between thumbnails. No side effects but its cache.
+  function targetOf(v) {
+    const r = v.getBoundingClientRect();
+    if (seen.v === v && seen.left === r.left && seen.top === r.top && seen.href === location.href) return seen.t;
+    const own = isYouTubePage(location.href) ? location.href : null;
+    let t = { url: own, own: false };
+    if (own && v.closest('#movie_player')) t.own = true;
+    else if (/(^|\.)youtube\.com$/.test(location.hostname)) {
+      const x = (Math.max(r.left, 0) + Math.min(r.right, innerWidth)) / 2, y = (Math.max(r.top, 0) + Math.min(r.bottom, innerHeight)) / 2;
+      for (const el of document.elementsFromPoint(x, y)) {
+        const url = ytWatchUrl(el.closest('a[href]')?.href ?? '');
+        if (url) { t = { url, own: false }; break; }
+      }
+    }
+    seen = { v, left: r.left, top: r.top, href: location.href, t };
+    return t;
+  }
+
+  function prefetch(url) {
+    if (!url || prefetched.has(url)) return; // once per video; the app keeps the list 15 min
+    prefetched.add(url);
+    try { chrome.runtime.sendMessage({ type: 'formats', pageUrl: url }).catch(() => {}); } catch {} // extension reloaded: the click says so
+  }
+
   function show(v) {
     clearTimeout(hideTimer);
     hideTimer = 0;
     if (!host) build();
-    if (v !== video) { closeMenu(); closeHelp(); }
+    const t = targetOf(v);
+    // another <video>, or the same preview <video> moved to another thumbnail: the open list or help was for the old one
+    if (v !== video || t.url !== target) { closeMenu(); closeHelp(); }
     video = v;
-    const yt = isYouTubePage(location.href);
+    target = t.url;
+    targetOwn = t.own;
+    const yt = !!target;
     chev.style.display = yt ? '' : 'none';
     if (yt) { btn.setAttribute('aria-haspopup', 'menu'); btn.setAttribute('aria-expanded', String(!menu.hidden)); }
     else { btn.removeAttribute('aria-haspopup'); btn.removeAttribute('aria-expanded'); }
     box.classList.add('on');
     place();
-    // yt-dlp needs a few seconds for YouTube's list: start it when the panel shows, so a click often finds it ready
-    if (yt && prefetched !== location.href) {
-      prefetched = location.href; // once per page; the app keeps the list 15 min
-      try { chrome.runtime.sendMessage({ type: 'formats', pageUrl: location.href }).catch(() => {}); } catch {} // extension reloaded: the click says so
-    }
+    // yt-dlp needs a few seconds for YouTube's list: start it when the panel shows on the page's own player, so a click
+    // often finds it ready. Previews wait for the pointer on the button: a run per hovered thumbnail would be too many.
+    if (targetOwn) prefetch(target);
   }
 
   // 1.5 s after the pointer left the video and the panel (counted from leaving, not from the last move).
@@ -357,7 +393,7 @@ function main() {
     // inside the page's own player, where page scripts and CSS can reach it.
     if (document.fullscreenElement) return hide(true);
     const v = host && e.composedPath().includes(host) ? video : videoAt(e.clientX, e.clientY);
-    if (v && dismissed.get(v) !== location.href) show(v);
+    if (v && (!dismissed.has(v) || dismissed.get(v) !== (targetOf(v).url ?? location.href))) show(v);
     else if (video) hide();
   }, { passive: true, capture: true });
   addEventListener('mouseout', e => { if (!e.relatedTarget && video) hide(); }, true); // pointer left the frame

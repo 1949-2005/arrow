@@ -476,16 +476,20 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
 
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, menuGroups, sizeText, step, panelAt, fileName })', { URL });
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, ytWatchUrl, menuGroups, sizeText, step, panelAt, fileName })', { URL });
 
 test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
   // \s+: git may check out CRLF
-  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy \|\| dragged\) return;\s+closeHelp\(\);\s+if \(!isYouTubePage\(location\.href\)\) grab\(\);/);
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy \|\| dragged\) return;\s+closeHelp\(\);\s+if \(!target\) grab\(\);/);
   assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
   assert.match(contentSrc, /if \(!e\.isTrusted\) return;\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
   assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
-  // the list starts when the panel shows on YouTube, once per page, and a dead extension can't break the panel
-  assert.match(contentSrc, /if \(yt && prefetched !== location\.href\) \{\s+prefetched = location\.href;[^\n]*\s+try \{ chrome\.runtime\.sendMessage\(\{ type: 'formats', pageUrl: location\.href \}\)\.catch\(\(\) => \{\}\); \} catch \{\}/);
+  // the list starts when the panel shows on the page's own player, or on a preview when the pointer reaches the button,
+  // once per video, and a dead extension can't break the panel
+  assert.match(contentSrc, /if \(!url \|\| prefetched\.has\(url\)\) return;[^\n]*\s+prefetched\.add\(url\);\s+try \{ chrome\.runtime\.sendMessage\(\{ type: 'formats', pageUrl: url \}\)\.catch\(\(\) => \{\}\); \} catch \{\}/);
+  assert.match(contentSrc, /if \(targetOwn\) prefetch\(target\);/);
+  assert.match(contentSrc, /btn\.addEventListener\('pointerenter', \(\) => prefetch\(target\)\);/);
+  assert.match(contentSrc, /const n = \+\+asked, pageUrl = target;/);
   assert.match(contentSrc, /grab\(\{ pageUrl, title: res\.title \|\| undefined, format: o\.key \}\)/);
   assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: pick\.pageUrl \?\? location\.href, title: pick\.title \?\? document\.title, \.\.\.\(pick\.format && \{ format: pick\.format \}\) \}/);
   assert.match(contentSrc, /'Download anyway'/);
@@ -499,6 +503,14 @@ test('content.js helpers: the YouTube check agrees with common.js, menu groups, 
     'https://www.youtube.com/watch?v=short', 'ftp://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://x.com/', 'nope']) {
     assert.equal(content.isYouTubePage(u), isYouTubeVideo(u), u);
   }
+  // a feed thumbnail's link → the clean watch URL its preview plays
+  const w = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  assert.equal(content.ytWatchUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1&pp=x'), w);
+  assert.equal(content.ytWatchUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ'), w);
+  assert.equal(content.ytWatchUrl('https://youtu.be/dQw4w9WgXcQ?t=1'), w);
+  assert.equal(content.ytWatchUrl('https://www.youtube.com/@channel'), null);
+  assert.equal(content.ytWatchUrl('https://example.com/watch?v=dQw4w9WgXcQ'), null);
+  assert.equal(content.ytWatchUrl(''), null);
   const o = (group, label) => ({ key: label, group, label, size: 1 });
   assert.deepEqual(JSON.parse(JSON.stringify(content.menuGroups([o('Audio', 'M4A'), o('MP4', '1080p'), o('MP4', '720p'), o('Audio', 'MP3')]))), [
     { title: 'Video · MP4', items: [o('MP4', '1080p'), o('MP4', '720p')] },
@@ -511,8 +523,9 @@ test('content.js helpers: the YouTube check agrees with common.js, menu groups, 
 
 test('content.js panel: ? and × take trusted clicks only, × hides it for this video and page, only a trusted press drags', () => {
   assert.match(contentSrc, /helpBtn\.addEventListener\('click', e => \{\s+if \(!e\.isTrusted \|\| dragged\) return;/);
-  assert.match(contentSrc, /closeBtn\.addEventListener\('click', e => \{\s+if \(!e\.isTrusted \|\| dragged\) return;\s+if \(video\) dismissed\.set\(video, location\.href\);/);
-  assert.match(contentSrc, /if \(v && dismissed\.get\(v\) !== location\.href\) show\(v\);/);
+  assert.match(contentSrc, /closeBtn\.addEventListener\('click', e => \{\s+if \(!e\.isTrusted \|\| dragged\) return;\s+if \(video\) dismissed\.set\(video, target \?\? location\.href\);/);
+  assert.match(contentSrc, /if \(v && \(!dismissed\.has\(v\) \|\| dismissed\.get\(v\) !== \(targetOf\(v\)\.url \?\? location\.href\)\)\) show\(v\);/);
+  assert.match(contentSrc, /if \(v !== video \|\| t\.url !== target\) \{ closeMenu\(\); closeHelp\(\); \}/, 'a preview moved to another thumbnail closes the old list');
   assert.match(contentSrc, /drag = e\.isTrusted && e\.button === 0 \?/);
   assert.match(contentSrc, /if \(!e\.isTrusted \|\| \(e\.target !== panel && e\.target !== grip\)\) return;\s+offset = \{ x: 0, y: 0 \};/, 'double-click on the edge puts it back');
 });
