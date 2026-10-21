@@ -255,7 +255,8 @@ function main() {
     if (groups.length) {
       // each row shows the whole file it saves, as IDM does, wrapped over as many lines as it needs
       const title = res.title || document.title;
-      const h3 = t => { const [kind, fmt] = t.split(' · '); return h('h3', { 'aria-hidden': 'true' }, fmt ? h('span', { class: 'fmtchip' }, fmt) : null, kind); }; // "[MP4] Video"
+      // group header: a white chip per file format the group offers, then its kind: "[MP4] Video", "[M4A] [MP3] Audio"
+      const h3 = g => h('h3', { 'aria-hidden': 'true' }, ...[...new Set(g.items.map(o => o.key.split(':')[0].toUpperCase()))].map(f => h('span', { class: 'fmtchip' }, f)), g.title.split(' · ')[0]);
       const item = o => {
         const name = fileName(title, o.key);
         const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size))),
@@ -265,7 +266,7 @@ function main() {
         return b;
       };
       menu.setAttribute('aria-label', `Choose a format for ${title}`);
-      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h3(g.title), ...g.items.map(item))));
+      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h3(g), ...g.items.map(item))));
       live.textContent = '';
     } else {
       const text = res?.error ?? (res ? 'No downloadable formats found.' : 'Reload the page and try again.');
