@@ -75,6 +75,7 @@ namespace Arrow
         {
             this.api = api;
             this.shots = shots;
+            if (AppIcon.Window != null) Icon = AppIcon.Window;
             visible = show;
             Text = Program.Name;
             Font = Theme.Body;
@@ -242,10 +243,16 @@ namespace Arrow
 
         protected override bool ShowWithoutActivation { get { return shots != null; } }
 
+        // after WinForms' own UpdateWindowIcon, so the crisp small icon wins
+        protected override void CreateHandle()
+        {
+            base.CreateHandle();
+            AppIcon.Apply(this);
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            AppIcon.Apply(this);
             Themed.Apply(this);
             poller.Start();
         }

@@ -108,8 +108,23 @@ namespace Arrow
         const uint IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10;
         const int WM_SETICON = 0x80, ICON_SMALL = 0, ICON_BIG = 1;
 
-        // null when brand.json or the icon is missing
+        static readonly Dictionary<int, Icon> cache = new Dictionary<int, Icon>();
+
+        // the icon WinForms sends itself on every handle creation; null keeps its default
+        public static Icon Window { get { return Load(SystemInformation.IconSize.Width); } }
+
+        // null when brand.json or the icon is missing; cached and never destroyed, windows keep using the handles
         public static Icon Load(int size)
+        {
+            Icon icon;
+            lock (cache)
+            {
+                if (!cache.TryGetValue(size, out icon)) cache[size] = icon = LoadFile(size);
+                return icon;
+            }
+        }
+
+        static Icon LoadFile(int size)
         {
             try
             {

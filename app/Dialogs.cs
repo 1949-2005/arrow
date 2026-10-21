@@ -30,6 +30,7 @@ namespace Arrow
         public Dialog(string title, int width)
         {
             Text = title;
+            if (AppIcon.Window != null) Icon = AppIcon.Window;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             ShowInTaskbar = false;
@@ -55,10 +56,16 @@ namespace Arrow
 
         protected override bool ShowWithoutActivation { get { return Offscreen; } }
 
+        // after WinForms' own UpdateWindowIcon, so the crisp small icon wins
+        protected override void CreateHandle()
+        {
+            base.CreateHandle();
+            AppIcon.Apply(this);
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            AppIcon.Apply(this);
             Colors();
             Themed.Apply(this);
         }
