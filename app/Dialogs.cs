@@ -383,14 +383,16 @@ namespace Arrow
             return Modal(f, owner) == DialogResult.OK ? field.Text.Trim() : null;
         }
 
-        public static void Error(IWin32Window owner, string text)
+        public static void Error(IWin32Window owner, string text) { Modal(ErrorDialog(text), owner); }
+
+        static Dialog ErrorDialog(string text)
         {
             var f = new Dialog(Program.Name, 420);
             f.BodyHeight(f.Paragraph(new Caption(Theme.Body, () => Theme.Text) { Text = text }, Dialog.Pad) + Dialog.Pad);
             var ok = Dialog.Button("OK", ButtonKind.Primary, DialogResult.OK);
             f.Buttons(new FlatButton[0], new[] { ok });
             f.AcceptButton = f.CancelButton = ok;
-            Modal(f, owner);
+            return f;
         }
 
         static Dialog AboutDialog()
@@ -509,6 +511,7 @@ namespace Arrow
                 TextField field;
                 Shot(folder, "changelink", ChangeLinkDialog("https://cdn.example.com/games/Last War Winter Storm.mp4?token=expired", out field));
                 Shot(folder, "about", AboutDialog());
+                Shot(folder, "error", ErrorDialog("Couldn't reach the server: the connection was reset. Check the link, then try again."));
             }
             finally { Dialog.Offscreen = false; }
         }

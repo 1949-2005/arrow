@@ -53,13 +53,14 @@ namespace Arrow
             var names = new HashSet<string>(FontFamily.Families.Select(f => f.Name));
             Func<string, string, string> pick = (want, fallback) => names.Contains(want) ? want : fallback;
             // Segoe UI, not Segoe UI Variable: Variable has no Arabic, so GDI would draw Arabic in Tahoma
-            var body = pick("Segoe UI", "Microsoft Sans Serif");
-            Body = new Font(body, 9.75f);
-            Small = new Font(body, 8.25f);
-            var bold = pick("Segoe UI Semibold", body);
-            Bold = new Font(bold, 9.75f);
-            SmallBold = new Font(bold, 8.25f);
-            Big = new Font(bold, 17f);
+            // Text is semibold 14 px; emphasis is the regular family's Bold style (GDI has no "Segoe UI Bold" family)
+            var regular = pick("Segoe UI", "Microsoft Sans Serif");
+            var semibold = pick("Segoe UI Semibold", regular);
+            Body = new Font(semibold, 10.5f);
+            Small = new Font(semibold, 9f);
+            Bold = new Font(regular, 10.5f, FontStyle.Bold);
+            SmallBold = new Font(regular, 9f, FontStyle.Bold);
+            Big = new Font(regular, 18f, FontStyle.Bold);
             IconFamily = pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
             var env = (Environment.GetEnvironmentVariable("ARROW_THEME") ?? "").ToLowerInvariant();
             forced = env == "light" || env == "dark";
@@ -190,13 +191,19 @@ namespace Arrow
         {
             s = s ?? "";
             var size = Core.HasEmoji(s) ? ColorText.Measure(s, f, int.MaxValue, Line1) : null;
-            return size ?? TextRenderer.MeasureText(s, f, new Size(int.MaxValue, int.MaxValue), Line1);
+            return size ?? GdiMeasure(s, f, new Size(int.MaxValue, int.MaxValue), Line1);
         }
         public static int MeasureHeight(string s, Font f, int width)
         {
             if (string.IsNullOrEmpty(s)) s = " ";
             var size = Core.HasEmoji(s) ? ColorText.Measure(s, f, width, Wrap) : null;
-            return (size ?? TextRenderer.MeasureText(s, f, new Size(width, int.MaxValue), Wrap)).Height;
+            return (size ?? GdiMeasure(s, f, new Size(width, int.MaxValue), Wrap)).Height;
+        }
+        // With a device context: TextRenderer's overload without one ignores NoPadding and adds about 9 px, which pushed
+        // centered button labels 4 px to the left
+        static Size GdiMeasure(string s, Font f, Size proposed, TextFormatFlags flags)
+        {
+            using (var g = Graphics.FromHwnd(IntPtr.Zero)) return TextRenderer.MeasureText(g, s, f, proposed, flags);
         }
 
         // An icon from Segoe Fluent Icons (or MDL2) centered in r; px is the size at 96 DPI

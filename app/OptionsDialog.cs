@@ -27,7 +27,7 @@ namespace Arrow
         static Caption Heading(string text) { return new Caption(Theme.Bold, () => Theme.Text) { Text = text }; }
         static Caption Hint(string text) { return new Caption(Theme.Body, () => Theme.Muted) { Text = text }; }
 
-        public OptionsDialog(Api api, Settings s, bool focusSchedule) : base("Options", 560)
+        public OptionsDialog(Api api, Settings s, bool focusSchedule) : base("Options", 580)
         {
             this.api = api;
             dir.Text = s.Dir;
@@ -125,7 +125,9 @@ namespace Arrow
 
         void Relayout()
         {
-            int p = Pad, lw = Theme.Px(200), x = p + lw + Theme.Px(12), vw = ClientSize.Width - p - x, row = Theme.Px(32), gap = Theme.Px(8), nw = Theme.Px(72);
+            // the label column fits its longest label ("Start scheduled downloads at")
+            var lw = Math.Max(Theme.Px(200), new[] { dirLabel, connLabel, activeLabel, limitLabel, timeLabel }.Max(c => Theme.Measure(c.Text, c.Font).Width));
+            int p = Pad, x = p + lw + Theme.Px(12), vw = ClientSize.Width - p - x, row = Theme.Px(32), gap = Theme.Px(8), nw = Theme.Px(72);
             var y = p;
             Func<Caption, int> head = h => { h.Bounds = new Rectangle(p, y, ClientSize.Width - 2 * p, h.Height); return h.Height + gap; };
             Action<Caption, TextField, Caption> number = (label, field, hint) =>

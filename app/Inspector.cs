@@ -244,7 +244,7 @@ namespace Arrow
             }
             var bw = Theme.Measure(big.Text, big.Font).Width + Theme.Px(2);
             Place(big, p, y, Math.Min(bw, w), big.Height);
-            if (sub.Visible) Place(sub, p + bw + Theme.Px(8), y + big.Height - sub.Height - Theme.Px(3), Math.Max(0, w - bw - Theme.Px(8)), sub.Height);
+            if (sub.Visible) Place(sub, p + bw + Theme.Px(16), y + big.Height - sub.Height - Theme.Px(3), Math.Max(0, w - bw - Theme.Px(16)), sub.Height);
             y += big.Height;
             if (mode == "one")
             {

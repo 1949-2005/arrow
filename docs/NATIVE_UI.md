@@ -35,8 +35,8 @@ Every size is in pixels at 96 DPI (scale with the system DPI). Workers implement
 | video / music / docs / programs / zip / other | #AF52DE / #E0245E / #0A6CDB / #5856D6 / #D97706 / #8E8E93 | #BF5AF2 / #FF375F / #4DA3FF / #7D7AFF / #FFB340 / #98989D | file-type glyphs |
 | tint | category color at 14% alpha | category color at 22% alpha | file-type tiles, over the surface |
 
-Fonts: "Segoe UI" 9.75pt (13 px), Small 8.25pt (11 px). Emphasis "Segoe UI Semibold" (Bold, SmallBold), big numbers
-"Segoe UI Semibold" 17pt. Not "Segoe UI Variable": it has no Arabic, so GDI would draw Arabic names in Tahoma.
+Fonts: text "Segoe UI Semibold" 10.5pt (14 px), Small 9pt (12 px). Emphasis (Bold, SmallBold) is "Segoe UI" in the Bold
+style at the same sizes, so it reads stronger than the semibold text; big numbers "Segoe UI" Bold 18pt (24 px). Not "Segoe UI Variable": it has no Arabic, so GDI would draw Arabic names in Tahoma.
 Text is drawn by GDI (TextRenderer); text with emoji (U+1F000–1FAFF, U+2600–27BF, U+FE0F, the keycap U+20E3) is drawn
 and measured by DirectWrite through a Direct2D DC render target with color fonts on (`ColorText.cs`), at GDI's line height
 and baseline, so emoji are in color as in the browser. Text fields (TextBox) stay GDI: emoji there are monochrome or boxes.
@@ -102,8 +102,8 @@ Full-width, inspector background, bottom hairline, glyph + text + text buttons o
   download has that url.
 
 ### Sidebar (width 200, sidebar token, padding 8)
-Two groups with an 11 px muted heading ("Library", "Types"), items 30 high, radius 6, glyph 16 + label + count right
-(muted). Selected: soft background, semibold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
+Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radius 6, glyph 16 + label + count right
+(muted). Selected: soft background, bold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
 Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled.
 Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — glyphs in their category color.
 
@@ -123,7 +123,7 @@ Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — 
   Copy link, separator, Resume / Pause, Change link…, Progress window, separator, Remove….
 - Drag links over the window: a full-window overlay (inspector token at 92% alpha, accent dashed border radius 12,
   Download glyph 32, "Drop to download"). Drop: one link = the paste-bar flow, several = Add links dialog.
-- Empty list: centered logo at 64 px (40% alpha), "No downloads yet" (semibold), "Paste a link above, drop links here,
+- Empty list: centered logo at 64 px (40% alpha), "No downloads yet" (bold), "Paste a link above, drop links here,
   or let the browser extension catch them." (muted), and a secondary button "Add links…".
   Empty section or no search match: "Nothing here" + muted hint.
 - Accessibility: the control exposes one AccessibleObject per row (role ListItem, name = file name + trailing text,
@@ -132,7 +132,7 @@ Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — 
 ### Inspector (width 320, inspector token, padding 16, scrolls if short)
 Shows the selection:
 - One download:
-  - Header: 48 px tile (radius 12, category tint, 24 px glyph in the category color), name (semibold, max 2 lines),
+  - Header: 48 px tile (radius 12, category tint, 24 px glyph in the category color), name (bold, max 2 lines),
     host of the url (muted) with a ghost Copy button (Copy glyph, tooltip "Copy link").
   - Progress: big percent ("45%", or "Done" when finished, "Failed" in err) + "974 MB of 2.11 GB" (muted);
     under it an 8 px segmented bar (Core.Pieces: one piece per connection for http, one fill otherwise),
@@ -151,7 +151,7 @@ Shows the selection:
 - Nothing selected: "Overview": total speed (big), the 60 s total speed graph, counts (Active, Finished, Failed),
   free space on the download folder's drive ("120 GB free on C:").
 
-### Status bar (height 30, top token, top hairline, 11 px muted)
+### Status bar (height 30, top token, top hairline, 12 px muted)
 Left: "2 active · 12.4 MB/s" (+ " · limit 500 KB/s", + " · scheduled start 02:00"). Right: "When done:" and a
 small combo (Do nothing, Sleep, Shut down) → POST /api/settings {whenDone}.
 
@@ -172,7 +172,7 @@ min/max boxes, centered on the main window (or the screen when it is hidden).
   own Download.Format is set and the probe is listing or offers that key: the extension's format menu already
   picked it), Category, Save As + Browse… (native SaveFileDialog, no overwrite prompt; tooltip "Missing folders are
   created."), FlatCheck "Remember this folder for <Category>" ("for other files" for Other; follows Category,
-  unchecked on open; checked → Start/Later send remember: <Category>), inline error, Size (semibold). Tab order:
+  unchecked on open; checked → Start/Later send remember: <Category>), inline error, Size (bold). Tab order:
   Save As, Browse…, the checkbox, then the footer. Save As's folder is Core.FolderFor (the remembered folder first).
   Footer: Download Later (left), Cancel, Start Download (primary). Start → POST /api/confirm start, then this dialog
   becomes the progress window for that download.

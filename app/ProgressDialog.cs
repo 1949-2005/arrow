@@ -181,7 +181,7 @@ namespace Arrow
             {
                 var bw = Theme.Measure("100%", big.Font).Width + Theme.Px(2);
                 big.Bounds = new Rectangle(p, y, bw, big.Height);
-                sub.Bounds = new Rectangle(p + bw + Theme.Px(8), y + big.Height - sub.Height - Theme.Px(3), w - bw - Theme.Px(8), sub.Height);
+                sub.Bounds = new Rectangle(p + bw + Theme.Px(16), y + big.Height - sub.Height - Theme.Px(3), w - bw - Theme.Px(16), sub.Height);
                 y += big.Height + Theme.Px(8);
             }
             bar.Bounds = new Rectangle(p, y, w, Theme.Px(8));
