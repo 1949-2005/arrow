@@ -50,6 +50,10 @@ function fileName(title, key) {
   return name || 'download';
 }
 
+// chrome.runtime.sendMessage, or null instead of an error. Once the extension reloads, this tab's copy of the script is cut
+// off and sendMessage throws at once ("Extension context invalidated"), with no promise for .catch to catch.
+const send = msg => { try { return chrome.runtime.sendMessage(msg).catch(() => null); } catch { return Promise.resolve(null); } };
+
 if (typeof document !== 'undefined') main();
 
 function main() {
@@ -235,7 +239,7 @@ function main() {
     busy = true;
     say('Sending…');
     const msg = { type: 'video', src: video?.currentSrc ?? '', pageUrl: pick.pageUrl ?? location.href, title: pick.title ?? document.title, ...(pick.format && { format: pick.format }) };
-    const res = await chrome.runtime.sendMessage(msg).catch(() => null); // fails after the extension reloads
+    const res = await send(msg); // null after the extension reloads
     say(res?.ok ? `Sent to ${NAME} ✓` : res?.error ?? 'Reload the page and try again.');
     setTimeout(() => { busy = false; say(LABEL); }, 2500);
   }
@@ -255,7 +259,7 @@ function main() {
     menu.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
     live.textContent = 'Getting formats…';
-    const res = await chrome.runtime.sendMessage({ type: 'formats', pageUrl }).catch(() => null);
+    const res = await send({ type: 'formats', pageUrl });
     if (n !== asked || !menu) return; // closed or opened again meanwhile
     const pick = o => { closeMenu(); grab({ pageUrl, title: res.title || undefined, format: o.key }); };
     const groups = menuGroups(res?.options ?? []);
@@ -340,7 +344,7 @@ function main() {
   function prefetch(url) {
     if (!url || prefetched.has(url)) return; // once per video; the app keeps the list 15 min
     prefetched.add(url);
-    try { chrome.runtime.sendMessage({ type: 'formats', pageUrl: url }).catch(() => {}); } catch {} // extension reloaded: the click says so
+    send({ type: 'formats', pageUrl: url }); // extension reloaded: the click says so
   }
 
   function show(v) {

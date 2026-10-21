@@ -561,7 +561,18 @@ test('playerData: reads the player of that video id only, as plain data', () => 
 
 // content.js is a classic script; without `document` it only defines its helpers.
 const contentSrc = fs.readFileSync(new URL('./extension/content.js', import.meta.url), 'utf8');
-const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, ytWatchUrl, menuGroups, sizeText, step, panelAt, fileName })', { URL });
+const contentCtx = { URL };
+const content = vm.runInNewContext(contentSrc + '\n;({ bigEnough, inside, isYouTubePage, ytWatchUrl, menuGroups, sizeText, step, panelAt, fileName, send })', contentCtx);
+
+test('content.js send: null instead of an error once the extension reloaded (sendMessage then throws at once)', async () => {
+  contentCtx.chrome = { runtime: { sendMessage() { throw new Error('Extension context invalidated.'); } } };
+  assert.equal(await content.send({ type: 'video' }), null);
+  contentCtx.chrome = { runtime: { sendMessage: () => Promise.reject(new Error('Could not establish connection.')) } };
+  assert.equal(await content.send({ type: 'video' }), null);
+  contentCtx.chrome = { runtime: { sendMessage: async m => ({ ok: true, got: m.type }) } };
+  assert.deepEqual(await content.send({ type: 'video' }), { ok: true, got: 'video' });
+  assert.doesNotMatch(contentSrc, /await chrome\.runtime\.sendMessage/, 'every message goes through send()');
+});
 
 test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
   // \s+: git may check out CRLF
@@ -571,7 +582,7 @@ test('content.js: other sites send on one trusted click; YouTube opens the forma
   assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
   // the list starts when the panel shows on the page's own player, or on a preview when the pointer reaches the button,
   // once per video, and a dead extension can't break the panel
-  assert.match(contentSrc, /if \(!url \|\| prefetched\.has\(url\)\) return;[^\n]*\s+prefetched\.add\(url\);\s+try \{ chrome\.runtime\.sendMessage\(\{ type: 'formats', pageUrl: url \}\)\.catch\(\(\) => \{\}\); \} catch \{\}/);
+  assert.match(contentSrc, /if \(!url \|\| prefetched\.has\(url\)\) return;[^\n]*\s+prefetched\.add\(url\);\s+send\(\{ type: 'formats', pageUrl: url \}\);/);
   assert.match(contentSrc, /if \(targetOwn\) prefetch\(target\);/);
   assert.match(contentSrc, /btn\.addEventListener\('pointerenter', \(\) => prefetch\(target\)\);/);
   assert.match(contentSrc, /const n = \+\+asked, pageUrl = target;/);
