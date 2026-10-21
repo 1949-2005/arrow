@@ -35,8 +35,11 @@ Every size is in pixels at 96 DPI (scale with the system DPI). Workers implement
 | video / music / docs / programs / zip / other | #AF52DE / #E0245E / #0A6CDB / #5856D6 / #D97706 / #8E8E93 | #BF5AF2 / #FF375F / #4DA3FF / #7D7AFF / #FFB340 / #98989D | file-type glyphs |
 | tint | category color at 14% alpha | category color at 22% alpha | file-type tiles, over the surface |
 
-Fonts: "Segoe UI Variable Text" 9.75pt (13 px) when that family exists, else "Segoe UI". Emphasis "Segoe UI Semibold".
-Big numbers: "Segoe UI Variable Display" Semibold 17pt (22 px) when it exists, else "Segoe UI Semibold". Small: 8.25pt (11 px).
+Fonts: "Segoe UI" 9.75pt (13 px), Small 8.25pt (11 px). Emphasis "Segoe UI Semibold" (Bold, SmallBold), big numbers
+"Segoe UI Semibold" 17pt. Not "Segoe UI Variable": it has no Arabic, so GDI would draw Arabic names in Tahoma.
+Text is drawn by GDI (TextRenderer); text with emoji (U+1F000–1FAFF, U+2600–27BF, U+FE0F, the keycap U+20E3) is drawn
+and measured by DirectWrite through a Direct2D DC render target with color fonts on (`ColorText.cs`), at GDI's line height
+and baseline, so emoji are in color as in the browser. Text fields (TextBox) stay GDI: emoji there are monochrome or boxes.
 Radii: 6 (sidebar items, small buttons), 8 (fields, buttons), 12 (tiles). Spacing steps 4, 8, 12, 16.
 Focus ring: 2 px accent, drawn 1 px inside the control, only for keyboard focus.
 

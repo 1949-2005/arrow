@@ -448,7 +448,7 @@ namespace Arrow
 
                 Func<string, Probe> listed = key => new Probe
                 {
-                    Name = "Me at the zoo.mp4", Category = "Video", Format = key, Options = new List<FormatOption>
+                    Name = "عزف سويمي 🎻 في بث.mp4", Category = "Video", Format = key, Options = new List<FormatOption>
                     {
                         opt("m4a:140", "Audio", "M4A", 3565158), opt("mp3", "Audio", "MP3", 456000),
                         opt("webm:248+251", "WEBM", "1080p", 98860390), opt("mp4:137+140", "MP4", "1080p", 126353408), opt("mp4:136+140", "MP4", "720p", 60353408),
@@ -484,7 +484,7 @@ namespace Arrow
 
                 var running = new Download
                 {
-                    Id = "shot-run", Kind = "http", Status = "downloading", Url = "https://cdn.example.com/games/Last War Winter Storm.mp4", Name = "Last War Winter Storm.mp4",
+                    Id = "shot-run", Kind = "http", Status = "downloading", Url = "https://cdn.example.com/games/Last War Winter Storm.mp4", Name = "(1) MT NEWS on X 🚨🚨 الخريطة الجديدة.mp4",
                     Size = 2265595904, Got = 1021313024, Speed = 12976128, Connections = 8, Resumable = true,
                     Segments = Enumerable.Range(0, 8).Select(i => new[] { i * 283199488L, (i + 1) * 283199488L, i * 283199488L + new[] { 270000000L, 180000000, 90000000, 150000000, 60000000, 120000000, 40000000, 111313024 }[i] }).ToList(),
                 };
@@ -496,7 +496,7 @@ namespace Arrow
                 var done = new Download
                 {
                     Id = "shot-done", Kind = "http", Status = "done", Url = running.Url, Name = running.Name, Size = running.Size, Got = running.Size.Value,
-                    File = "C:\\Users\\PC\\Downloads\\Video\\Last War Winter Storm.mp4",
+                    File = "C:\\Users\\PC\\Downloads\\Video\\" + running.Name,
                 };
                 prog = new ProgressDialog(null, done.Id);
                 prog.Fill(done, cats, new List<double>());

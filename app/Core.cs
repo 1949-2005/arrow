@@ -418,5 +418,23 @@ namespace Arrow
             var host = d.Url != null && Uri.TryCreate(d.Url, UriKind.Absolute, out u) ? Regex.Replace(u.Host, @"^www\.", "") : "";
             return string.Join(" · ", new[] { d.Kind == "video" ? WithExt(name, "") : name, host }.Where(s => !string.IsNullOrEmpty(s)));
         }
+
+        // Text GDI can't draw in color: emoji planes U+1F000–1FAFF, symbols and dingbats U+2600–27BF, the emoji variation
+        // selector U+FE0F and the keycap U+20E3. ZWJ sequences are found through their emoji; a ZWJ alone (Arabic, Indic) is not one.
+        public static bool HasEmoji(string s)
+        {
+            if (s == null) return false;
+            for (var i = 0; i < s.Length; i++)
+            {
+                var c = s[i];
+                if (c >= '☀' && c <= '➿' || c == '️' || c == '⃣') return true;
+                if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                {
+                    var cp = char.ConvertToUtf32(c, s[++i]);
+                    if (cp >= 0x1F000 && cp <= 0x1FAFF) return true;
+                }
+            }
+            return false;
+        }
     }
 }

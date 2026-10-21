@@ -52,15 +52,14 @@ namespace Arrow
             using (var g = Graphics.FromHwnd(IntPtr.Zero)) Scale = g.DpiX / 96f;
             var names = new HashSet<string>(FontFamily.Families.Select(f => f.Name));
             Func<string, string, string> pick = (want, fallback) => names.Contains(want) ? want : fallback;
-            var body = pick("Segoe UI Variable Text", "Segoe UI");
+            // Segoe UI, not Segoe UI Variable: Variable has no Arabic, so GDI would draw Arabic in Tahoma
+            var body = pick("Segoe UI", "Microsoft Sans Serif");
             Body = new Font(body, 9.75f);
             Small = new Font(body, 8.25f);
-            // The variable font's own Semibold: some systems map "Segoe UI Semibold" to its italic file
-            var bold = body == "Segoe UI Variable Text" ? pick("Segoe UI Variable Text Semibold", "Segoe UI Semibold") : pick("Segoe UI Semibold", "Segoe UI");
+            var bold = pick("Segoe UI Semibold", body);
             Bold = new Font(bold, 9.75f);
             SmallBold = new Font(bold, 8.25f);
-            // GDI lists the variable font's Semibold instance under this cut-off name
-            Big = new Font(pick("Segoe UI Variable Display Semib", pick("Segoe UI Semibold", "Segoe UI")), 17f);
+            Big = new Font(bold, 17f);
             IconFamily = pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
             var env = (Environment.GetEnvironmentVariable("ARROW_THEME") ?? "").ToLowerInvariant();
             forced = env == "light" || env == "dark";
@@ -180,10 +179,25 @@ namespace Arrow
         public const TextFormatFlags Line1Right = (Line1 & ~TextFormatFlags.Left) | TextFormatFlags.Right;
         public const TextFormatFlags Wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.TextBoxControl;
 
-        public static void DrawText(Graphics g, string s, Font f, Rectangle r, Color c, TextFormatFlags flags) { TextRenderer.DrawText(g, s ?? "", f, r, c, flags); }
+        // GDI has no color fonts: text with emoji is drawn and measured by ColorText (DirectWrite), the rest by TextRenderer
+        public static void DrawText(Graphics g, string s, Font f, Rectangle r, Color c, TextFormatFlags flags)
+        {
+            s = s ?? "";
+            if (!Core.HasEmoji(s) || !ColorText.Draw(g, s, f, r, c, flags)) TextRenderer.DrawText(g, s, f, r, c, flags);
+        }
         public static void DrawText(Graphics g, string s, Font f, Rectangle r, Color c) { DrawText(g, s, f, r, c, Line1); }
-        public static Size Measure(string s, Font f) { return TextRenderer.MeasureText(s ?? "", f, new Size(int.MaxValue, int.MaxValue), Line1); }
-        public static int MeasureHeight(string s, Font f, int width) { return TextRenderer.MeasureText(string.IsNullOrEmpty(s) ? " " : s, f, new Size(width, int.MaxValue), Wrap).Height; }
+        public static Size Measure(string s, Font f)
+        {
+            s = s ?? "";
+            var size = Core.HasEmoji(s) ? ColorText.Measure(s, f, int.MaxValue, Line1) : null;
+            return size ?? TextRenderer.MeasureText(s, f, new Size(int.MaxValue, int.MaxValue), Line1);
+        }
+        public static int MeasureHeight(string s, Font f, int width)
+        {
+            if (string.IsNullOrEmpty(s)) s = " ";
+            var size = Core.HasEmoji(s) ? ColorText.Measure(s, f, width, Wrap) : null;
+            return (size ?? TextRenderer.MeasureText(s, f, new Size(width, int.MaxValue), Wrap)).Height;
+        }
 
         // An icon from Segoe Fluent Icons (or MDL2) centered in r; px is the size at 96 DPI
         public static void DrawGlyph(Graphics g, char glyph, Rectangle r, Color c, int px)

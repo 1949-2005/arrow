@@ -12,7 +12,8 @@
   - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), and the helpers ported from the old web UI (numbers and dates in the user's regional format)
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
   - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `ARROW_SHOTS` screenshot mode; `AppIcon` (the brand .ico through user32 `LoadImage`)
-  - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
+  - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, text drawing and measuring, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
+  - `ColorText.cs` — text with emoji in color: DirectWrite layouts drawn through a cached Direct2D DC render target (COM interop), with TextRenderer's alignment, wrapping, ellipsis and GDI's line height; Theme falls back to TextRenderer on any failure
   - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `FlatCheck`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
   - `Inspector.cs` — the right column: one download, several, or the overview; `ErrorBox`
   - `MainForm.cs` — the main window (top bar with the paste bar, strips, sidebar, search and list, inspector, status bar), tray icon and menu, keyboard shortcuts, drag and drop, clipboard offers, `ui.json` (bounds, section), shots
@@ -21,7 +22,7 @@
   - `ProgressDialog.cs` — the progress window (progress.html's behavior, the inspector's look): running, done, removed
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
   - `OptionsDialog.cs` — Options: Downloads, Schedule, Behavior, validated inline, POST /api/settings
-  - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, plus an `/api/state` round trip
+  - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, emoji detection (`HasEmoji`), plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)

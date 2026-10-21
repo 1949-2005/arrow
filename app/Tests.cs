@@ -244,6 +244,15 @@ namespace Arrow
             Ok(Core.IsYouTube("https://music.youtube.com/watch?v=x") && Core.IsYouTube("HTTPS://youtu.be/x") && !Core.IsYouTube("https://notyoutube.com/"), "isYouTube");
             Ok(Core.CanResume(err) && !Core.CanResume(http()) && Core.CanStop(with("scheduled")) && !Core.CanStop(with("done")), "canResume / canStop");
 
+            // emoji: drawn in color by DirectWrite, everything else stays on TextRenderer
+            foreach (var s in new[] { "(1) MT NEWS on X \U0001F6A8\U0001F6A8 الخريطة.mp4", "عزف \U0001F3BB.mp4",
+                "☀ sun", "end ➿", "❤️", "❤️‍\U0001F525", "\U0001F3F3️‍\U0001F308", "1⃣", "#️⃣",
+                "\U0001F000", "\U0001FAFF", "\U0001F44D\U0001F3FD" })
+                Ok(Core.HasEmoji(s), "emoji in " + s);
+            foreach (var s in new[] { null, "", "Last War Winter Storm.mp4", "Last War Winter Storm الشتوية.mp4", "Café — ü … · →",
+                "ع‍", "◿ ⟀", "\U0001EFFF", "\U0001FB00", "\U00020000 \U0001D400", "\uD83D", "x\uDE80" })
+                Ok(!Core.HasEmoji(s), "no emoji in " + s);
+
             // the user's regional format
             Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");
             Eq(Core.Size(126353408), "120,5 MB", "size with a comma");
