@@ -13,10 +13,14 @@
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
   - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `ARROW_SHOTS` screenshot mode; `AppIcon` (the brand .ico through user32 `LoadImage`)
   - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
-  - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
+  - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `FlatCheck`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
   - `Inspector.cs` — the right column: one download, several, or the overview; `ErrorBox`
   - `MainForm.cs` — the main window (top bar with the paste bar, strips, sidebar, search and list, inspector, status bar), tray icon and menu, keyboard shortcuts, drag and drop, clipboard offers, `ui.json` (bounds, section), shots
-  - `Dialogs.cs` — the dialogs' static API used by the main window (Download File Info, progress, Add links, Options, Remove, Confirm, Change link, Error, About)
+  - `Dialogs.cs` — the dialogs' static API used by the main window (one Download File Info / progress window per download, fed by `Update(State)`), the themed `Dialog` base (body over footer, centering, Esc), engine calls off the UI thread, bringing Download File Info to the front, the small modal dialogs (Confirm, Remove, Change link, Error, About) and the dialogs' ARROW_SHOTS pictures
+  - `FileInfoDialog.cs` — Download File Info for a pending download (confirm.html's behavior): format list, category, Save As + Browse…, POST /api/confirm start / later / cancel, then the progress window
+  - `ProgressDialog.cs` — the progress window (progress.html's behavior, the inspector's look): running, done, removed
+  - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
+  - `OptionsDialog.cs` — Options: Downloads, Schedule, Behavior, validated inline, POST /api/settings
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles

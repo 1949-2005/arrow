@@ -376,6 +376,36 @@ namespace Arrow
         public static string FormatExt(string key) { return key == "best" ? ".mp4" : "." + key.Split(':')[0]; }
         public static string FormatCategory(string key) { return AudioKey.IsMatch(key) ? "Music" : "Video"; }
 
+        // Download File Info's Format list: [key, text] grouped MP4, WEBM, Audio; the legacy choices when the list failed
+        public static List<string[]> FormatChoices(Probe p)
+        {
+            if (p.Options == null || p.Options.Count == 0) return new List<string[]> { new[] { "best", "MP4 · best quality" }, new[] { "mp3", "MP3 · audio" } };
+            return new[] { "MP4", "WEBM", "Audio" }.SelectMany(g => p.Options.Where(o => o.Group == g)).Select(o => new[] { o.Key, FormatText(o) }).ToList();
+        }
+
+        // Add links' Quality for YouTube links (engine.js QUALITIES)
+        public static readonly string[] QualityKeys = { "best", "1080", "720", "480", "mp3" };
+        public static readonly string[] QualityNames = { "Best quality", "1080p", "720p", "480p", "MP3" };
+
+        // Options: a whole number in [min, max], else null
+        public static int? WholeNumber(string text, int min, int max)
+        {
+            int n;
+            return int.TryParse((text ?? "").Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out n) && n >= min && n <= max ? n : (int?)null;
+        }
+
+        // Options' schedule: "HH:MM" (an hour without its zero is padded), "" for an empty field, null when invalid
+        public static string ScheduleTime(string text)
+        {
+            var t = (text ?? "").Trim();
+            if (t == "") return "";
+            var m = Regex.Match(t, "^([01]?[0-9]|2[0-3]):([0-5][0-9])$");
+            return m.Success ? m.Groups[1].Value.PadLeft(2, '0') + ":" + m.Groups[2].Value : null;
+        }
+
+        // A folder with a drive or a network share, like C:\Downloads or \\server\share
+        public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
+
         // Download File Info header: the name (a YouTube title without its extension) · the host without www.
         public static string Subtitle(Download d, string name)
         {

@@ -892,6 +892,7 @@ namespace Arrow
             HideOverlay();
             search.Text = "zzzz";
             Shot("main-empty-search");
+            Dialogs.Shots(this, shots);
             Close();
         }
 

@@ -149,6 +149,30 @@ namespace Arrow
             Eq(Core.Subtitle(new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=jNQXAC9IVRw" }, "Me at the zoo.mp4"), "Me at the zoo · youtube.com", "subtitle video");
             Eq(Core.Subtitle(new Download { Kind = "http", Url = "https://releases.ubuntu.com/24.04/u.iso" }, "u.iso"), "u.iso · releases.ubuntu.com", "subtitle http");
             Eq(Core.Subtitle(new Download { Kind = "http", Url = "bad" }, "u.iso"), "u.iso", "subtitle bad url");
+            Func<List<FormatOption>, string> choices = opts => string.Join(" | ", Core.FormatChoices(new Probe { Options = opts }).Select(c => c[0] + "=" + c[1]));
+            Eq(choices(new List<FormatOption>()), "best=MP4 · best quality | mp3=MP3 · audio", "format choices when the list failed");
+            Eq(choices(new List<FormatOption> {
+                new FormatOption { Key = "mp3", Group = "Audio", Label = "MP3", Size = 456000 },
+                new FormatOption { Key = "webm:248+251", Group = "WEBM", Label = "1080p", Size = 1024 },
+                new FormatOption { Key = "mp4:137+140", Group = "MP4", Label = "1080p", Size = 2048 } }),
+                "mp4:137+140=MP4 · 1080p · 2.0 KB | webm:248+251=WEBM · 1080p · 1.0 KB | mp3=MP3 · audio · 445.3 KB", "format choices grouped MP4, WEBM, Audio");
+            Eq(L(Core.QualityKeys) + "/" + L(Core.QualityNames), "best | 1080 | 720 | 480 | mp3/Best quality | 1080p | 720p | 480p | MP3", "qualities");
+
+            // Options
+            Eq(Core.WholeNumber(" 8 ", 1, 32), 8, "number");
+            Eq(Core.WholeNumber("32", 1, 32), 32, "number at the top");
+            foreach (var bad in new[] { "0", "33", "", "abc", "-1", "+3", "2.5", "1e1", null })
+                Eq(Core.WholeNumber(bad, 1, 32), null, "number refused: " + bad);
+            Eq(Core.WholeNumber("0", 0, 10000000), 0, "0 = unlimited");
+            Eq(Core.ScheduleTime("02:00"), "02:00", "time");
+            Eq(Core.ScheduleTime(" 2:05 "), "02:05", "time padded");
+            Eq(Core.ScheduleTime("23:59"), "23:59", "time late");
+            Eq(Core.ScheduleTime(""), "", "time off");
+            foreach (var bad in new[] { "24:00", "12:60", "12", "1200", "ab:cd", "12:5", "012:00" })
+                Eq(Core.ScheduleTime(bad), null, "time refused: " + bad);
+            Ok(Core.IsFullPath("C:\\Downloads") && Core.IsFullPath("d:/x") && Core.IsFullPath("\\\\server\\share"), "full paths");
+            Ok(!Core.IsFullPath("Downloads") && !Core.IsFullPath("C:") && !Core.IsFullPath("\\x") && !Core.IsFullPath("\\\\server") && !Core.IsFullPath(""), "not full paths");
+
             Eq(Core.Size(6291456000), "5.86 GB", "size GB");
             Eq(Core.Size(10), "10 B", "size B");
 
