@@ -501,8 +501,8 @@ test('content.js helpers: the YouTube check agrees with common.js, menu groups, 
   }
   const o = (group, label) => ({ key: label, group, label, size: 1 });
   assert.deepEqual(JSON.parse(JSON.stringify(content.menuGroups([o('Audio', 'M4A'), o('MP4', '1080p'), o('MP4', '720p'), o('Audio', 'MP3')]))), [
-    { title: 'VIDEO · MP4', items: [o('MP4', '1080p'), o('MP4', '720p')] },
-    { title: 'AUDIO', items: [o('Audio', 'M4A'), o('Audio', 'MP3')] },
+    { title: 'Video · MP4', items: [o('MP4', '1080p'), o('MP4', '720p')] },
+    { title: 'Audio', items: [o('Audio', 'M4A'), o('Audio', 'MP3')] },
   ]);
   assert.equal(content.menuGroups([]).length, 0);
   assert.deepEqual([content.sizeText(126353408), content.sizeText(456000), content.sizeText(900), content.sizeText(6291456000)], ['120.5 MB', '445.3 KB', '900 B', '5.86 GB']);

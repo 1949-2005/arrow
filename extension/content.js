@@ -32,7 +32,7 @@ function isYouTubePage(href) {
 }
 
 // The format list's groups, in the app's order: [{title, items}], empty groups left out.
-const GROUPS = [['MP4', 'VIDEO · MP4'], ['WEBM', 'VIDEO · WEBM'], ['Audio', 'AUDIO']];
+const GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
 const menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: options.filter(o => o.group === g) })).filter(g => g.items.length);
 // As confirm.html size(), so the list and the window show the same number
 const sizeText = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
@@ -76,8 +76,11 @@ function main() {
     .icon svg { width: 14px; height: 14px; }
     .menu, .help { box-sizing: border-box; border-radius: 12px; background: rgba(59,60,61,.97); border: 1px solid rgba(255,255,255,.18);
       box-shadow: 0 10px 28px rgba(0,0,0,.45); color: #fff; font-weight: 400; }
-    .menu { width: min(440px, calc(var(--room, 448px) - 8px)); max-height: min(480px, 70vh); overflow: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.28) transparent; }
-    h3 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: rgba(255,255,255,.55); }
+    .menu { width: min(440px, calc(var(--room, 448px) - 8px)); max-height: min(480px, 70vh); overflow: auto; padding: 6px; scroll-padding-top: 40px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.28) transparent; }
+    /* sticky group header: the format stays in view while its rows scroll under it; the -6px (top and sides) cover the menu's padding */
+    h3 { position: sticky; top: -6px; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0 -6px; padding: 10px 16px 7px;
+      background: #3B3C3D; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.9); }
+    .fmtchip { padding: 2px 7px; border-radius: 5px; background: #fff; color: #3B3C3D; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; }
     .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 13px; }
     .item:hover, .item:focus { background: rgba(255,255,255,.1); }
     .item:focus { outline: 2px solid #fff; outline-offset: -2px; }
@@ -252,6 +255,7 @@ function main() {
     if (groups.length) {
       // each row shows the whole file it saves, as IDM does, wrapped over as many lines as it needs
       const title = res.title || document.title;
+      const h3 = t => { const [kind, fmt] = t.split(' · '); return h('h3', { 'aria-hidden': 'true' }, fmt ? h('span', { class: 'fmtchip' }, fmt) : null, kind); }; // "[MP4] Video"
       const item = o => {
         const name = fileName(title, o.key);
         const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size))),
@@ -261,7 +265,7 @@ function main() {
         return b;
       };
       menu.setAttribute('aria-label', `Choose a format for ${title}`);
-      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h('h3', { 'aria-hidden': 'true' }, g.title), ...g.items.map(item))));
+      menu.replaceChildren(...groups.map(g => h('div', { role: 'group', 'aria-label': g.title }, h3(g.title), ...g.items.map(item))));
       live.textContent = '';
     } else {
       const text = res?.error ?? (res ? 'No downloadable formats found.' : 'Reload the page and try again.');
