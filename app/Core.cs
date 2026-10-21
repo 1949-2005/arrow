@@ -95,9 +95,11 @@ namespace Arrow
         public string Dir, ScheduleAt;
         public int Connections, MaxActive, SpeedLimitKB;
         public bool Categories, Clipboard, Startup;
+        public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
 
         public static Settings From(IDictionary<string, object> o)
         {
+            var f = o.Obj("folders");
             return new Settings
             {
                 Dir = o.Str("dir") ?? "",
@@ -108,6 +110,7 @@ namespace Arrow
                 Categories = o.Bool("categories") ?? false,
                 Clipboard = o.Bool("clipboard") ?? false,
                 Startup = o.Bool("startup") ?? false,
+                Folders = f == null ? new Dictionary<string, string>() : f.Keys.Where(k => !string.IsNullOrEmpty(f[k] as string)).ToDictionary(k => k, k => (string)f[k]),
             };
         }
     }
@@ -351,9 +354,11 @@ namespace Arrow
             return m.Success && exts.Contains(m.Groups[1].Value.ToLowerInvariant()) ? u.AbsoluteUri : null;
         }
 
-        // Category folder, as engine.js assignName(): <dir>\<Category>, Other and categories off go straight into <dir>
+        // Category folder, as engine.js assignName(): the remembered folder, else <dir>\<Category>; Other and categories off go straight into <dir>
         public static string FolderFor(Settings settings, string category)
         {
+            string kept;
+            if (settings.Folders != null && category != null && settings.Folders.TryGetValue(category, out kept) && !string.IsNullOrEmpty(kept)) return kept;
             var dir = (settings.Dir ?? "").TrimEnd('\\', '/');
             return settings.Categories && category != "Other" ? dir + "\\" + category : dir;
         }

@@ -28,9 +28,9 @@ namespace Arrow
         readonly Picker category = new Picker { AccessibleName = "Category", Height = Theme.Px(32) };
         readonly TextField file = new TextField('\0', "");
         readonly FlatButton browse = new FlatButton("Browse…", '\0', ButtonKind.Secondary);
-        readonly Caption hint = new Caption(Theme.Small, () => Theme.Muted) { Text = "Missing folders are created." };
+        readonly FlatCheck remember = new FlatCheck("Remember this folder for other files"); // unchecked each time the window opens
         readonly Caption error = new Caption(Theme.Small, () => Theme.Err) { MaxLines = 4, Visible = false };
-        readonly Caption size = new Caption(Theme.Body, () => Theme.Text);
+        readonly Caption size; // muted "Getting details…" while an own format waits for the list
         readonly FlatButton later = new FlatButton("Download Later", '\0', ButtonKind.Secondary);
         readonly FlatButton cancel = new FlatButton("Cancel", '\0', ButtonKind.Secondary);
         readonly FlatButton start = new FlatButton("Start Download", '\0', ButtonKind.Primary);
@@ -39,6 +39,7 @@ namespace Arrow
         Settings settings = new Settings();
         List<string[]> formats; // [key, text]; null while listing
         bool listing = true, shownListing, filled, busy, gone, answered;
+        bool chosen; // the extension's format menu already picked this video's format: no Format row
         int angle;
 
         public FileInfoDialog(Api api, string id) : base("Download File Info", 560)
@@ -46,14 +47,15 @@ namespace Arrow
             Api = api;
             Id = id;
             ShowInTaskbar = !Offscreen;
-            spinner = new Canvas(PaintSpinner) { Visible = false, AccessibleName = "Getting formats", AccessibleRole = AccessibleRole.Animation };
+            spinner = new Canvas(PaintSpinner) { Visible = false, AccessibleName = "Getting the video's details", AccessibleRole = AccessibleRole.Animation }; // next to Format, or in Size when the format is already chosen
             spin.Tick += (s, e) => { angle = (angle + 30) % 360; spinner.Invalidate(); };
             category.Items.AddRange(Categories);
             category.SelectedIndex = Categories.Length - 1;
             file.Box.AccessibleName = "Save As";
+            Tips.SetToolTip(file.Box, "Missing folders are created.");
             url.Font = Theme.Body;
-            size.AccessibleName = "Size";
-            foreach (var c in new Control[] { tile, title, sub, urlLabel, url, note, formatLabel, format, spinner, catLabel, category, fileLabel, file, browse, hint, error, sizeLabel, size }) Add(c);
+            size = new Caption(Theme.Body, () => chosen && Spinning ? Theme.Muted : Theme.Text) { AccessibleName = "Size" };
+            foreach (var c in new Control[] { tile, title, sub, urlLabel, url, note, formatLabel, format, spinner, catLabel, category, fileLabel, file, browse, remember, error, sizeLabel, size }) Add(c);
             Buttons(new[] { later }, new[] { cancel, start });
             AcceptButton = start;
             CancelButton = cancel;
@@ -68,8 +70,7 @@ namespace Arrow
             };
             category.Picked += () =>
             {
-                tile.Category = Category();
-                tile.Invalidate();
+                CategoryChanged();
                 file.Text = Core.JoinPath(Core.FolderFor(settings, Category()), Core.SplitPath(file.Text)[1]);
             };
             browse.Click += (s, e) => Browse();
@@ -96,8 +97,15 @@ namespace Arrow
         {
             var i = Array.IndexOf(Categories, c);
             category.SelectedIndex = i >= 0 ? i : Categories.Length - 1;
-            tile.Category = Category();
+            CategoryChanged();
+        }
+        void CategoryChanged()
+        {
+            var c = Category();
+            tile.Category = c;
             tile.Invalidate();
+            remember.Text = "Remember this folder for " + (c == "Other" ? "other files" : c);
+            remember.Width = remember.PreferredWidth;
         }
 
         string Key() { return formats != null && format.SelectedIndex >= 0 && format.SelectedIndex < formats.Count ? formats[format.SelectedIndex][0] : null; }
@@ -135,7 +143,9 @@ namespace Arrow
         {
             listing = p.Listing;
             var yt = YouTube;
-            formatLabel.Visible = format.Visible = yt;
+            // the pending download's own format (not the probe's pick), while it is listed or still being listed
+            chosen = yt && !string.IsNullOrEmpty(d.Format) && (listing || p.Options.Any(o => o.Key == d.Format));
+            formatLabel.Visible = format.Visible = yt && !chosen;
             spinner.Visible = Spinning;
             if (Spinning && !Offscreen) spin.Start(); else spin.Stop();
             if (yt)
@@ -151,7 +161,7 @@ namespace Arrow
                 {
                     formats = Core.FormatChoices(p);
                     format.Items.AddRange(formats.Select(c => c[1]));
-                    format.SelectedIndex = Math.Max(0, formats.FindIndex(c => c[0] == p.Format));
+                    format.SelectedIndex = Math.Max(0, formats.FindIndex(c => c[0] == (chosen ? d.Format : p.Format)));
                 }
             }
             SetCategory(p.Category);
@@ -172,13 +182,14 @@ namespace Arrow
             var o = YouTube ? Option() : null;
             var n = YouTube ? (o != null ? o.Size : null) : p.Size;
             size.Font = n != null ? Theme.Bold : Theme.Body;
-            size.Text = n != null ? Core.Size(n) : YouTube ? "Known once the download starts" : "Unknown";
+            size.Text = chosen && Spinning ? "Getting details…" : n != null ? Core.Size(n) : YouTube ? "Known once the download starts" : "Unknown";
+            size.Invalidate();
         }
 
         // While listing (or before the probe) only Cancel works
         void Enable(bool on)
         {
-            foreach (var c in new Control[] { format, category, file, browse, later, start }) c.Enabled = on;
+            foreach (var c in new Control[] { format, category, file, browse, remember, later, start }) c.Enabled = on;
         }
 
         void Lock(bool on, string action)
@@ -203,6 +214,7 @@ namespace Arrow
             gone = true;
             spin.Stop();
             spinner.Visible = false;
+            if (chosen) ShowSize(); // not "Getting details…" any more
             Enable(false);
             cancel.Text = "Close";
             Buttons(new FlatButton[0], new[] { cancel });
@@ -229,6 +241,7 @@ namespace Arrow
             if (action != "cancel")
             {
                 body["path"] = file.Text.Trim();
+                if (remember.Checked) body["remember"] = Category();
                 if (YouTube)
                 {
                     var o = Option();
@@ -285,7 +298,7 @@ namespace Arrow
                 note.Bounds = new Rectangle(x, y - Theme.Px(4), vw, h);
                 y += h - Theme.Px(4) + gap;
             }
-            if (YouTube)
+            if (YouTube && !chosen)
             {
                 label(formatLabel, y, row);
                 var fw = Math.Min(Theme.Px(320), vw - (Spinning ? Theme.Px(24) : 0));
@@ -300,18 +313,22 @@ namespace Arrow
             browse.Size = new Size(Math.Max(Theme.Px(88), browse.PreferredWidth), row);
             browse.Location = new Point(x + vw - browse.Width, y);
             file.Bounds = new Rectangle(x, y, vw - browse.Width - Theme.Px(8), row);
-            y += row + Theme.Px(4);
-            hint.Bounds = new Rectangle(x, y, vw, hint.Height);
-            y += hint.Height;
+            y += row;
             if (error.Text != "")
             {
                 var h = error.HeightFor(vw);
-                error.Bounds = new Rectangle(x, y + Theme.Px(2), vw, h);
-                y += h + Theme.Px(2);
+                error.Bounds = new Rectangle(x, y + Theme.Px(4), vw, h);
+                y += h + Theme.Px(4);
             }
+            y += Theme.Px(6);
+            remember.Location = new Point(x, y);
+            y += remember.Height;
             y += gap;
             label(sizeLabel, y, line);
-            size.Bounds = new Rectangle(x, y, vw, line);
+            // own format while listing: the Format row's spinner waits here, before "Getting details…"
+            var sx = chosen && Spinning ? x + Theme.Px(24) : x;
+            spinner.Bounds = chosen ? new Rectangle(x, y + (line - Theme.Px(18)) / 2, Theme.Px(18), Theme.Px(18)) : spinner.Bounds;
+            size.Bounds = new Rectangle(sx, y, ClientSize.Width - p - sx, line);
             y += line;
             BodyHeight(y + p);
         }

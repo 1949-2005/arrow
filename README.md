@@ -75,6 +75,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - It shows the link, the size (when the server tells it) and where the file goes.
   - For YouTube, choose the **Format** (MP4, WEBM, M4A or MP3). Each one shows its real size. The file name is the video's title.
   - **Category** changes the folder. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
+  - Tick **Remember this folder for Video** (the name follows the category) to keep that folder. Next time, every Video download goes there, also downloads that skip this window.
   - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** adds it as paused: start it later with Resume. **Cancel** (or Esc) drops it.
   - If the window says "Couldn't read the file details", you can still try to start it.
   - The download shows in the list only after you click Start Download or Download Later. A window left open for 30 minutes forgets its download.
@@ -100,7 +101,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - Point at the YouTube video and click **Download this video**. A list of formats opens, with the real size of each:
     - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
     - **AUDIO**: M4A and MP3.
-    - Click one. The Download File Info window opens with that format.
+    - Click one. The Download File Info window opens with that format. It does not ask for the format again.
     - Getting the list takes yt-dlp about 3 seconds (about 8 after YouTube updates its player). Arrow starts it as soon as you point at the video, so it is often ready when you click. It keeps the list for 15 minutes.
   - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**.
   - Right-click a YouTube link and choose "Download with Arrow".

@@ -132,6 +132,15 @@ namespace Arrow
             Eq(Core.FolderFor(on, "Other"), "C:\\Users\\PC\\Downloads", "folder other");
             Eq(Core.FolderFor(new Settings { Dir = on.Dir, Categories = false }, "Music"), "C:\\Users\\PC\\Downloads", "folder categories off");
             Eq(Core.FolderFor(new Settings { Dir = "D:\\", Categories = true }, "Programs"), "D:\\Programs", "folder at a drive root");
+            var kept = new Settings { Dir = on.Dir, Categories = true, Folders = new Dictionary<string, string> { { "Video", "E:\\Films" }, { "Other", "E:\\Misc" }, { "Music", "" } } };
+            Eq(Core.FolderFor(kept, "Video"), "E:\\Films", "folder remembered");
+            Eq(Core.FolderFor(kept, "Other"), "E:\\Misc", "folder remembered other");
+            Eq(Core.FolderFor(kept, "Compressed"), "C:\\Users\\PC\\Downloads\\Compressed", "folder not remembered");
+            Eq(Core.FolderFor(kept, "Music"), "C:\\Users\\PC\\Downloads\\Music", "folder empty entry");
+            Eq(Core.FolderFor(new Settings { Dir = on.Dir, Categories = false, Folders = kept.Folders }, "Video"), "E:\\Films", "folder remembered categories off");
+            Eq(Settings.From((IDictionary<string, object>)Json.Parse("{\"folders\":{\"Video\":\"E:\\\\Films\",\"Music\":5}}")).Folders["Video"], "E:\\Films", "settings folders parsed");
+            Eq(Settings.From((IDictionary<string, object>)Json.Parse("{\"folders\":{\"Video\":\"E:\\\\Films\",\"Music\":5}}")).Folders.Count, 1, "settings folders bad entry");
+            Eq(Settings.From((IDictionary<string, object>)Json.Parse("{}")).Folders.Count, 0, "settings folders missing");
             Eq(Core.JoinPath(Core.FolderFor(on, "Compressed"), "a.iso"), "C:\\Users\\PC\\Downloads\\Compressed\\a.iso", "join");
             Eq(Core.JoinPath("D:\\", "a.iso"), "D:\\a.iso", "join at a drive root");
             Eq(L(Core.SplitPath("C:\\a\\b c\\Me at the zoo.mp4")), "C:\\a\\b c | Me at the zoo.mp4", "split");

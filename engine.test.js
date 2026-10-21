@@ -464,6 +464,57 @@ test('confirm later pauses, cancel removes, and only a pending download can be c
 });
 
 
+test('confirm remember: the folder is kept for its category and used for that category\'s next downloads', async () => {
+  const file = path.join(dir, 'remember.json');
+  const m = new Manager(file); // never loaded: no timer
+  m.update({ dir: path.join(dir, 'out'), categories: true });
+  assert.deepEqual(m.settings.folders, {});
+  const a = m.add({ url: base + '/file.bin', confirm: true });
+  await m.confirm(a.id, { action: 'later', path: path.join(dir, 'films', 'a.mp4'), remember: 'Video' });
+  assert.deepEqual(m.settings.folders, { Video: path.join(dir, 'films') });
+  const b = m.add({ url: base + '/file.bin', confirm: true });
+  await m.confirm(b.id, { action: 'start', path: path.join(dir, 'tunes', 'b.mp3'), remember: 'Music' });
+  assert.equal(m.settings.folders.Music, path.join(dir, 'tunes'));
+  for (const bad of ['Nope', 'toString', ['Video'], 1]) {
+    const c = m.add({ url: base + '/file.bin', confirm: true });
+    await m.confirm(c.id, { action: 'later', path: path.join(dir, 'elsewhere', 'c.mp4'), remember: bad });
+  }
+  assert.deepEqual(Object.keys(m.settings.folders), ['Video', 'Music']);
+  const c = m.add({ url: base + '/file.bin', confirm: true });
+  await m.confirm(c.id, { action: 'cancel', remember: 'Programs' });
+  assert.equal(m.settings.folders.Programs, undefined);
+
+  const v = { id: 'v' }, z = { id: 'z' }, o = { id: 'o' };
+  m.assignName(v, 'clip.mp4'); // remembered: wins over <dir>\\Video
+  m.assignName(z, 'pack.zip'); // not remembered: the usual rule
+  m.assignName(o, 'notes.xyz');
+  assert.equal(v.file, path.join(dir, 'films', 'clip.mp4'));
+  assert.equal(z.file, path.join(dir, 'out', 'Compressed', 'pack.zip'));
+  assert.equal(o.file, path.join(dir, 'out', 'notes.xyz'));
+  m.update({ categories: false });
+  const v2 = { id: 'v2' };
+  m.assignName(v2, 'clip.mp4'); // also with "Sort into folders" off
+  assert.equal(v2.file, path.join(dir, 'films', 'clip.mp4'));
+
+  await until(() => !m.running.size);
+  await m.save();
+  const m2 = new Manager(file);
+  await m2.load();
+  assert.deepEqual(m2.settings.folders, { Video: path.join(dir, 'films'), Music: path.join(dir, 'tunes') });
+  const saved = JSON.parse(await fs.readFile(file, 'utf8'));
+  saved.settings.folders = { Video: 'relative\\x', Music: 5, Nope: path.join(dir, 'n'), Other: path.join(dir, 'misc') };
+  await fs.writeFile(file, JSON.stringify(saved));
+  const m3 = new Manager(file);
+  await m3.load();
+  assert.deepEqual(m3.settings.folders, { Other: path.join(dir, 'misc') });
+  await fs.writeFile(file, JSON.stringify({ ...saved, settings: { ...saved.settings, folders: 'C:\\x' } }));
+  const m4 = new Manager(file);
+  await m4.load();
+  assert.deepEqual(m4.settings.folders, {});
+  for (const x of [...m.list]) await m.act(x.id, 'remove');
+});
+
+
 test('pending downloads are never saved, are dropped on load, and expire after 30 minutes', async () => {
   const file = path.join(dir, 'pending.json');
   const m = new Manager(file); // never loaded: no timer, these tests tick by hand

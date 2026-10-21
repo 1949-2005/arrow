@@ -20,6 +20,7 @@ export const CATEGORIES = {
   Documents: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'epub', 'csv'],
   Programs: ['exe', 'msi', 'apk', 'dmg', 'deb', 'rpm', 'appimage'],
 };
+const isCategory = c => typeof c === 'string' && (c === 'Other' || Object.hasOwn(CATEGORIES, c));
 
 // Windows-safe file name: no path separators, reserved characters or device names
 export function sanitize(name) {
@@ -66,7 +67,7 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, scheduleAt: '', categories: true, clipboard: false };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, scheduleAt: '', categories: true, clipboard: false, folders: {} };
   list = [];
   running = new Map();
   limiter = new Limiter();
@@ -109,6 +110,9 @@ export class Manager {
     if (s.scheduleAt != null) t.scheduleAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(s.scheduleAt) ? s.scheduleAt : '';
     if (s.categories != null) t.categories = !!s.categories;
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
+    // "Remember this folder for <Category>": category → absolute folder; anything else is dropped (also from a loaded state.json)
+    const f = s.folders ?? t.folders;
+    t.folders = Object.fromEntries(Object.entries(f && typeof f === 'object' ? f : {}).filter(([k, v]) => isCategory(k) && typeof v === 'string' && path.isAbsolute(v)));
     if (s.whenDone != null) {
       this.whenDone = ['sleep', 'shutdown'].includes(s.whenDone) ? s.whenDone : '';
       if (!this.whenDone) this.powerAt = 0; // Cancel stops the countdown at once
@@ -202,7 +206,7 @@ export class Manager {
 
   // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
   // format: a key from the video's list (fetched again when the cache expired); quality: a legacy choice.
-  async confirm(id, { action, path: file, quality, format } = {}) {
+  async confirm(id, { action, path: file, quality, format, remember } = {}) {
     const gone = 'This download is no longer waiting to start.';
     const d = this.list.find(x => x.id === id);
     if (d?.status !== 'pending') throw new Error(gone);
@@ -230,6 +234,7 @@ export class Manager {
     const dir = path.dirname(p);
     try { mkdirSync(dir, { recursive: true }); } catch (e) { throw new Error('Could not create the folder: ' + e.message); }
     this.setFile(d, this.uniqueFile(dir, name));
+    if (isCategory(remember)) this.settings.folders[remember] = path.dirname(d.file);
     delete d.probe;
     d.status = action === 'start' ? 'queued' : 'paused';
     this.dirty = true;
@@ -351,8 +356,8 @@ export class Manager {
   assignName(d, suggested) {
     if (d.file) return;
     const name = this.baseName(d, suggested), ext = path.extname(name);
-    const cat = this.settings.categories && Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext.slice(1).toLowerCase()));
-    const dir = cat ? path.join(this.settings.dir, cat) : this.settings.dir;
+    const cat = Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext.slice(1).toLowerCase())) ?? 'Other';
+    const dir = this.settings.folders[cat] ?? (this.settings.categories && cat !== 'Other' ? path.join(this.settings.dir, cat) : this.settings.dir);
     mkdirSync(dir, { recursive: true });
     this.setFile(d, this.uniqueFile(dir, name));
   }

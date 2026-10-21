@@ -439,16 +439,29 @@ namespace Arrow
                 info.Fill(http(), settings);
                 Shot(folder, "fileinfo-http", info);
 
-                info = new FileInfoDialog(null, "shot-yt");
-                info.Fill(video(new Probe
+                Func<string, Probe> listed = key => new Probe
                 {
-                    Name = "Me at the zoo.mp4", Category = "Video", Format = "mp4:137+140", Options = new List<FormatOption>
+                    Name = "Me at the zoo.mp4", Category = "Video", Format = key, Options = new List<FormatOption>
                     {
                         opt("m4a:140", "Audio", "M4A", 3565158), opt("mp3", "Audio", "MP3", 456000),
                         opt("webm:248+251", "WEBM", "1080p", 98860390), opt("mp4:137+140", "MP4", "1080p", 126353408), opt("mp4:136+140", "MP4", "720p", 60353408),
                     },
-                }), settings);
+                };
+                info = new FileInfoDialog(null, "shot-yt");
+                info.Fill(video(listed("mp4:137+140")), settings);
                 Shot(folder, "fileinfo-youtube", info);
+
+                info = new FileInfoDialog(null, "shot-yt"); // picked in the extension's format menu: no Format row
+                var chosen = video(listed("mp4:136+140"));
+                chosen.Format = "mp4:136+140";
+                info.Fill(chosen, settings);
+                Shot(folder, "fileinfo-chosen", info);
+
+                info = new FileInfoDialog(null, "shot-yt"); // the same while the list is read: spinner in the Size row
+                chosen = video(new Probe { Name = "Me at the zoo.mp4", Category = "Video", Listing = true, Options = new List<FormatOption>() });
+                chosen.Format = "mp4:136+140";
+                info.Fill(chosen, settings);
+                Shot(folder, "fileinfo-chosen-listing", info);
 
                 info = new FileInfoDialog(null, "shot-yt");
                 info.Fill(video(new Probe { Name = "Me at the zoo.mp4", Category = "Video", Listing = true, Options = new List<FormatOption>() }), settings);

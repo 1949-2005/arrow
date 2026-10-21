@@ -165,8 +165,12 @@ min/max boxes, centered on the main window (or the screen when it is hidden).
 - Download File Info (one per pending download, appears in front even when Arrow is in the tray; same rules as
   confirm.html): header (48 tile, "Download File Info", Core.Subtitle), URL (read-only, selectable), amber note when
   the probe failed, Format (YouTube only; while probe.listing it shows "Getting formats…" with a small spinner and only
-  Cancel works; items are Core.FormatText grouped MP4, WEBM, Audio), Category, Save As + Browse… (native
-  SaveFileDialog, no overwrite prompt), hint "Missing folders are created.", inline error, Size (semibold).
+  Cancel works; items are Core.FormatText grouped MP4, WEBM, Audio; hidden with its gap closed when the download's
+  own Download.Format is set and the probe is listing or offers that key: the extension's format menu already
+  picked it), Category, Save As + Browse… (native SaveFileDialog, no overwrite prompt; tooltip "Missing folders are
+  created."), FlatCheck "Remember this folder for <Category>" ("for other files" for Other; follows Category,
+  unchecked on open; checked → Start/Later send remember: <Category>), inline error, Size (semibold). Tab order:
+  Save As, Browse…, the checkbox, then the footer. Save As's folder is Core.FolderFor (the remembered folder first).
   Footer: Download Later (left), Cancel, Start Download (primary). Start → POST /api/confirm start, then this dialog
   becomes the progress window for that download.
 - Progress window (IDM's, restyled like the inspector): tile + title ("Downloading · 45%", Core.Heading) + name,
