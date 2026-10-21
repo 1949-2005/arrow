@@ -253,6 +253,16 @@ namespace Arrow
                 "ع‍", "◿ ⟀", "\U0001EFFF", "\U0001FB00", "\U00020000 \U0001D400", "\uD83D", "x\uDE80" })
                 Ok(!Core.HasEmoji(s), "no emoji in " + s);
 
+            // Windows file icons: the file's own extension, else its category's typical one
+            Eq(L(new[] { "Video", "Music", "Documents", "Programs", "Compressed", "Other", "?" }.Select(Core.TypicalExt)), ".mp4 | .mp3 | .pdf | .exe | .zip |  | ", "typical extensions");
+            Eq(Core.IconExt("C:\\Users\\PC\\Downloads\\Music\\Song.MP3", "Music"), ".mp3", "icon ext from a path, lower case");
+            Eq(Core.IconExt("(1) tangerine - Search _ X.ts", "Video"), ".ts", "icon ext ts");
+            Eq(Core.IconExt("backup.tar.gz", "Compressed"), ".gz", "icon ext of the last part");
+            Eq(Core.IconExt("README", "Other"), "", "no extension: the generic file");
+            Eq(Core.IconExt("YouTube video", "Video"), ".mp4", "no extension: the category's");
+            Eq(Core.IconExt("v1.2 final", "Video"), ".mp4", "a dot inside the name is no extension");
+            Eq(Core.IconExt("https://x.com/", "Other") + "/" + Core.IconExt(null, "Music"), "/.mp3", "icon ext of a bare URL and of nothing");
+
             // the user's regional format
             Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");
             Eq(Core.Size(126353408), "120,5 MB", "size with a comma");

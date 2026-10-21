@@ -53,6 +53,7 @@ namespace Arrow
             category.SelectedIndex = Categories.Length - 1;
             file.Box.AccessibleName = "Save As";
             Tips.SetToolTip(file.Box, "Missing folders are created.");
+            file.Box.TextChanged += (s, e) => { tile.File = file.Text; tile.Invalidate(); }; // the icon follows the name's extension
             url.Font = Theme.Body;
             size = new Caption(Theme.Body, () => chosen && Spinning ? Theme.Muted : Theme.Text) { AccessibleName = "Size" };
             foreach (var c in new Control[] { tile, title, sub, urlLabel, url, note, formatLabel, format, spinner, catLabel, category, fileLabel, file, browse, remember, error, sizeLabel, size }) Add(c);

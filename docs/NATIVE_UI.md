@@ -49,6 +49,13 @@ Delete E74D, Folder E8B7, Open folder E838, Open file E8E5, Copy E8C8, Search E7
 Error E783, Clipboard E77F, Close E8BB. Categories: All E8B7, Active E896, Finished E930, Failed E783, Scheduled E121,
 Video E714, Music EC4F, Documents E8A5, Programs ECAA, Compressed F012, Other E7C3.
 
+File types show the icon Windows shows for them, as File Explorer and IDM do (`FileIcons.cs`): SHGetFileInfo on the
+extension alone (SHGFI_USEFILEATTRIBUTES, never the disk), the 16 px image up to 16 px, else the 32 px one scaled
+down with high-quality bicubic, cached per extension and size. The extension is the file's own, else its category's
+typical one (.mp4, .mp3, .pdf, .exe, .zip; none = the generic file). Sizes: 24 px in list rows, 20 px in the sidebar's
+Types, 32 px (native, crisp) in the Download File Info and progress headers. When Windows gives no icon, the category
+glyph in its color is drawn instead.
+
 ## Main window
 Default 1180 x 700, minimum 900 x 560; remembers bounds, maximized state and the selected section
 (`%LOCALAPPDATA%\<name>\ui.json`). Closing it hides it (the app stays in the tray); the first time, a tray balloon says
@@ -102,15 +109,17 @@ Full-width, inspector background, bottom hairline, glyph + text + text buttons o
   download has that url.
 
 ### Sidebar (width 200, sidebar token, padding 8)
-Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radius 6, glyph 16 + label + count right
-(muted). Selected: soft background, bold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
-Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled.
-Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — glyphs in their category color.
+Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radius 6, a 20 px icon slot + label + count
+right (muted). Selected: soft background, bold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
+Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled — glyphs at 18 px, muted
+(text when selected).
+Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — the Windows icon of a typical file at 20 px.
 
 ### List (list token)
 - Search field on top (height 32, margin 12, field + line, Search glyph, cue "Search downloads", Ctrl+F focuses it,
   Esc clears): filters by name or url, case-insensitive, together with the sidebar section.
-- Custom-drawn rows, height 48, padding 12: 16 px category glyph in its color, name (ellipsis), right-aligned trailing
+- Custom-drawn rows, height 48, padding 12: the file's Windows icon at 24 px (as is, also when selected), 12 px gap,
+  name (ellipsis), right-aligned trailing
   text; unfinished rows add a 3 px progress line under the name (radius 2, bar token track, accent fill; paused fill =
   faint; error = err). Trailing text: downloading "45% · 12.4 MB/s" (video phases: "Merging", "Converting to MP3"),
   queued "Queued", paused "Paused · 30%", error "Failed" in err, scheduled "Scheduled", done the size in muted.
@@ -166,7 +175,8 @@ accent border when focused), primary button accent/onAccent, secondary buttons t
 Enter = primary, Esc = Cancel, dark title bar in dark mode, the brand icon, FormBorderStyle FixedDialog, no
 min/max boxes, centered on the main window (or the screen when it is hidden).
 - Download File Info (one per pending download, appears in front even when Arrow is in the tray; same rules as
-  confirm.html): header (48 tile, "Download File Info", Core.Subtitle), URL (read-only, selectable), amber note when
+  confirm.html): header (the Save As name's Windows icon at 32 px, centered in the 48 px tile's place, "Download File
+  Info", Core.Subtitle), URL (read-only, selectable), amber note when
   the probe failed, Format (YouTube only; while probe.listing it shows "Getting formats…" with a small spinner and only
   Cancel works; items are Core.FormatText grouped MP4, WEBM, Audio; hidden with its gap closed when the download's
   own Download.Format is set and the probe is listing or offers that key: the extension's format menu already
@@ -176,7 +186,8 @@ min/max boxes, centered on the main window (or the screen when it is hidden).
   Save As, Browse…, the checkbox, then the footer. Save As's folder is Core.FolderFor (the remembered folder first).
   Footer: Download Later (left), Cancel, Start Download (primary). Start → POST /api/confirm start, then this dialog
   becomes the progress window for that download.
-- Progress window (IDM's, restyled like the inspector): tile + title ("Downloading · 45%", Core.Heading) + name,
+- Progress window (IDM's, restyled like the inspector): the file's Windows icon at 32 px (in the tile's place) + title
+  ("Downloading · 45%", Core.Heading) + name,
   big percent, segmented bar, speed graph, facts (URL, Status, File size, Downloaded, Transfer rate, Time left,
   Resume capability), footer Pause/Resume and Cancel ("Cancel this download? The partial file is deleted.").
   Done: green check tile, "Download complete", Saved to, File size, footer Open folder, Close, Open (primary).

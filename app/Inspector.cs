@@ -142,6 +142,7 @@ namespace Arrow
             graph.Visible = running;
             error.Visible = failed;
             tile.Category = category;
+            tile.File = string.IsNullOrEmpty(d.File) ? Core.ShortName(d) : d.File; // Windows' icon for its type, as the list
             tile.Invalidate();
             name.Text = Core.ShortName(d);
             Uri u;

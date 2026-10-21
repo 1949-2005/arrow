@@ -428,10 +428,12 @@ namespace Arrow
         }
     }
 
-    // File-type tile (radius 12, category tint, glyph in the category color); Complete = green check tile
+    // File-type tile (radius 12, category tint, glyph in the category color); Complete = green check tile.
+    // With File set: Windows' icon for that file's type at 32 px instead of the tinted tile.
     public class Tile : Painted
     {
         public string Category = "Other";
+        public string File;
         public bool Complete;
 
         public Tile() { Size = new Size(Theme.Px(48), Theme.Px(48)); }
@@ -439,7 +441,11 @@ namespace Arrow
         protected override void OnPaint(PaintEventArgs e)
         {
             var r = ClientRectangle;
-            if (!Complete) { Theme.DrawTile(e.Graphics, r, Category, Surface); return; }
+            if (!Complete)
+            {
+                if (File == null || !FileIcons.Draw(e.Graphics, Core.IconExt(File, Category), r, 32)) Theme.DrawTile(e.Graphics, r, Category, Surface);
+                return;
+            }
             Theme.Fill(e.Graphics, r, Theme.Px(12) * r.Width / (float)Theme.Px(48), Theme.Tint(Theme.Done, Surface));
             Theme.DrawGlyph(e.Graphics, Glyph.CheckCircle, r, Theme.Done, r.Width >= Theme.Px(40) ? 24 : 16);
         }
@@ -704,12 +710,14 @@ namespace Arrow
                     Theme.DrawText(g, head, Theme.Small, new Rectangle(r.X + Theme.Px(8), r.Y - Theme.Px(24), r.Width, Theme.Px(20)), Theme.Muted);
                 var sel = it.Key == selected;
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
-                var glyphColor = it.Category ? Theme.Category(it.Key) : sel ? Theme.Text : Theme.Muted;
-                Theme.DrawGlyph(g, it.Icon, new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(16), r.Height), glyphColor, 16);
+                // Types: Windows' icon of a typical file at 20 px; Library: its glyph at 18 px, in the same 20 px slot
+                var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(20), r.Height);
+                if (!it.Category || !FileIcons.Draw(g, Core.TypicalExt(it.Key), slot, 20))
+                    Theme.DrawGlyph(g, it.Icon, slot, it.Category ? Theme.Category(it.Key) : sel ? Theme.Text : Theme.Muted, it.Category ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Theme.Measure(count, Theme.Body).Width;
                 Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);
-                var x = r.X + Theme.Px(8 + 16 + 10);
+                var x = r.X + Theme.Px(8 + 20 + 10);
                 Theme.DrawText(g, it.Label, sel ? Theme.Bold : Theme.Body, new Rectangle(x, r.Y, r.Right - Theme.Px(16) - cw - x, r.Height), Theme.Text);
                 if (sel && Focused && ShowFocusCues) Theme.FocusRing(g, r, Theme.Px(6));
             }
@@ -991,13 +999,16 @@ namespace Arrow
             var lineY = bar ? r.Y + Theme.Px(7) : r.Y + (r.Height - Theme.Px(20)) / 2;
             var lineH = Theme.Px(20);
             var cat = CategoryOf(d);
-            Theme.DrawGlyph(g, Glyph.Of(cat), new Rectangle(r.X + pad, lineY, Theme.Px(16), lineH), sel ? Theme.OnSel : Theme.Category(cat), 16);
+            // Windows' icon for the file type, centered on the name's line; drawn as is on the selection
+            var icon = new Rectangle(r.X + pad, lineY + (lineH - Theme.Px(24)) / 2, Theme.Px(24), Theme.Px(24));
+            if (!FileIcons.Draw(g, Core.IconExt(string.IsNullOrEmpty(d.File) ? Core.ShortName(d) : d.File, cat), icon, 24))
+                Theme.DrawGlyph(g, Glyph.Of(cat), icon, sel ? Theme.OnSel : Theme.Category(cat), 16);
             var trailing = Trailing(d);
             var tw = Theme.Measure(trailing, Theme.Body).Width;
             var right = r.Right - pad;
             var tColor = sel ? Theme.OnSel : d.Status == "error" ? Theme.Err : d.Status == "done" ? Theme.Muted : Theme.Text;
             Theme.DrawText(g, trailing, Theme.Body, new Rectangle(right - tw, lineY, tw, lineH), tColor, Theme.Line1Right);
-            var x = r.X + pad + Theme.Px(16 + 12);
+            var x = r.X + pad + Theme.Px(24 + 12);
             Theme.DrawText(g, Core.ShortName(d), Theme.Body, new Rectangle(x, lineY, Math.Max(0, right - tw - Theme.Px(12) - x), lineH), sel ? Theme.OnSel : Theme.Text);
             if (bar)
             {

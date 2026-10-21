@@ -79,6 +79,7 @@ namespace Arrow
             var fraction = Core.Fraction(d, true);
             Text = Math.Floor(fraction * 100) + "% · " + short_;
             tile.Category = Core.Category(d, categories);
+            tile.File = string.IsNullOrEmpty(d.File) ? short_ : d.File;
             tile.Complete = done;
             tile.Invalidate();
             title.Text = Core.Heading(d);

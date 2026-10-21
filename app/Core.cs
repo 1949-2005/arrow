@@ -200,6 +200,7 @@ namespace Arrow
         static readonly Regex Link = new Regex(@"^https?://\S+$", RegexOptions.IgnoreCase);
         static readonly Regex YouTube = new Regex(@"^https?://((www|m|music)\.)?youtube\.com/|^https?://youtu\.be/", RegexOptions.IgnoreCase);
         static readonly Regex LastExt = new Regex(@"\.[^.\\/]*$");
+        static readonly Regex IconExtension = new Regex(@"\.[A-Za-z0-9_]{1,16}$");
 
         static string Num(double n) { return n.ToString(CultureInfo.CurrentCulture); }
         static string Get(Dictionary<string, string> map, string key) { string v; return key != null && map.TryGetValue(key, out v) ? v : null; }
@@ -410,6 +411,27 @@ namespace Arrow
 
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
         public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
+
+        // A typical extension per Category name, for its Windows icon ("" = the generic file)
+        public static string TypicalExt(string category)
+        {
+            switch (category)
+            {
+                case "Video": return ".mp4";
+                case "Music": return ".mp3";
+                case "Documents": return ".pdf";
+                case "Programs": return ".exe";
+                case "Compressed": return ".zip";
+                default: return "";
+            }
+        }
+
+        // The extension whose Windows icon a file gets: its own (".mp4"), else its category's typical one
+        public static string IconExt(string name, string category)
+        {
+            var m = IconExtension.Match(name ?? "");
+            return m.Success ? m.Value.ToLowerInvariant() : TypicalExt(category);
+        }
 
         // Download File Info header: the name (a YouTube title without its extension) · the host without www.
         public static string Subtitle(Download d, string name)
