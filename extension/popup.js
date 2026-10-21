@@ -13,7 +13,7 @@ $('#intercept').onchange = e => chrome.storage.local.set({ intercept: e.target.c
 const { overlay = true } = await chrome.storage.local.get('overlay');
 $('#overlay').checked = overlay;
 $('#overlay').onchange = e => chrome.storage.local.set({ overlay: e.target.checked });
-$('#open').onclick = () => chrome.tabs.create({ url: APP });
+$('#open').onclick = () => fetch(APP + '/api/open', { method: 'POST' }).catch(() => {}); // the app shows its window
 
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 

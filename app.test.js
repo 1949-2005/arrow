@@ -44,8 +44,8 @@ test('--check reads the state from a running engine', win, async () => {
   await new Promise(r => probe.listen(0, '127.0.0.1', r));
   const port = probe.address().port;
   await new Promise(r => probe.close(r));
-  // never the user's port 9614, state.json, Startup folder or Save dialog
-  const env = { ...process.env, FASTDL_PORT: String(port), FASTDL_STATE: path.join(dir, 'state.json'), FASTDL_STARTUP: dir, FASTDL_BROWSE_STUB: path.join(dir, 'picked') };
+  // never the user's port 9614, state.json or Startup folder
+  const env = { ...process.env, FASTDL_PORT: String(port), FASTDL_STATE: path.join(dir, 'state.json'), FASTDL_STARTUP: dir };
   const check = () => spawnSync(exe, ['--check', '--no-engine'], { env, encoding: 'utf8', windowsHide: true, timeout: 30000 });
 
   const offline = check();

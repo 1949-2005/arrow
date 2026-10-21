@@ -37,17 +37,9 @@ export async function send({ url, referrer, name, title, quality, format, confir
   return res?.ok ? (await res.json().catch(() => null))?.id ?? null : null;
 }
 
-// Every Download click in the browser: the app keeps the download waiting (confirm: true) and IDM's
-// Download File Info window opens, centred on the browser window. Returns the id, or null when the app refused it.
-const W = 560, H = 470;
-export async function sendConfirm(item) {
-  const id = await send({ ...item, confirm: true });
-  if (!id) return null;
-  const b = await chrome.windows.getLastFocused().catch(() => null);
-  await chrome.windows.create({ url: APP + '/confirm?id=' + id, type: 'popup', width: W, height: H, focused: true,
-    ...(b?.width && { left: Math.round(b.left + (b.width - W) / 2), top: Math.round(b.top + (b.height - H) / 2) }) });
-  return id;
-}
+// Every Download click in the browser: the app keeps the download waiting (confirm: true) and shows IDM's
+// Download File Info window itself. Returns the id, or null when the app refused it (not running, or its window closed).
+export const sendConfirm = item => send({ ...item, confirm: true });
 
 const isHttp = url => /^https?:$/.test(parse(url)?.protocol ?? '');
 

@@ -79,7 +79,6 @@ export class Manager {
   powerDelayMs = 60000;
   power = () => {}; // server.js puts the real sleep/shutdown here; tests and other users of Manager stay harmless
   worked = false; // a download started since the last tick, so even one that ended between ticks counts
-  browse = async () => null; // server.js puts the Windows Save dialog here; tests use a stub
   pendingMs = 30 * 60000; // a Download File Info window left open longer than this loses its download
   formatCache = new Map(); // YouTube video id → {at, list}, see listFormats()
 

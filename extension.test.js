@@ -70,8 +70,8 @@ const media = (tabId, url, headers) => listeners['webRequest.onHeadersReceived']
   tabId, url, responseHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
 });
 const MB5 = String(5 * 1024 * 1024);
-// The Download File Info window for the app's download dl-1: 560x470, centred on the 1400x900 browser window at 100,40
-const dialog = { url: 'http://127.0.0.1:9614/confirm?id=dl-1', type: 'popup', width: 560, height: 470, focused: true, left: 520, top: 255 };
+// The native app shows the Download File Info window itself: the extension never opens a browser window
+const noWindow = () => assert.equal(called('windows.create').length, 0);
 
 test('media grabber remembers real media and HLS, skips fragments and small files', async () => {
   reset();
@@ -142,7 +142,7 @@ test('download takeover: cancel, erase, then hand to the app with cookies and re
   assert.equal(adds[0].url, 'http://127.0.0.1:9614/api/add');
   assert.equal(adds[0].method, 'POST');
   assert.deepEqual(adds[0].body, { url: 'https://cdn.x.com/file.zip', name: 'file.zip', headers: { referer: 'https://x.com/page', cookie: 'a=1; b=2' }, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
   assert.doesNotMatch(JSON.stringify(requests).toLowerCase(), /user-agent/);
   assert.deepEqual(called('cookies.getAll')[0][1], { url: 'https://cdn.x.com/file.zip' });
   // cancel before erase before add
@@ -169,7 +169,7 @@ test('download takeover is skipped when it should be', async () => {
     await takeover(it);
     assert.equal(called('downloads.cancel').length, 0, JSON.stringify(it));
     assert.equal(requests.filter(r => r.url.endsWith('/api/add')).length, 0);
-    assert.equal(called('windows.create').length, 0);
+    noWindow();
   }
 });
 
@@ -178,7 +178,7 @@ test('download takeover gives the download back when the app refuses it', async 
   await takeover(item());
   assert.equal(called('downloads.cancel').length, 1);
   assert.deepEqual(called('downloads.download'), [['downloads.download', { url: 'https://cdn.x.com/file.zip' }]]);
-  assert.equal(called('windows.create').length, 0);
+  noWindow();
 });
 
 test('context menu sends the link or the media source with the tab as referer', async () => {
@@ -187,7 +187,7 @@ test('context menu sends the link or the media source with the tab as referer', 
   assert.equal(requests.at(-1).body.url, 'https://x.com/f.zip');
   assert.deepEqual(requests.at(-1).body.headers, { referer: 'https://x.com/page', cookie: 'a=1; b=2' });
   assert.equal(requests.at(-1).body.confirm, true);
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
 
   reset();
   listeners['contextMenus.onClicked']({ menuItemId: 'fastdl', srcUrl: 'https://x.com/v.mp4', mediaType: 'video' }, { url: 'https://x.com/watch' });
@@ -315,12 +315,12 @@ test('popup shows the YouTube section only on video pages', async () => {
   assert.equal((await openPopup('https://x.com/'))['#yt'].hidden, true);
 });
 
-test('popup YouTube button opens the Download File Info window; no quality picker any more', async () => {
+test('popup YouTube button sends the video for the Download File Info window; no quality picker any more', async () => {
   reset();
   let els = await openPopup('https://www.youtube.com/shorts/dQw4w9WgXcQ');
   await els['#ytdl'].onclick();
   assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', headers: {}, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
   assert.equal(els['#ytdl'].textContent, 'Sent ✓');
   assert.equal(els['#ytdl'].disabled, true);
   assert.ok(!('#quality' in els), 'popup.js must not touch a quality select');
@@ -333,17 +333,17 @@ test('popup YouTube button opens the Download File Info window; no quality picke
   await els['#ytdl'].onclick();
   assert.equal(els['#ytdl'].textContent, 'Failed. Is Arrow running?');
   assert.equal(els['#ytdl'].disabled, false);
-  assert.equal(called('windows.create').length, 0);
+  noWindow();
 });
 
-test('popup media rows open the Download File Info window too', async () => {
+test('popup media rows send for the Download File Info window too', async () => {
   reset();
   session.tab9 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
   let els = await openPopup('https://x.com/watch');
   const [li] = els['#media'].children, b = li.children[2];
   await b.onclick();
   assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Tab', headers: { referer: 'https://x.com/watch', cookie: 'a=1; b=2' }, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
   assert.equal(b.textContent, 'Sent ✓');
 
   reset('error');
@@ -352,7 +352,17 @@ test('popup media rows open the Download File Info window too', async () => {
   const b2 = els['#media'].children[0].children[2];
   await b2.onclick();
   assert.equal(b2.textContent, 'Failed');
-  assert.equal(called('windows.create').length, 0);
+  noWindow();
+});
+
+test('popup Open asks the app to show its window (no browser tab)', async () => {
+  reset();
+  const els = await openPopup('https://x.com/');
+  await els['#open'].onclick();
+  assert.deepEqual(requests.at(-1), { url: 'http://127.0.0.1:9614/api/open', method: 'POST', body: undefined, headers: undefined });
+  assert.equal(called('tabs.create').length, 0);
+  reset('down');
+  await (await openPopup('https://x.com/'))['#open'].onclick(); // app closed: no error
 });
 
 test('popup "Show download button on videos" defaults on and saves to overlay', async () => {
@@ -407,26 +417,26 @@ test('video button message: sends the picked media with the page as referrer', a
   session.tab5 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
   assert.deepEqual(await videoMsg(vmsg()), { ok: true });
   assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' }, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
 
   reset(); // YouTube without a pick ("Download anyway"): the window opens without a preselected format
   assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })), { ok: true });
   assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Clip', headers: {}, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
 
   reset(); // a pick in the format list: format and title go to the app, the window opens with them
   assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140' })), { ok: true });
   assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140', headers: {}, confirm: true });
-  assert.deepEqual(called('windows.create'), [['windows.create', dialog]]);
+  noWindow();
 
   reset();
   assert.deepEqual(await videoMsg(vmsg()), { error: 'No video found yet. Play it for a few seconds, then try again.' });
   assert.equal(requests.length, 0);
-  assert.equal(called('windows.create').length, 0);
+  noWindow();
 
   reset('down');
   assert.deepEqual(await videoMsg(vmsg({ src: 'https://cdn.x.com/v.mp4' })), { error: 'Arrow is not running.' });
-  assert.equal(called('windows.create').length, 0);
+  noWindow();
 });
 
 test('video button message: other senders and bad fields are refused', async () => {

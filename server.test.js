@@ -24,8 +24,7 @@ async function startServer(dir) {
   const base = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, [serverJs], {
     // FASTDL_STARTUP: the Start with Windows shortcut goes to the temp folder, never the real Startup folder
-    // FASTDL_BROWSE_STUB: Browse… answers with this folder instead of opening a real Save dialog on the screen
-    env: { ...process.env, FASTDL_PORT: String(port), FASTDL_STATE: path.join(dir, 'state.json'), FASTDL_STARTUP: dir, FASTDL_BROWSE_STUB: path.join(dir, 'picked') },
+    env: { ...process.env, FASTDL_PORT: String(port), FASTDL_STATE: path.join(dir, 'state.json'), FASTDL_STARTUP: dir },
     stdio: 'ignore',
   });
   for (const t = Date.now(); ; await sleep(50)) {
@@ -51,10 +50,11 @@ const call = (url, { origin, body } = {}) => fetch(base + url, {
 });
 const scheduled = { url: 'http://127.0.0.1:1/x', scheduled: true }; // never starts: no network, no files
 
-test('extensions may only ping, add and list YouTube formats', async () => {
+test('extensions may only ping, add, list YouTube formats and show the window', async () => {
   const origin = 'chrome-extension://abc';
   assert.equal((await call('/api/ping', { origin })).status, 200);
   assert.equal((await call('/api/add', { origin, body: scheduled })).status, 200);
+  assert.equal((await call('/api/open', { origin, body: {} })).status, 200);
   // /api/formats is open to them, for YouTube single-video links only (a real one would run yt-dlp: not here)
   for (const [url, error] of [['https://example.com/v.mp4', /Only YouTube video links/], ['https://www.youtube.com/@channel', /not a channel or playlist/], ['nope', /Invalid URL/]]) {
     const res = await call('/api/formats', { origin, body: { url } });
@@ -64,8 +64,8 @@ test('extensions may only ping, add and list YouTube formats', async () => {
   const site = await call('/api/formats', { origin: 'https://evil.example', body: { url: 'https://youtu.be/jNQXAC9IVRw' } });
   assert.equal(site.status, 403, 'other websites never reach it');
   const forbidden = [['/api/settings', { dir, startup: true, whenDone: 'shutdown' }], ['/api/action', { id: 'x', op: 'open' }], ['/api/state'],
-    ['/api/open', {}], ['/api/pause-all', {}], ['/api/quit', {}], ['/api/confirm', { id: 'x', action: 'start', path: 'C:\\Users\\Public\\a.exe' }],
-    ['/api/browse', { path: 'C:\\a.zip' }], ['/api/state?x=1']];
+    ['/api/pause-all', {}], ['/api/quit', {}], ['/api/confirm', { id: 'x', action: 'start', path: 'C:\\Users\\Public\\a.exe' }],
+    ['/api/state?x=1']];
   for (const [url, body] of forbidden) {
     const res = await call(url, { origin, body });
     assert.equal(res.status, 403, url);
@@ -77,7 +77,7 @@ test('extensions may only ping, add and list YouTube formats', async () => {
   assert.ok(!existsSync(path.join(dir, brand.name + '.lnk')));
 });
 
-test('Start with Windows: the app page creates and removes a shortcut that starts the exe in the tray', { skip: process.platform !== 'win32' }, async () => {
+test('Start with Windows: the app creates and removes a shortcut that starts the native exe in the tray', { skip: process.platform !== 'win32' }, async () => {
   const link = path.join(dir, brand.name + '.lnk');
   const startup = async () => (await (await call('/api/state')).json()).settings.startup;
   assert.equal(await startup(), false);
@@ -91,22 +91,13 @@ test('Start with Windows: the app page creates and removes a shortcut that start
   assert.ok(!existsSync(link));
 });
 
-test('the page and its icon carry the name and icon from brand.json', async () => {
-  assert.ok((await (await call('/')).text()).includes(`<title>${brand.name}</title>`));
-  const icon = await call('/favicon.ico');
-  assert.equal(icon.headers.get('content-type'), 'image/x-icon');
-  assert.deepEqual(Buffer.from(await icon.arrayBuffer()), readFileSync(path.join(app, brand.icon)));
-});
-
-test('the Download File Info and progress windows carry the brand name, also with a query string', async () => {
-  for (const url of ['/confirm?id=abc', '/progress?id=abc', '/confirm', '/?x=1']) {
-    const res = await call(url);
-    assert.equal(res.status, 200, url);
-    assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8');
-    const text = await res.text();
-    assert.ok(text.includes(brand.name), url);
-    if (brand.name !== 'FastDL') assert.ok(!text.includes('FastDL'), url);
-  }
+test('Open (tray, extension popup, a second start) raises `open` in /api/state, which the native app watches', async () => {
+  const open = async () => (await (await call('/api/state')).json()).open;
+  const before = await open();
+  assert.equal(typeof before, 'number');
+  assert.deepEqual(await (await call('/api/open', { body: {} })).json(), { ok: true });
+  await call('/api/open', { origin: 'chrome-extension://abc', body: {} });
+  assert.equal(await open(), before + 2);
 });
 
 test('routes with a query string work', async () => {
@@ -115,7 +106,30 @@ test('routes with a query string work', async () => {
   assert.equal((await call('/api/add?from=ext', { origin: 'chrome-extension://abc', body: scheduled })).status, 200);
 });
 
-test('extension downloads wait as pending; the app page confirms or cancels them', async () => {
+test('extension downloads wait as pending only while the native app is open; it confirms or cancels them', async () => {
+  // a fresh engine: nothing has polled /api/state yet, so no window would show the pending download
+  const pdir = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-pending-'));
+  try {
+    const s = await startServer(pdir);
+    const add = () => fetch(s.base + '/api/add', { method: 'POST', headers: { origin: 'chrome-extension://abc' }, body: JSON.stringify({ url: 'http://127.0.0.1:1/z/f.zip', confirm: true }) });
+    const refused = await add();
+    assert.equal(refused.status, 503);
+    assert.deepEqual(await refused.json(), { error: `${brand.name} is not open. Start it from the Start menu.` });
+    const fromExt = await fetch(s.base + '/api/state', { headers: { origin: 'chrome-extension://abc' } }); // extensions don't count
+    assert.equal(fromExt.status, 403);
+    assert.equal((await add()).status, 503);
+    assert.equal((await fetch(s.base + '/api/add', { method: 'POST', body: JSON.stringify(scheduled) })).status, 200, 'other downloads need no window');
+    await fetch(s.base + '/api/state'); // the native app polls, without an Origin
+    const ok = await add();
+    assert.equal(ok.status, 200);
+    const { id } = await ok.json();
+    assert.equal((await (await fetch(s.base + '/api/state')).json()).downloads.find(d => d.id === id).status, 'pending');
+    s.child.kill();
+  } finally {
+    await fs.rm(pdir, { recursive: true, force: true, maxRetries: 3 });
+  }
+
+  await call('/api/state');
   const { id } = await (await call('/api/add', { origin: 'chrome-extension://abc', body: { url: 'http://127.0.0.1:1/z/f.zip', confirm: true } })).json();
   const find = async () => (await (await call('/api/state')).json()).downloads.find(d => d.id === id);
   assert.equal((await find()).status, 'pending');
@@ -131,12 +145,6 @@ test('extension downloads wait as pending; the app page confirms or cancels them
   const { id: id2 } = await (await call('/api/add', { body: { url: 'http://127.0.0.1:1/z/g.zip', confirm: true } })).json();
   assert.deepEqual(await (await call('/api/confirm', { body: { id: id2, action: 'cancel' } })).json(), { ok: true });
   assert.ok(!(await (await call('/api/state')).json()).downloads.some(d => d.id === id2));
-});
-
-test('Browse… goes through the injectable dialog (a stub in tests)', async () => {
-  const res = await call('/api/browse', { origin: base, body: { path: 'C:\\Users\\Public\\Downloads\\a b.zip' } });
-  assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { path: path.join(dir, 'picked', 'a b.zip') });
 });
 
 test('tray: Pause all pauses running downloads; scheduled ones keep their time', async () => {

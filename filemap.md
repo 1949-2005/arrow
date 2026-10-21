@@ -1,46 +1,41 @@
 # File map
 
-- `engine.js` — core: pending downloads (probe, `confirm()`), queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, "when all downloads finish" countdown, `state.json` persistence, `view()` for the UI
+- `engine.js` — core: pending downloads (probe, `confirm()`), queue, dynamic segmentation, resume, retries, stall watchdog, speed limit, scheduler, categories, "when all downloads finish" countdown, `state.json` persistence, `view()` for the native app
 - `hls.js` — HLS (.m3u8): best-variant pick and its separate sound track (X), AES-128 decryption, parallel segment fetch written in order, ffmpeg join of video and sound
 - `ytdlp.js` — YouTube via yt-dlp + ffmpeg: URL check, format list with real sizes (`listFormats`, cached 15 min), format key / quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
-- `server.js` — local HTTP API on 127.0.0.1:9614, serves `ui.html`, `confirm.html` and `progress.html` (with the brand name) and the brand icon as favicon; Browse… (Windows Save dialog through PowerShell, `FASTDL_BROWSE_STUB` in tests); Host/Origin checks live here; extensions only get ping, add and formats; tray routes (open, pause all, quit); Windows integration: Start with Windows shortcut, sleep/shutdown commands
-- `desktop.js` — the Windows desktop app: `brand.json` reading, port/URL, `powershell()`, `shortcut()`, browser lookup and app window, `start()` (one instance, server, tray, window); `node desktop.js [--tray]`
-- `tray.ps1` — tray icon (PowerShell + WinForms): click opens the window; menu Open / Pause all / Quit call the local API
-- `install.js` — builds `<name>.exe` (Node single executable app: launcher, brand icon, version info, no console); install/uninstall shortcuts; pure PE/icon/version-info helpers for tests
+- `server.js` — the engine's local HTTP API on 127.0.0.1:9614 (JSON only, no pages); Host/Origin checks live here; extensions only get ping, add, formats and open; `open` counter in `/api/state` (tray, popup's Open); app presence (`confirm: true` → 503 when the native app has not polled `/api/state` for 5 s); pause all, quit; Windows integration: Start with Windows shortcut (native exe `--tray`), sleep/shutdown commands
+- `desktop.js` — the engine launcher: `brand.json` reading, `exe` (native `<name>.exe`) and `engineExe` (`<name> Engine.exe`) paths, port/URL, `powershell()`, `shortcut()`, `start()` (exits if the engine already runs, errors if another program has the port, else imports `server.js`); `node desktop.js`
+- `install.js` — builds `<name> Engine.exe` (Node single executable app: launcher, brand icon, version info, no console) and the native `<name>.exe` (`app/build.js` `compileApp()`); refuses while either runs; install/uninstall of both exes and the shortcuts (to the native exe); pure PE/icon/version-info helpers for tests
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
-- `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand (`extension.test.js` checks the extension's copies of the name)
-- `confirm.html` — IDM's Download File Info window (`GET /confirm?id=`): URL, YouTube Format select (real sizes), category, Save As with Browse…, size; Start Download / Download Later / Cancel; DOM-free path helpers in `<script id="helpers">`
-- `progress.html` — the download progress window (`GET /progress?id=`): status, size, speed, time left, connections bar, Pause/Resume, Cancel; "Download complete" view with Open / Open folder; DOM-free text helpers in `<script id="helpers">`
-- `ui.html` — the whole web UI (HTML + CSS + JS), IDM-style: toolbar, categories sidebar, download list with multi-select, details pane, status bar, Add URL and Settings dialogs; polls `/api/state` every 700 ms; DOM-free helpers (batch links, clipboard link check, category, date label) in `<script id="helpers">`
+- `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand both exes (`extension.test.js` checks the extension's copies of the name)
 - `app/` — the native Windows app (C# 5 WinForms, compiled by Windows' own .NET Framework `csc.exe`) that replaces the web UI
-  - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), and the helpers ported from `ui.html`, `confirm.html` and `progress.html` (numbers and dates in the user's regional format)
+  - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), and the helpers ported from the old web UI (numbers and dates in the user's regional format)
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
   - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `AppIcon` (the brand .ico through user32 `LoadImage`)
   - `MainForm.cs` — placeholder main window (connection status only)
-  - `Tests.cs` — console test of `Core.cs` with `ui.test.js`'s cases, plus an `/api/state` round trip
+  - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
-  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending and opens the Download File Info window), `pickMedia()` (what the video button downloads)
-  - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); opens the Download File Info window for each
+  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending; the native app shows the Download File Info window), `pickMedia()` (what the video button downloads)
+  - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); each sends as pending, for the native app's Download File Info window
   - `content.js` — IDM-style download panel over page videos: Download this video, ? (help), × (hide on that video), drag to move (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
   - `icons/` — the logo for the toolbar and the extensions page (16, 32, 48, 128 px)
-  - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches
+  - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches, Open (`POST /api/open`)
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files, answers `-J`)
 - `fixtures/ytdlp-formats.json` — `yt-dlp -J` output of a fake 19 s video, used for the format list
-- `server.test.js` — API access rules (Host, Origin, extension privileges), routes with query strings, pending downloads and `/api/confirm`, Browse… through the stub, UTF-8 bodies, the Start with Windows shortcut, brand page and favicon, tray Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
-- `desktop.test.js` — browser order, brand name rules, second start and port conflict (`node desktop.js --tray` against a stand-in server), `tray.ps1` syntax
-- `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder (Windows)
-- `ui.test.js` — batch links, the clipboard link check, categories and date labels, by running `ui.html`'s helpers script in Node; `view()`'s `categories` and `added`; the helpers of `confirm.html` (Save As paths) and `progress.html` (status texts, bar pieces)
+- `server.test.js` — API access rules (Host, Origin, extension privileges), routes with query strings, `/api/open` and `open`, pending downloads (503 until the native app polls) and `/api/confirm`, UTF-8 bodies, the Start with Windows shortcut, Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
+- `desktop.test.js` — brand name rules, second start and port conflict (`node desktop.js` against a stand-in server)
+- `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)
 - `app.test.js` — the native app (Windows): `Tests.cs` passes, the exe builds with the brand icon, `--check` against `server.js` on a free port with temp state
-- `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into the exe and the tray as is
+- `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into both exes and the tray as is
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
-- `<name>.exe`, `installed.json` — made by `install.js` (gitignored)
+- `<name>.exe`, `<name> Engine.exe`, `installed.json` — made by `install.js` (gitignored)
 - `README.md` — user guide: install, start, quit, uninstall, name and icon, extension install, features, settings, limits, privacy
 - `docs/agents/` — settings for the Matt Pocock engineering skills: issue tracker (local `.scratch/`), triage labels, domain-doc rules
 - `docs/SPEC.md` — behaviour, data model, API, security model

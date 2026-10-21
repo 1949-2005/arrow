@@ -45,7 +45,7 @@ test('exe edits on a copy of node.exe: signature dropped, embedded app on, no co
   assert.throws(() => finish(b), /cannot hold an app/);
 });
 
-test('install builds a working exe with the icon and shortcuts, after removing a renamed install; uninstall removes it all', win, async () => {
+test('install builds the native app and the engine with the icon, and shortcuts to the app, after removing a renamed install; uninstall removes it all', win, async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'fastdl-install-'));
   const dir = path.join(tmp, 'app'), where = { programs: path.join(tmp, 'programs'), desktop: path.join(tmp, 'desktop'), startup: path.join(tmp, 'startup') };
   const links = Object.values(where).map(d => path.join(d, 'TestDL.lnk'));
@@ -53,27 +53,29 @@ test('install builds a working exe with the icon and shortcuts, after removing a
     for (const d of [dir, ...Object.values(where)]) await fs.mkdir(d);
     await fs.copyFile(brandIcon, path.join(dir, 'logo.ico'));
     await fs.writeFile(path.join(dir, 'brand.json'), JSON.stringify({ name: 'TestDL', icon: 'logo.ico' }));
-    // stands in for desktop.js and records how the exe called it
+    // stands in for desktop.js and records how the engine exe called it
     await fs.writeFile(path.join(dir, 'desktop.js'), "import { writeFileSync } from 'node:fs';\nexport function start() { writeFileSync(new URL('./started.json', import.meta.url), JSON.stringify(process.argv.slice(2))); }\n");
     // an earlier install under another name, with Start with Windows on
     await fs.writeFile(path.join(dir, 'installed.json'), JSON.stringify({ name: 'OldDL' }));
-    for (const f of [path.join(dir, 'OldDL.exe'), ...Object.values(where).map(d => path.join(d, 'OldDL.lnk'))]) await fs.writeFile(f, '');
+    for (const f of [path.join(dir, 'OldDL.exe'), path.join(dir, 'OldDL Engine.exe'), ...Object.values(where).map(d => path.join(d, 'OldDL.lnk'))]) await fs.writeFile(f, '');
 
     await install(dir, where);
-    const exe = path.join(dir, 'TestDL.exe');
-    assert.deepEqual((await fs.readdir(dir)).sort(), ['TestDL.exe', 'brand.json', 'desktop.js', 'installed.json', 'logo.ico']);
+    const exe = path.join(dir, 'TestDL.exe'), engine = path.join(dir, 'TestDL Engine.exe');
+    assert.deepEqual((await fs.readdir(dir)).sort(), ['TestDL Engine.exe', 'TestDL.exe', 'brand.json', 'desktop.js', 'installed.json', 'logo.ico']);
     for (const d of Object.values(where)) assert.deepEqual(await fs.readdir(d), ['TestDL.lnk']);
-    const read = '[Console]::OutputEncoding = [Text.Encoding]::UTF8; $w = New-Object -ComObject WScript.Shell; $env:L -split "\\|" | % { $s = $w.CreateShortcut($_); "$($s.TargetPath)>$($s.Arguments)" }; $v = (Get-Item $env:E).VersionInfo; "$($v.FileDescription)>$($v.ProductName)>$($v.FileVersion)"';
-    const lines = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', read], { env: { ...process.env, L: links.join('|'), E: exe } }).toString().trim().split(/\r?\n/);
+    const read = '[Console]::OutputEncoding = [Text.Encoding]::UTF8; $w = New-Object -ComObject WScript.Shell; $env:L -split "\\|" | % { $s = $w.CreateShortcut($_); "$($s.TargetPath)>$($s.Arguments)" }; $env:E -split "\\|" | % { $v = (Get-Item $_).VersionInfo; "$($v.FileDescription)>$($v.ProductName)>$($v.FileVersion)" }';
+    const lines = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', read], { env: { ...process.env, L: links.join('|'), E: `${exe}|${engine}` } }).toString().trim().split(/\r?\n/);
     const { version } = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
-    assert.deepEqual(lines.map(l => l.toLowerCase()), [`${exe}>`, `${exe}>`, `${exe}>--tray`, `testdl>testdl>${version}`].map(l => l.toLowerCase()));
+    assert.deepEqual(lines.map(l => l.toLowerCase()), [`${exe}>`, `${exe}>`, `${exe}>--tray`, `testdl>testdl>${version}.0`, `testdl engine>testdl>${version}`].map(l => l.toLowerCase()));
 
-    const b = readFileSync(exe), res = resources(b);
-    assert.equal(b.readUInt16LE(pe(b).subsystem), 2); // no console window
-    assert.equal(res.filter(r => r.type === 3).length, readFileSync(brandIcon).readUInt16LE(4)); // every size in the .ico
-    assert.ok(res.some(r => r.type === 10 && r.name === 'NODE_SEA_BLOB'));
-    execFileSync(exe, ['--tray']); // the embedded app loads desktop.js from the exe's folder
-    assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'started.json'), 'utf8')), ['--tray']);
+    for (const f of [exe, engine]) {
+      const b = readFileSync(f), res = resources(b); // pe() inside: a 64-bit (PE32+) exe
+      assert.equal(b.readUInt16LE(pe(b).subsystem), 2, f); // no console window
+      assert.equal(res.filter(r => r.type === 3).length, readFileSync(brandIcon).readUInt16LE(4), f); // every size in the .ico
+      assert.equal(res.some(r => r.type === 10 && r.name === 'NODE_SEA_BLOB'), f === engine, f); // only the engine is node.exe
+    }
+    execFileSync(engine, []); // the embedded app loads desktop.js from the exe's folder
+    assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'started.json'), 'utf8')), []);
 
     await uninstall(dir, where);
     assert.deepEqual((await fs.readdir(dir)).sort(), ['brand.json', 'desktop.js', 'logo.ico', 'started.json']);

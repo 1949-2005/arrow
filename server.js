@@ -1,20 +1,19 @@
 import http from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
-import { rm, readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Manager } from './engine.js';
-import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, openWindow } from './desktop.js';
+import { here, brand, exe, port as PORT, startupDir, powershell, shortcut } from './desktop.js';
 
 const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
 await mgr.load();
-const html = f => readFileSync(path.join(here, f), 'utf8').replaceAll('FastDL', brand.name);
-const pages = { '/': html('ui.html'), '/confirm': html('confirm.html'), '/progress': html('progress.html') };
+let opens = 0, appSeen = 0; // POST /api/open count, and when the native app last polled /api/state
 const startupLink = path.join(startupDir, brand.name + '.lnk');
 const run = promisify(execFile);
 
-// "Start with Windows": a Startup-folder shortcut that starts the exe in the tray. The shortcut itself is the setting.
+// "Start with Windows": a Startup-folder shortcut that starts the native app in the tray. The shortcut itself is the setting.
 async function setStartup(on) {
   if (process.platform !== 'win32') throw new Error('Start with Windows only works on Windows');
   if (!on) return rm(startupLink, { force: true });
@@ -33,21 +32,9 @@ mgr.power = op => {
   ).catch(e => console.error(`could not ${op === 'shutdown' ? 'shut down' : 'sleep'}:`, e.message));
 };
 
-// Browse… in the Download File Info window: Windows' own Save dialog. Its hidden TopMost owner puts it in front of the browser.
-// No overwrite prompt: confirm() numbers taken names instead. Cancel gives null.
-async function saveDialog(file) {
-  const { stdout } = await powershell('[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; '
-    + '$d = New-Object System.Windows.Forms.SaveFileDialog; $d.OverwritePrompt = $false; $d.InitialDirectory = $env:FDL_DIR; $d.FileName = $env:FDL_NAME; '
-    + 'if ($d.ShowDialog((New-Object System.Windows.Forms.Form -Property @{ TopMost = $true })) -eq "OK") { $d.FileName }',
-  { FDL_DIR: file ? path.dirname(file) : mgr.settings.dir, FDL_NAME: file ? path.basename(file) : '' });
-  return stdout.trim() || null;
-}
-// FASTDL_BROWSE_STUB (tests): a folder "picked" in place of the real dialog, which would open on the user's screen
-mgr.browse = process.env.FASTDL_BROWSE_STUB ? async file => path.join(process.env.FASTDL_BROWSE_STUB, path.basename(file)) : saveDialog;
-
-function send(res, code, body, type = 'application/json') {
-  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
-  res.end(type === 'application/json' ? JSON.stringify(body) : body);
+function send(res, code, body) {
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(body));
 }
 
 // Always quoted ourselves: Node leaves space-free paths bare and explorer splits them at commas.
@@ -67,35 +54,33 @@ async function readJson(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // Only our own page and browser extensions may drive the app: blocks other websites and DNS rebinding.
+  // Only the native app (no Origin) and browser extensions may drive the engine: blocks other websites and DNS rebinding.
   const { host, origin } = req.headers;
   if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: 'bad host' });
   const extension = /^(chrome|moz)-extension:\/\//.test(origin ?? '');
   if (origin && origin !== `http://${host}` && !extension) return send(res, 403, { error: 'bad origin' });
-  // Any installed extension gets here, so it may only queue downloads and list a YouTube video's formats: settings could aim the folder at Startup, "open" runs files.
-  const url = req.url.split('?')[0]; // /confirm?id=… and /progress?id=…
+  // Any installed extension gets here, so it may only queue downloads, list a YouTube video's formats and show the window: settings could aim the folder at Startup, "open" runs files.
+  const url = req.url.split('?')[0];
   const route = `${req.method} ${url}`;
-  if (extension && !['GET /api/ping', 'POST /api/add', 'POST /api/formats'].includes(route)) return send(res, 403, { error: 'not allowed from extensions' });
+  if (extension && !['GET /api/ping', 'POST /api/add', 'POST /api/formats', 'POST /api/open'].includes(route)) return send(res, 403, { error: 'not allowed from extensions' });
   try {
-    if (req.method === 'GET' && pages[url]) return send(res, 200, pages[url], 'text/html; charset=utf-8');
-    if (req.method === 'GET' && url === '/favicon.ico') { // the brand icon, so the app window and its taskbar button show it
-      return readFile(path.join(here, brand.icon)).then(b => send(res, 200, b, 'image/x-icon'), () => send(res, 404, { error: 'not found' }));
-    }
     if (req.method === 'GET' && url === '/api/ping') return send(res, 200, { app: 'fastdl' });
     if (req.method === 'GET' && url === '/api/state') {
+      if (!origin) appSeen = Date.now();
       const v = mgr.view();
-      return send(res, 200, { ...v, settings: { ...v.settings, startup: existsSync(startupLink) } });
+      return send(res, 200, { ...v, open: opens, settings: { ...v.settings, startup: existsSync(startupLink) } });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
+    // A pending download waits for the Download File Info window, which only the native app shows.
+    if (url === '/api/add' && body.confirm && Date.now() - appSeen > 5000) return send(res, 503, { error: `${brand.name} is not open. Start it from the Start menu.` });
     if (url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
     // The video button's format list: YouTube single-video links only (youtubeId())
     if (url === '/api/formats') return send(res, 200, await mgr.formats(String(body.url ?? '')));
-    // The Download File Info window (confirm.html)
+    // The Download File Info window
     if (url === '/api/confirm') { await mgr.confirm(body.id, body); return send(res, 200, { ok: true }); }
-    if (url === '/api/browse') return send(res, 200, { path: await mgr.browse(String(body.path ?? '')) });
-    // The tray menu (tray.ps1)
-    if (url === '/api/open') { openWindow(); return send(res, 200, { ok: true }); }
+    // The native app shows its window when `open` in /api/state rises
+    if (url === '/api/open') { opens++; return send(res, 200, { ok: true }); }
     if (url === '/api/pause-all') { mgr.pauseAll(); return send(res, 200, { ok: true }); }
     if (url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
     if (url === '/api/settings') {
@@ -128,7 +113,7 @@ server.on('error', e => {
 });
 server.listen(PORT, '127.0.0.1', () => console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`));
 
-// Running yt-dlp processes and the tray end with this process (libuv puts child processes in a job object).
+// Running yt-dlp processes end with this process (libuv puts child processes in a job object).
 function quit() {
   mgr.saveSync();
   process.exit(0);

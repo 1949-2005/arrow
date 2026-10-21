@@ -1,8 +1,9 @@
 // Installs the desktop app in place (this folder):
-//   node install.js             (install.cmd)    build <name>.exe here, add Start menu and desktop shortcuts
+//   node install.js             (install.cmd)    build <name>.exe and <name> Engine.exe here, add Start menu and desktop shortcuts
 //   node install.js uninstall   (uninstall.cmd)  remove them again; downloads and state.json stay
-// The exe is Node's own single executable application: a copy of node.exe whose embedded app loads desktop.js from
-// this folder (so code changes need no rebuild), with the brand icon, version info and no console window.
+// <name>.exe is the native app (app/, compiled by app/build.js). <name> Engine.exe is Node's own single executable
+// application: a copy of node.exe whose embedded app loads desktop.js from this folder (so code changes need no rebuild),
+// with the brand icon, version info and no console window.
 // No npm tools: kernel32's UpdateResource (through PowerShell) writes the resources.
 import { readFileSync, existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -12,6 +13,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { here, readBrand, url, startupDir, powershell, shortcut } from './desktop.js';
+import { compileApp } from './app/build.js';
 
 const run = promisify(execFile);
 
@@ -39,13 +41,14 @@ function block(key, value, children = []) {
   b.writeUInt16LE(b.length, 0); b.writeUInt16LE(text ? v.length / 2 : v.length, 2); b.writeUInt16LE(Buffer.isBuffer(value) ? 0 : 1, 4);
   return b;
 }
-export function versionInfo(name, version) {
+// file: the exe's own name ("<name> Engine"), which Task Manager shows; name stays the product
+export function versionInfo(name, version, file = name) {
   const [a, b, c] = `${version}.0.0`.split('.').map(n => Number(n) & 0xffff);
   const fixed = Buffer.alloc(52);
   fixed.writeUInt32LE(0xfeef04bd, 0); fixed.writeUInt32LE(0x10000, 4);
   for (const at of [8, 16]) { fixed.writeUInt32LE((a << 16 | b) >>> 0, at); fixed.writeUInt32LE(c << 16 >>> 0, at + 4); } // file, product version a.b.c.0
   fixed.writeUInt32LE(0x3f, 24); fixed.writeUInt32LE(0x40004, 32); fixed.writeUInt32LE(1, 36); // flags mask, VOS_NT_WINDOWS32, VFT_APP
-  const strings = { FileDescription: name, ProductName: name, InternalName: name, OriginalFilename: name + '.exe', FileVersion: version, ProductVersion: version };
+  const strings = { FileDescription: file, ProductName: name, InternalName: file, OriginalFilename: file + '.exe', FileVersion: version, ProductVersion: version };
   return block('VS_VERSION_INFO', fixed, [
     block('StringFileInfo', undefined, [block('040904B0', undefined, Object.entries(strings).map(([k, v]) => block(k, v)))]),
     block('VarFileInfo', undefined, [block('Translation', Buffer.from([0x09, 0x04, 0xb0, 0x04]))]), // en-US, UTF-16
@@ -126,7 +129,7 @@ foreach ($r in (Get-Content -Raw $env:FDL_RES | ConvertFrom-Json)) {
 }
 if (![Res]::EndUpdateResource($h, $false)) { throw [ComponentModel.Win32Exception]::new() }`;
 
-// <name>.exe in dir, from dir's brand.json.
+// <name> Engine.exe in dir, from dir's brand.json.
 export async function build(dir = here) {
   const { name, icon } = readBrand(dir);
   const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
@@ -138,14 +141,14 @@ export async function build(dir = here) {
     const node = readFileSync(process.execPath);
     const res = [
       ...resources(node).filter(r => r.type === 24), // node.exe's manifest: Windows 10/11 support, long paths
-      { type: 16, name: 1, data: versionInfo(name, version) },
+      { type: 16, name: 1, data: versionInfo(name, version, name + ' Engine') },
       ...iconResources(readFileSync(path.resolve(dir, icon)), icon),
       { type: 10, name: 'NODE_SEA_BLOB', data: readFileSync(file('app.blob')) },
     ];
     await fs.writeFile(file('res.json'), JSON.stringify(res.map(r => ({ ...r, data: r.data.toString('base64') }))));
     await fs.writeFile(file('app.exe'), unsign(node));
     await powershell(UPDATE, { FDL_EXE: file('app.exe'), FDL_RES: file('res.json') });
-    await fs.writeFile(path.join(dir, name + '.exe'), finish(readFileSync(file('app.exe'))));
+    await fs.writeFile(path.join(dir, name + ' Engine.exe'), finish(readFileSync(file('app.exe'))));
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
@@ -164,11 +167,13 @@ async function folders() {
 
 export async function install(dir = here, where) {
   where ??= await folders();
-  const { name } = readBrand(dir), old = installed(dir), exe = path.join(dir, name + '.exe');
-  // Start with Windows stays on, now through the exe (its shortcut may still start node.exe, or have the old name).
+  const { name, icon } = readBrand(dir), old = installed(dir), exe = path.join(dir, name + '.exe');
+  // Start with Windows stays on, now through the native app (its shortcut may still start node.exe or the engine, or have the old name).
   const startup = [old, name].some(n => existsSync(path.join(where.startup, n + '.lnk')));
   if (old !== name) await uninstall(dir, where);
   await build(dir);
+  const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
+  await compileApp({ out: exe, name, version, icon: path.resolve(dir, icon) });
   for (const folder of [where.programs, where.desktop]) await shortcut(path.join(folder, name + '.lnk'), exe);
   if (startup) await shortcut(path.join(where.startup, name + '.lnk'), exe, '--tray');
   await fs.writeFile(record(dir), JSON.stringify({ name }));
@@ -177,17 +182,21 @@ export async function install(dir = here, where) {
 export async function uninstall(dir = here, where) {
   where ??= await folders();
   const name = installed(dir);
-  for (const f of [...Object.values(where).map(folder => path.join(folder, name + '.lnk')), path.join(dir, name + '.exe'), record(dir)]) {
+  for (const f of [...Object.values(where).map(folder => path.join(folder, name + '.lnk')), path.join(dir, name + '.exe'), path.join(dir, name + ' Engine.exe'), record(dir)]) {
     await fs.rm(f, { force: true });
   }
 }
+
+// CSV: the table format cuts long image names.
+const appRunning = name => run('tasklist.exe', ['/FI', `IMAGENAME eq ${name}.exe`, '/FO', 'CSV', '/NH'], { windowsHide: true })
+  .then(r => r.stdout.toLowerCase().includes(`"${name}.exe"`.toLowerCase()), () => false);
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const remove = process.argv[2] === 'uninstall', name = installed(here);
   try {
     if (process.platform !== 'win32') throw new Error('the desktop app needs Windows.');
-    // Windows can't replace or delete a running exe
-    if (await fetch(url + '/api/ping', { signal: AbortSignal.timeout(5000) }).then(r => r.ok, () => false)) {
+    // Windows can't replace or delete a running exe: the engine answers on its port, the native app shows in tasklist
+    if (await appRunning(name) || await appRunning(readBrand(here).name) || await fetch(url + '/api/ping', { signal: AbortSignal.timeout(5000) }).then(r => r.ok, () => false)) {
       throw new Error(`${name} is running. Quit it first: right-click its icon next to the clock and click Quit (or close its console window). Then try again.`);
     }
     if (remove) {
@@ -195,7 +204,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       console.log(`${name} is uninstalled. Your downloaded files and state.json (the download list and settings) are still here.`);
     } else {
       const { name: now } = readBrand(here);
-      console.log(`Building ${now}.exe. This takes a few seconds...`);
+      console.log(`Building ${now}.exe and ${now} Engine.exe. This takes a few seconds...`);
       await install();
       await run('ie4uinit.exe', ['-show']).catch(() => {}); // refresh Windows' icon cache, for a new logo
       spawn(path.join(here, now + '.exe'), [], { detached: true, stdio: 'ignore' }).unref();
