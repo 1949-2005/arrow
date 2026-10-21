@@ -1,4 +1,4 @@
-import { APP, sendConfirm, appAlive, pickMedia, isYouTubeVideo } from './common.js';
+import { APP, sendConfirm, appAlive, pickMedia, isYouTubeVideo, youTubeId, playerData, optionsFromPlayer } from './common.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
@@ -84,7 +84,15 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!['video', 'formats'].includes(msg?.type) || sender.id !== chrome.runtime.id || !sender.tab) return;
   if (msg.type === 'formats') {
     if (!httpUrl(msg.pageUrl) || !isYouTubeVideo(msg.pageUrl)) return reply({ error: 'Bad request.' });
-    formats(msg.pageUrl).then(reply);
+    const app = formats(msg.pageUrl); // also warms the app's list for its Download File Info window
+    // YouTube's own player in the page already has the formats: at once, instead of yt-dlp's 3 s; the app's list is the fallback
+    Promise.resolve().then(() => chrome.scripting.executeScript({
+      target: { tabId: sender.tab.id, frameIds: [sender.frameId] }, world: 'MAIN', func: playerData, args: [youTubeId(msg.pageUrl)],
+    })).then(([r]) => {
+      const options = optionsFromPlayer(r?.result);
+      if (!options.length) throw new Error('no formats in the page');
+      return { title: String(r.result.title ?? ''), options };
+    }).catch(() => app).then(reply);
     return true; // reply comes later
   }
   const { src, pageUrl, title, quality, format } = msg;

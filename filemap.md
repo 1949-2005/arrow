@@ -26,16 +26,17 @@
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
-  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending; the native app shows the Download File Info window), `pickMedia()` (what the video button downloads)
-  - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list through `/api/formats`, kept per page); each sends as pending, for the native app's Download File Info window
+  - `common.js` — app URL, `appAlive()`, `send()` (adds cookies and referrer, returns the download's id), `sendConfirm()` (adds it as pending; the native app shows the Download File Info window), `pickMedia()` (what the video button downloads), `youTubeId()`, `playerData()` (runs in the YouTube page's MAIN world: its player's formats) and `optionsFromPlayer()` (those formats → the same list as ytdlp.js `formatOptions()`)
+  - `background.js` — download takeover, context menu, media grabber (webRequest), badge, the video button's messages (send, and the format list: at once from YouTube's player in the page through `chrome.scripting`, else `/api/formats`, which is always asked and kept per page); each sends as pending, for the native app's Download File Info window
   - `content.js` — IDM-style download panel over page videos: Download this video, ? (help), × (hide on that video), drag to move (every frame, closed shadow root, one click sends; on YouTube it first opens the format list from `/api/formats`); a classic script
   - `icons/` — the logo for the toolbar and the extensions page (16, 32, 48, 128 px)
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches, Open (`POST /api/open`)
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
-- `extension.test.js` — extension logic (background.js, `pickMedia`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
+- `extension.test.js` — extension logic (background.js, `pickMedia`, `playerData`/`optionsFromPlayer` against `formatOptions`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files, answers `-J`)
 - `fixtures/ytdlp-formats.json` — `yt-dlp -J` output of a fake 19 s video, used for the format list
+- `fixtures/youtube-player.json` — real captures, trimmed: `playerData()` from YouTube's page and `yt-dlp -J` of the same videos (a 4K60 HDR video; a dubbed video with 23 audio tracks, some itags only), for `optionsFromPlayer()` = `formatOptions()`
 - `server.test.js` — API access rules (Host, Origin, extension privileges), routes with query strings, `/api/open` and `open`, pending downloads (503 until the native app polls) and `/api/confirm`, UTF-8 bodies, the Start with Windows shortcut, Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
 - `desktop.test.js` — brand name rules, second start and port conflict (`node desktop.js` against a stand-in server)
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)

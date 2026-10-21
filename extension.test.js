@@ -32,7 +32,10 @@ globalThis.chrome = {
   webRequest: { onHeadersReceived: event('webRequest.onHeadersReceived') },
   windows: { create: rec('windows.create'), getLastFocused: rec('windows.getLastFocused', () => ({ left: 100, top: 40, width: 1400, height: 900 })) },
   cookies: { getAll: rec('cookies.getAll', () => [{ name: 'a', value: '1' }, { name: 'b', value: '2' }]) },
+  // the page's YouTube player (playerData()): pageResult, or a throw for 'throw'
+  scripting: { executeScript: rec('scripting.executeScript', () => { if (pageResult === 'throw') throw new Error('no frame'); return [{ result: pageResult }]; }) },
 };
+let pageResult = null;
 
 let tabUrl = 'https://x.com/';
 
@@ -49,7 +52,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 await import('./extension/background.js');
-const { isYouTubeVideo, send, pickMedia } = await import('./extension/common.js');
+const { isYouTubeVideo, send, pickMedia, optionsFromPlayer, playerData } = await import('./extension/common.js');
 
 function reset(mode = 'up') {
   calls.length = requests.length = 0;
@@ -472,6 +475,88 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
   assert.deepEqual(await msg(other), { error: 'Arrow is not running.' });
   reset();
   assert.deepEqual(await msg(other), LIST);
+});
+
+test('formats message: answers at once from YouTube\'s player in the page, still warms the app\'s list; else the app\'s list', async () => {
+  reset();
+  const yt = 'https://www.youtube.com/shorts/LXb3EKWsInQ';
+  const msg = () => videoMsg({ type: 'formats', pageUrl: yt }, { id: 'ext-id', tab: { id: 5 }, frameId: 3 });
+  pageResult = PLAYER.LXb3EKWsInQ.player;
+  const got = await msg();
+  assert.deepEqual(got, { title: 'COSTA RICA IN 4K 60fps HDR (ULTRA HD)', options: optionsFromPlayer(PLAYER.LXb3EKWsInQ.player) });
+  assert.equal(got.options.length, 16);
+  const [[, inject]] = called('scripting.executeScript');
+  assert.deepEqual({ ...inject, func: inject.func.name }, { target: { tabId: 5, frameIds: [3] }, world: 'MAIN', func: 'playerData', args: ['LXb3EKWsInQ'] });
+  assert.equal(inject.func, playerData);
+  assert.deepEqual(requests.filter(r => r.url.endsWith('/api/formats')).map(r => r.body), [{ url: yt }], 'the app is still asked, for its cache');
+
+  for (const page of [null, { ...PLAYER.LXb3EKWsInQ.player, live: true }, { title: 'x', seconds: 1, formats: [] }, 'throw']) {
+    reset();
+    pageResult = page;
+    assert.deepEqual(await msg(), LIST, JSON.stringify(page)); // the app's list (cached since the first call)
+  }
+  pageResult = null;
+});
+
+const PLAYER = JSON.parse(fs.readFileSync(new URL('./fixtures/youtube-player.json', import.meta.url), 'utf8'));
+const { formatOptions, FORMAT_KEY } = await import('./ytdlp.js');
+const noRange = { get: async () => { throw new Error('no network'); } }; // exactSize() → null: both sides drop unsized formats
+
+test('optionsFromPlayer: the same list as ytdlp.js formatOptions() on real captures of the same video', async () => {
+  // LXb3EKWsInQ: 4K60 with HDR and DRC copies, and audio itags listed 3 times; plN7JMbadRg: 23 audio tracks (a subset of its itags)
+  for (const [id, { player, ytdlp }] of Object.entries(PLAYER)) {
+    const options = optionsFromPlayer(player);
+    assert.deepEqual(options, await formatOptions(ytdlp, noRange), id);
+    for (const o of options) assert.match(o.key, FORMAT_KEY);
+  }
+  assert.deepEqual(optionsFromPlayer(PLAYER.LXb3EKWsInQ.player).map(o => o.key).slice(0, 8),
+    ['mp4:299+140', 'mp4:298+140', 'mp4:135+140', 'mp4:134+140', 'mp4:133+140', 'mp4:160+140', 'webm:315+251', 'webm:308+251']);
+  assert.deepEqual(optionsFromPlayer(PLAYER.plN7JMbadRg.player).map(o => o.key), ['mp4:160+140-22', 'webm:278+251-22', 'm4a:140-22', 'mp3']);
+});
+
+test('optionsFromPlayer: HDR, DRC, other audio tracks, unsized formats, bad itags and live are left out', () => {
+  const f = (itag, mimeType, contentLength, more = {}) => ({ itag, mimeType, contentLength, bitrate: 1000, hdr: false, drc: false, track: null, ...more });
+  const v = (itag, h, size, more) => f(itag, 'video/mp4; codecs="avc1.4d401f"', size, { width: h * 16 / 9, height: h, fps: 30, ...more });
+  const a = (itag, size, more) => f(itag, 'audio/mp4; codecs="mp4a.40.2"', size, more);
+  const data = formats => ({ title: 'T', seconds: 10, live: false, formats });
+  const keys = formats => optionsFromPlayer(data(formats)).map(o => o.key);
+  assert.deepEqual(optionsFromPlayer(data([v(136, 720, '100'), a(140, '10')])), [
+    { key: 'mp4:136+140', group: 'MP4', label: '720p', tag: 'HD', size: 110 },
+    { key: 'm4a:140', group: 'Audio', label: 'M4A', size: 10 },
+    { key: 'mp3', group: 'Audio', label: 'MP3', size: 240000 },
+  ]);
+  assert.deepEqual(keys([v(337, 1080, '500', { hdr: true }), v(136, 720, '100'), a(140, '10')]), ['mp4:136+140', 'm4a:140', 'mp3'], 'HDR');
+  assert.deepEqual(keys([v(136, 720, '100'), a(141, '90', { drc: true, bitrate: 9e9 }), a(140, '10')]), ['mp4:136+140', 'm4a:140', 'mp3'], 'DRC');
+  assert.deepEqual(keys([v(136, 720, '100'), a(140, '11', { track: { id: 'de.3', isDefault: false } }), a(140, '10', { track: { id: 'en.4', isDefault: true } })]),
+    ['mp4:136+140-1', 'm4a:140-1', 'mp3'], 'default track only, named as yt-dlp names it');
+  assert.deepEqual(keys([v(137, 1080, undefined), v(136, 720, '100'), a(139, null), a(140, '10')]), ['mp4:136+140', 'm4a:140', 'mp3'], 'no contentLength');
+  assert.deepEqual(keys([v('1 --exec x', 1080, '100'), v(136, 720, '100'), a(140, '10'), { itag: 1 }, null]), ['mp4:136+140', 'm4a:140', 'mp3'], 'bad entries');
+  assert.deepEqual(keys([v(136, 720, '100', { fps: 60 })]), [], 'no audio: no MP4, no MP3');
+  assert.equal(optionsFromPlayer(data([v(299, 1080, '9', { fps: 60, width: 1080, height: 1920 }), a(140, '1')]))[0].label, '1080p60', 'Shorts: the short side');
+  assert.deepEqual(optionsFromPlayer({ ...data([v(136, 720, '100'), a(140, '10')]), live: true }), []);
+  for (const bad of [null, undefined, 'x', {}, { formats: 'x' }]) assert.deepEqual(optionsFromPlayer(bad), []);
+});
+
+test('playerData: reads the player of that video id only, as plain data', () => {
+  const resp = id => ({
+    videoDetails: { videoId: id, title: 'T ' + id, lengthSeconds: '10', isLive: false },
+    streamingData: { adaptiveFormats: [
+      { itag: 337, mimeType: 'video/webm; codecs="vp09.02"', contentLength: '5', width: 1920, height: 1080, fps: 60, bitrate: 9, averageBitrate: 8, qualityLabel: '1080p60 HDR', colorInfo: { transferCharacteristics: 'COLOR_TRANSFER_CHARACTERISTICS_SMPTEST2084' }, url: 'https://x' },
+      { itag: 140, mimeType: 'audio/mp4; codecs="mp4a.40.2"', contentLength: '3', bitrate: 7, isDrc: true, audioTrack: { id: 'en.4', audioIsDefault: true, displayName: 'English' } },
+    ] },
+  });
+  const player = (shown, response) => ({ getVideoData: () => ({ video_id: shown }), getPlayerResponse: () => response });
+  const run = (players, id) => vm.runInNewContext(`(${playerData})(${JSON.stringify(id)})`, { document: { querySelectorAll: () => players } });
+  const broken = { getVideoData: () => { throw new Error('x'); } };
+  assert.deepEqual(JSON.parse(JSON.stringify(run([broken, player('aaaaaaaaaaa', resp('aaaaaaaaaaa')), player('bbbbbbbbbbb', resp('bbbbbbbbbbb'))], 'bbbbbbbbbbb'))), {
+    title: 'T bbbbbbbbbbb', seconds: 10, live: false, formats: [
+      { itag: 337, mimeType: 'video/webm; codecs="vp09.02"', contentLength: '5', width: 1920, height: 1080, fps: 60, bitrate: 8, qualityLabel: '1080p60 HDR', hdr: true, drc: false, track: null },
+      { itag: 140, mimeType: 'audio/mp4; codecs="mp4a.40.2"', contentLength: '3', bitrate: 7, hdr: false, drc: true, track: { id: 'en.4', isDefault: true } },
+    ],
+  });
+  assert.equal(run([player('bbbbbbbbbbb', resp('aaaaaaaaaaa'))], 'bbbbbbbbbbb'), null, 'the previous video\'s response');
+  assert.equal(run([player('aaaaaaaaaaa', resp('aaaaaaaaaaa'))], 'bbbbbbbbbbb'), null);
+  assert.equal(run([{}], 'bbbbbbbbbbb'), null);
 });
 
 // content.js is a classic script; without `document` it only defines its helpers.

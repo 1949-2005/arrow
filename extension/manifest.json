@@ -3,7 +3,7 @@
   "name": "Arrow",
   "version": "1.0",
   "description": "Send downloads and page videos to the Arrow download manager.",
-  "permissions": ["downloads", "contextMenus", "webRequest", "cookies", "storage"],
+  "permissions": ["downloads", "contextMenus", "webRequest", "cookies", "storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "all_frames": true, "run_at": "document_idle" }],
