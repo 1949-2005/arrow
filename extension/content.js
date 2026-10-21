@@ -252,6 +252,7 @@ function main() {
     const groups = menuGroups(res?.options ?? []);
     if (groups.length) {
       // each row shows the file it saves, as IDM does: stem and extension apart, so a long name is cut before ".mp4"
+      // shortcut: an Arabic title ending in Latin words shows "mp4." beside that part's start, not its end; cut in JS by measuring if users meet it
       const title = res.title || document.title;
       const item = o => {
         const name = fileName(title, o.key), dot = name.lastIndexOf('.'), cut = dot > 0 ? dot : name.length;
