@@ -188,6 +188,19 @@ namespace Arrow
         public double? Bar;
     }
 
+    // An SVG icon as plain data: its viewBox size and one step per command (M and L: x y, C: x1 y1 x2 y2 x y, Z: none)
+    public class SvgShape
+    {
+        public double Width, Height;
+        public List<SvgStep> Steps = new List<SvgStep>();
+    }
+
+    public class SvgStep
+    {
+        public char Op;
+        public double[] Args;
+    }
+
     public static class Core
     {
         static readonly Dictionary<string, string> Label = new Dictionary<string, string> { { "queued", "Queued" }, { "downloading", "Downloading" }, { "paused", "Paused" }, { "done", "Complete" }, { "scheduled", "Scheduled" }, { "removed", "Removing" } };
@@ -201,6 +214,11 @@ namespace Arrow
         static readonly Regex YouTube = new Regex(@"^https?://((www|m|music)\.)?youtube\.com/|^https?://youtu\.be/", RegexOptions.IgnoreCase);
         static readonly Regex LastExt = new Regex(@"\.[^.\\/]*$");
         static readonly Regex IconExtension = new Regex(@"\.[A-Za-z0-9_]{1,16}$");
+        // only at 0 0, as the user's files are: another origin would draw the shape shifted
+        static readonly Regex ViewBox = new Regex(@"viewBox=""\s*0[\s,]+0[\s,]+([-+0-9.eE]+)[\s,]+([-+0-9.eE]+)\s*""");
+        static readonly Regex PathData = new Regex(@"\sd=""([^""]*)""");
+        // a command, a number, or anything else (which makes the path unreadable)
+        static readonly Regex PathToken = new Regex(@"([A-Za-z])|([-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?)|([^\s,])");
 
         static string Num(double n) { return n.ToString(CultureInfo.CurrentCulture); }
         static string Get(Dictionary<string, string> map, string key) { string v; return key != null && map.TryGetValue(key, out v) ? v : null; }
@@ -457,6 +475,42 @@ namespace Arrow
                 }
             }
             return false;
+        }
+
+        // The sidebar's Types icons: only what the user's files use (absolute M, L, C, Z in every d="..."), so a file drawn
+        // with anything else gives null and the sidebar shows its glyph instead of a wrong shape
+        public static SvgShape ParseSvg(string svg)
+        {
+            var vb = ViewBox.Match(svg ?? "");
+            double w, h;
+            if (!vb.Success || !double.TryParse(vb.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out w)
+                || !double.TryParse(vb.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out h) || w <= 0 || h <= 0) return null;
+            var shape = new SvgShape { Width = w, Height = h };
+            foreach (Match d in PathData.Matches(svg))
+            {
+                var op = '\0';
+                var nums = new List<double>();
+                // the trailing M only ends the last command; a path must start with M
+                foreach (Match t in PathToken.Matches(d.Groups[1].Value + " M"))
+                {
+                    if (t.Groups[3].Success) return null;
+                    if (t.Groups[2].Success) { nums.Add(double.Parse(t.Value, NumberStyles.Float, CultureInfo.InvariantCulture)); continue; }
+                    if (op == '\0' ? t.Value != "M" || nums.Count != 0 : !AddSteps(shape.Steps, op, nums)) return null;
+                    op = t.Value[0];
+                    nums.Clear();
+                }
+            }
+            return shape.Steps.Count == 0 ? null : shape;
+        }
+
+        // One step per group of numbers: M and L take pairs (more pairs after M are lines), C sixes, Z none
+        static bool AddSteps(List<SvgStep> steps, char op, List<double> nums)
+        {
+            var n = op == 'M' || op == 'L' ? 2 : op == 'C' ? 6 : op == 'Z' ? 0 : -1;
+            if (n < 0 || (n == 0 ? nums.Count != 0 : nums.Count == 0 || nums.Count % n != 0)) return false;
+            if (n == 0) steps.Add(new SvgStep { Op = 'Z', Args = new double[0] });
+            for (var i = 0; i < nums.Count; i += n) steps.Add(new SvgStep { Op = op == 'M' && i > 0 ? 'L' : op, Args = nums.GetRange(i, n).ToArray() });
+            return true;
         }
     }
 }

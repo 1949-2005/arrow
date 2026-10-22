@@ -9,11 +9,11 @@
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
 - `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand both exes (`extension.test.js` checks the extension's copies of the name)
 - `app/` — the native Windows app (C# 5 WinForms, compiled by Windows' own .NET Framework `csc.exe`) that replaces the web UI
-  - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), and the helpers ported from the old web UI (numbers and dates in the user's regional format)
+  - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Download`, `Probe`, `FormatOption`), the helpers ported from the old web UI (numbers and dates in the user's regional format), and the parser of the sidebar's SVG icons (`ParseSvg`: absolute M/L/C/Z only)
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
   - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `ARROW_SHOTS` screenshot mode; `AppIcon` (the brand .ico through user32 `LoadImage`)
   - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, text drawing and measuring, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
-  - `FileIcons.cs` — the icon Windows shows for a file type (SHGetFileInfo on the extension only), scaled and cached per extension and size, for list rows and the dialogs' headers; the sidebar's Types: known-folder icons for Video, Music and Documents, a .zip file's icon for Compressed, `assets/types/` pictures in the text color for Programs and Other
+  - `FileIcons.cs` — the icon Windows shows for a file type (SHGetFileInfo on the extension only), scaled and cached per extension and size, for list rows and the dialogs' headers; the sidebar's Types: the `assets/types/` SVG icons as cached vector paths, filled in the text color
   - `ColorText.cs` — text with emoji in color: DirectWrite layouts drawn through a cached Direct2D DC render target (COM interop), with TextRenderer's alignment, wrapping, ellipsis and GDI's line height; Theme falls back to TextRenderer on any failure
   - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `FlatCheck`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
   - `Inspector.cs` — the right column: one download, several, or the overview; `ErrorBox`
@@ -23,7 +23,7 @@
   - `ProgressDialog.cs` — the progress window (progress.html's behavior, the inspector's look): running, done, removed
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
   - `OptionsDialog.cs` — Options: Downloads, Schedule, Behavior, validated inline, POST /api/settings
-  - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), plus an `/api/state` round trip
+  - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), the SVG icon parser (`ParseSvg`), plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
@@ -44,7 +44,7 @@
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)
 - `app.test.js` — the native app (Windows): `Tests.cs` passes, the exe builds with the brand icon, `--check` against `server.js` on a free port with temp state
 - `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into both exes and the tray as is
-- `assets/types/` — `programs.png` and `other.png`: the sidebar's Programs and Other pictures, black on transparent, drawn in the text color
+- `assets/types/` — the user's SVG icons for Video, Music, Documents, Programs and Compressed (one path each, absolute M/L/C/Z, even-odd), filled in the text color; Other has none and shows its glyph
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `<name> Engine.exe`, `installed.json` — made by `install.js` (gitignored)

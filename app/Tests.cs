@@ -263,6 +263,23 @@ namespace Arrow
             Eq(Core.IconExt("v1.2 final", "Video"), ".mp4", "a dot inside the name is no extension");
             Eq(Core.IconExt("https://x.com/", "Other") + "/" + Core.IconExt(null, "Music"), "/.mp3", "icon ext of a bare URL and of nothing");
 
+            // the sidebar's SVG Types icons: absolute M, L, C, Z only, else null (the glyph)
+            Func<string, string> svg = d =>
+            {
+                var s = Core.ParseSvg("<svg viewBox=\"0 0 128 96\" fill-rule=\"evenodd\"><path d=\"" + d + "\"/></svg>");
+                return s == null ? null : s.Width.ToString(Inv) + "x" + s.Height.ToString(Inv) + ": "
+                    + L(s.Steps.Select(p => p.Op + string.Concat(p.Args.Select(a => " " + a.ToString("R", Inv)))));
+            };
+            Eq(svg("M1 2L3.5 4C5 6 7 8 9 10.25Z"), "128x96: M 1 2 | L 3.5 4 | C 5 6 7 8 9 10.25 | Z", "svg path");
+            Eq(svg("M0 0 10 0 10 10Z M20 20L30 30 40 40Z"), "128x96: M 0 0 | L 10 0 | L 10 10 | Z | M 20 20 | L 30 30 | L 40 40 | Z", "svg lines after M and L");
+            Eq(svg("m0 0l10 10z"), null, "svg relative commands");
+            Eq(svg("M0 0L10 10H5Z"), null, "svg another command");
+            Eq(svg("M0 0L10Z"), null, "svg wrong number count");
+            Eq(svg("M0 0C1 2 3 4 5Z"), null, "svg short curve");
+            Eq(Core.ParseSvg("<svg><path d=\"M0 0L1 1Z\"/></svg>"), null, "svg without viewBox");
+            Eq(Core.ParseSvg("<svg viewBox=\"10 0 128 128\"><path d=\"M0 0L1 1Z\"/></svg>"), null, "svg viewBox not at 0 0");
+            Eq(Core.ParseSvg("<svg viewBox=\"0 0 128 128\"></svg>"), null, "svg without path");
+
             // the user's regional format
             Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");
             Eq(Core.Size(126353408), "120,5 MB", "size with a comma");
