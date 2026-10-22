@@ -710,14 +710,14 @@ namespace Arrow
                     Theme.DrawText(g, head, Theme.Small, new Rectangle(r.X + Theme.Px(8), r.Y - Theme.Px(24), r.Width, Theme.Px(20)), Theme.Muted);
                 var sel = it.Key == selected;
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
-                // Types: Windows' icon for the kind at 20 px; Library: its glyph at 18 px, in the same 20 px slot
-                var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(20), r.Height);
-                if (!it.Category || !FileIcons.DrawType(g, it.Key, slot, 20))
+                // Types: the user's SVG icon at 28 px; Library: its glyph at 18 px, centered in the same 28 px slot
+                var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(28), r.Height);
+                if (!it.Category || !FileIcons.DrawType(g, it.Key, slot, 28))
                     Theme.DrawGlyph(g, it.Icon, slot, it.Category ? Theme.Category(it.Key) : sel ? Theme.Text : Theme.Muted, it.Category ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Theme.Measure(count, Theme.Body).Width;
                 Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);
-                var x = r.X + Theme.Px(8 + 20 + 10);
+                var x = r.X + Theme.Px(8 + 28 + 10);
                 Theme.DrawText(g, it.Label, sel ? Theme.Bold : Theme.Body, new Rectangle(x, r.Y, r.Right - Theme.Px(16) - cw - x, r.Height), Theme.Text);
                 if (sel && Focused && ShowFocusCues) Theme.FocusRing(g, r, Theme.Px(6));
             }

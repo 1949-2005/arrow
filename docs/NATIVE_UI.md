@@ -53,7 +53,7 @@ File types show the icon Windows shows for them, as File Explorer and IDM do (`F
 extension alone (SHGFI_USEFILEATTRIBUTES, never the disk), the 16 px image up to 16 px, else the 32 px one scaled
 down with high-quality bicubic, cached per extension and size. The extension is the file's own, else its category's
 typical one (.mp4, .mp3, .pdf, .exe, .zip; none = the generic file). Sizes: 24 px in list rows, 32 px (native, crisp)
-in the Download File Info and progress headers. The sidebar's Types at 20 px: the user's SVG icons
+in the Download File Info and progress headers. The sidebar's Types at 28 px: the user's SVG icons
 `assets/types/<category>.svg` for Video, Music, Documents, Programs and Compressed, the same on every PC (a typical
 file's icon comes from whatever app opens that type: a .pdf showed the Claude app's logo). `Core.ParseSvg` reads only
 absolute M, L, C and Z; the path is cached per category and filled even-odd, anti-aliased, in `Theme.Text` at paint
@@ -112,12 +112,12 @@ Full-width, inspector background, bottom hairline, glyph + text + text buttons o
   download has that url.
 
 ### Sidebar (width 200, sidebar token, padding 8)
-Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radius 6, a 20 px icon slot + label + count
+Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radius 6, a 28 px icon slot + label + count
 right (muted). Selected: soft background, bold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
 Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled — glyphs at 18 px, muted
 (text when selected).
 Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — the user's SVG icons in the text color at
-20 px; Other shows its glyph.
+28 px; Other shows its glyph.
 
 ### List (list token)
 - Search field on top (height 32, margin 12, field + line, Search glyph, cue "Search downloads", Ctrl+F focuses it,
