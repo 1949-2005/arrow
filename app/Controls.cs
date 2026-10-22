@@ -710,9 +710,9 @@ namespace Arrow
                     Theme.DrawText(g, head, Theme.Small, new Rectangle(r.X + Theme.Px(8), r.Y - Theme.Px(24), r.Width, Theme.Px(20)), Theme.Muted);
                 var sel = it.Key == selected;
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
-                // Types: Windows' icon of a typical file at 20 px; Library: its glyph at 18 px, in the same 20 px slot
+                // Types: Windows' icon for the kind at 20 px; Library: its glyph at 18 px, in the same 20 px slot
                 var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(20), r.Height);
-                if (!it.Category || !FileIcons.Draw(g, Core.TypicalExt(it.Key), slot, 20))
+                if (!it.Category || !FileIcons.DrawType(g, it.Key, slot, 20))
                     Theme.DrawGlyph(g, it.Icon, slot, it.Category ? Theme.Category(it.Key) : sel ? Theme.Text : Theme.Muted, it.Category ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Theme.Measure(count, Theme.Body).Width;
