@@ -61,8 +61,8 @@ namespace Arrow
             {
                 var svg = Core.ParseSvg(File.ReadAllText(Path.Combine(Program.Folder, "assets", "types", category.ToLowerInvariant() + ".svg")));
                 if (svg == null) return null;
-                // the files are even-odd
-                var path = new GraphicsPath(FillMode.Alternate);
+                // the file's own fill rule: even-odd is Alternate, SVG's default nonzero is Winding
+                var path = new GraphicsPath(svg.EvenOdd ? FillMode.Alternate : FillMode.Winding);
                 var at = PointF.Empty;
                 var start = at;
                 foreach (var s in svg.Steps)

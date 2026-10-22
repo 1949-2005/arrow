@@ -116,7 +116,7 @@ namespace Arrow
             sidebar.Add("failed", "Failed", Glyph.Failed, false);
             sidebar.Add("scheduled", "Scheduled", Glyph.Scheduled, false);
             sidebar.Heading("Types");
-            foreach (var c in new[] { "Video", "Music", "Documents", "Programs", "Compressed", "Other" }) sidebar.Add(c, c, Glyph.Of(c), true);
+            foreach (var c in new[] { "Video", "Music", "Programs", "Documents", "Compressed", "Other" }) sidebar.Add(c, c, Glyph.Of(c), true);
 
             search.Height = Theme.Px(32);
             search.Box.AccessibleName = "Search downloads";

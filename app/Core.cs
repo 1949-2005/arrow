@@ -188,10 +188,12 @@ namespace Arrow
         public double? Bar;
     }
 
-    // An SVG icon as plain data: its viewBox size and one step per command (M and L: x y, C: x1 y1 x2 y2 x y, Z: none)
+    // An SVG icon as plain data: its viewBox size, its fill rule and one absolute step per segment (M and L: x y,
+    // C: x1 y1 x2 y2 x y, Z: none)
     public class SvgShape
     {
         public double Width, Height;
+        public bool EvenOdd;
         public List<SvgStep> Steps = new List<SvgStep>();
     }
 
@@ -217,8 +219,11 @@ namespace Arrow
         // only at 0 0, as the user's files are: another origin would draw the shape shifted
         static readonly Regex ViewBox = new Regex(@"viewBox=""\s*0[\s,]+0[\s,]+([-+0-9.eE]+)[\s,]+([-+0-9.eE]+)\s*""");
         static readonly Regex PathData = new Regex(@"\sd=""([^""]*)""");
-        // a command, a number, or anything else (which makes the path unreadable)
-        static readonly Regex PathToken = new Regex(@"([A-Za-z])|([-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?)|([^\s,])");
+        // what a fill of the paths alone would draw wrong: transforms, other shapes, stroke-only icons
+        static readonly Regex SvgUnsupported = new Regex(@"transform=|<(circle|rect|ellipse|line|polyline|polygon|use|image|text)[\s/>]|\bfill\s*=\s*[""']none[""']");
+        static readonly Regex SvgEvenOdd = new Regex(@"fill-rule\s*(=\s*[""']\s*|:\s*)evenodd");
+        const string SvgCommands = "MLHVCSQTAZ";
+        static readonly int[] SvgArgCount = { 2, 2, 1, 1, 6, 4, 4, 2, 7, 0 };
 
         static string Num(double n) { return n.ToString(CultureInfo.CurrentCulture); }
         static string Get(Dictionary<string, string> map, string key) { string v; return key != null && map.TryGetValue(key, out v) ? v : null; }
@@ -477,40 +482,148 @@ namespace Arrow
             return false;
         }
 
-        // The sidebar's Types icons: only what the user's files use (absolute M, L, C, Z in every d="..."), so a file drawn
-        // with anything else gives null and the sidebar shows its glyph instead of a wrong shape
+        // The sidebar's Types icons: every d="..." as absolute M, L, C, Z steps. A file this can't draw right (bad path data,
+        // transforms, other shapes, fill="none") gives null and the sidebar shows its glyph instead of a wrong shape.
         public static SvgShape ParseSvg(string svg)
         {
-            var vb = ViewBox.Match(svg ?? "");
+            svg = svg ?? "";
+            var vb = ViewBox.Match(svg);
             double w, h;
             if (!vb.Success || !double.TryParse(vb.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out w)
-                || !double.TryParse(vb.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out h) || w <= 0 || h <= 0) return null;
-            var shape = new SvgShape { Width = w, Height = h };
+                || !double.TryParse(vb.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out h) || w <= 0 || h <= 0
+                || SvgUnsupported.IsMatch(svg)) return null;
+            // SVG's default fill rule is nonzero
+            var shape = new SvgShape { Width = w, Height = h, EvenOdd = SvgEvenOdd.IsMatch(svg) };
             foreach (Match d in PathData.Matches(svg))
-            {
-                var op = '\0';
-                var nums = new List<double>();
-                // the trailing M only ends the last command; a path must start with M
-                foreach (Match t in PathToken.Matches(d.Groups[1].Value + " M"))
-                {
-                    if (t.Groups[3].Success) return null;
-                    if (t.Groups[2].Success) { nums.Add(double.Parse(t.Value, NumberStyles.Float, CultureInfo.InvariantCulture)); continue; }
-                    if (op == '\0' ? t.Value != "M" || nums.Count != 0 : !AddSteps(shape.Steps, op, nums)) return null;
-                    op = t.Value[0];
-                    nums.Clear();
-                }
-            }
+                if (!AddPath(shape.Steps, d.Groups[1].Value)) return null;
             return shape.Steps.Count == 0 ? null : shape;
         }
 
-        // One step per group of numbers: M and L take pairs (more pairs after M are lines), C sixes, Z none
-        static bool AddSteps(List<SvgStep> steps, char op, List<double> nums)
+        // One path's data (SVG 1.1 §8.3), absolute or relative: H and V become lines, S, Q, T and A become cubics
+        static bool AddPath(List<SvgStep> steps, string d)
         {
-            var n = op == 'M' || op == 'L' ? 2 : op == 'C' ? 6 : op == 'Z' ? 0 : -1;
-            if (n < 0 || (n == 0 ? nums.Count != 0 : nums.Count == 0 || nums.Count % n != 0)) return false;
-            if (n == 0) steps.Add(new SvgStep { Op = 'Z', Args = new double[0] });
-            for (var i = 0; i < nums.Count; i += n) steps.Add(new SvgStep { Op = op == 'M' && i > 0 ? 'L' : op, Args = nums.GetRange(i, n).ToArray() });
+            char op = '\0', prev = '\0';
+            double x = 0, y = 0, sx = 0, sy = 0, cx = 0, cy = 0, x1, y1, ex, ey; // pen, subpath start, last control point
+            var a = new double[7];
+            for (var i = Skip(d, 0); i < d.Length; i = Skip(d, i))
+            {
+                var letter = char.IsLetter(d[i]);
+                if (letter) op = d[i++];
+                // numbers without a letter repeat the command; pairs after a move are lines
+                else if (op == 'M' || op == 'm') op = op == 'M' ? 'L' : 'l';
+                var up = char.ToUpperInvariant(op);
+                var n = SvgCommands.IndexOf(up);
+                // a path starts with a move; Z takes no numbers
+                if (n < 0 || prev == '\0' && up != 'M' || !letter && up == 'Z') return false;
+                if (!Args(d, ref i, a, SvgArgCount[n], up == 'A')) return false;
+                double ox = char.IsLower(op) ? x : 0, oy = char.IsLower(op) ? y : 0;
+                switch (up)
+                {
+                    case 'M': sx = x = ox + a[0]; sy = y = oy + a[1]; Step(steps, 'M', x, y); break;
+                    case 'L': x = ox + a[0]; y = oy + a[1]; Step(steps, 'L', x, y); break;
+                    case 'H': x = ox + a[0]; Step(steps, 'L', x, y); break;
+                    case 'V': y = oy + a[0]; Step(steps, 'L', x, y); break;
+                    // after Z the pen is back at the subpath's start
+                    case 'Z': Step(steps, 'Z'); x = sx; y = sy; break;
+                    case 'C':
+                    case 'S':
+                        // S's first control point mirrors the last C or S one, else it is the pen
+                        var j = up == 'C' ? 2 : 0;
+                        x1 = j > 0 ? ox + a[0] : prev == 'C' || prev == 'S' ? 2 * x - cx : x;
+                        y1 = j > 0 ? oy + a[1] : prev == 'C' || prev == 'S' ? 2 * y - cy : y;
+                        cx = ox + a[j]; cy = oy + a[j + 1]; x = ox + a[j + 2]; y = oy + a[j + 3];
+                        Step(steps, 'C', x1, y1, cx, cy, x, y);
+                        break;
+                    case 'Q':
+                    case 'T':
+                        // T's control point mirrors the last Q or T one, else it is the pen
+                        if (up == 'Q') { cx = ox + a[0]; cy = oy + a[1]; }
+                        else if (prev == 'Q' || prev == 'T') { cx = 2 * x - cx; cy = 2 * y - cy; }
+                        else { cx = x; cy = y; }
+                        ex = ox + a[up == 'Q' ? 2 : 0]; ey = oy + a[up == 'Q' ? 3 : 1];
+                        // a quadratic is the cubic with control points 2/3 of the way from each end to its control point
+                        Step(steps, 'C', x + 2 * (cx - x) / 3, y + 2 * (cy - y) / 3, ex + 2 * (cx - ex) / 3, ey + 2 * (cy - ey) / 3, ex, ey);
+                        x = ex; y = ey;
+                        break;
+                    case 'A':
+                        ex = ox + a[5]; ey = oy + a[6];
+                        Arc(steps, x, y, a[0], a[1], a[2], a[3] != 0, a[4] != 0, ex, ey);
+                        x = ex; y = ey;
+                        break;
+                }
+                prev = up;
+            }
             return true;
         }
+
+        // An arc as cubics of at most 90° each, from SVG 1.1's endpoint-to-center conversion (implementation notes F.6.5, F.6.6)
+        static void Arc(List<SvgStep> steps, double x0, double y0, double rx, double ry, double degrees, bool large, bool sweep, double x, double y)
+        {
+            if (x0 == x && y0 == y) return;
+            rx = Math.Abs(rx); ry = Math.Abs(ry);
+            if (rx == 0 || ry == 0) { Step(steps, 'L', x, y); return; }
+            double cos = Math.Cos(degrees * Math.PI / 180), sin = Math.Sin(degrees * Math.PI / 180);
+            double dx = (x0 - x) / 2, dy = (y0 - y) / 2, px = cos * dx + sin * dy, py = cos * dy - sin * dx;
+            // radii too small to reach the end point grow until they just do
+            var scale = px * px / (rx * rx) + py * py / (ry * ry);
+            if (scale > 1) { rx *= Math.Sqrt(scale); ry *= Math.Sqrt(scale); }
+            double rx2 = rx * rx, ry2 = ry * ry, sum = rx2 * py * py + ry2 * px * px;
+            var k = Math.Sqrt(Math.Max(0, (rx2 * ry2 - sum) / sum)) * (large == sweep ? -1 : 1);
+            double pcx = k * rx * py / ry, pcy = -k * ry * px / rx;
+            double cx = cos * pcx - sin * pcy + (x0 + x) / 2, cy = sin * pcx + cos * pcy + (y0 + y) / 2;
+            var from = Math.Atan2((py - pcy) / ry, (px - pcx) / rx);
+            var turn = Math.Atan2((-py - pcy) / ry, (-px - pcx) / rx) - from;
+            if (sweep && turn < 0) turn += 2 * Math.PI;
+            else if (!sweep && turn > 0) turn -= 2 * Math.PI;
+            var n = Math.Max(1, (int)Math.Ceiling(Math.Abs(turn) / (Math.PI / 2) - 1e-9));
+            var part = turn / n;
+            var t = 4.0 / 3 * Math.Tan(part / 4);
+            // the ellipse's point and tangent at angle e
+            Func<double, double[]> at = e => new[] {
+                cx + rx * Math.Cos(e) * cos - ry * Math.Sin(e) * sin, cy + rx * Math.Cos(e) * sin + ry * Math.Sin(e) * cos,
+                -rx * Math.Sin(e) * cos - ry * Math.Cos(e) * sin, -rx * Math.Sin(e) * sin + ry * Math.Cos(e) * cos };
+            for (var s = 0; s < n; s++)
+            {
+                double[] p = at(from + s * part), q = at(from + (s + 1) * part);
+                // the last segment ends exactly at the given point
+                if (s == n - 1) { q[0] = x; q[1] = y; }
+                Step(steps, 'C', p[0] + t * p[2], p[1] + t * p[3], q[0] - t * q[2], q[1] - t * q[3], q[0], q[1]);
+            }
+        }
+
+        // count numbers after a command; an arc's flags (4th and 5th) are one '0' or '1' each, so "01.5" is 0, 1, .5
+        static bool Args(string d, ref int i, double[] a, int count, bool arc)
+        {
+            for (var k = 0; k < count; k++)
+            {
+                i = Skip(d, i);
+                if (!arc || k < 3 || k > 4) { if (!Number(d, ref i, out a[k])) return false; }
+                else if (i < d.Length && (d[i] == '0' || d[i] == '1')) a[k] = d[i++] - '0';
+                else return false;
+            }
+            return true;
+        }
+
+        // sign, digits, one dot, exponent: a number ends where it can't go on, so "1.5.5" is 1.5 .5 and "-1-2" is -1 -2
+        static bool Number(string d, ref int i, out double n)
+        {
+            var start = i;
+            n = 0;
+            if (i < d.Length && (d[i] == '+' || d[i] == '-')) i++;
+            var digits = Digits(d, ref i);
+            if (i < d.Length && d[i] == '.') { i++; digits += Digits(d, ref i); }
+            if (digits == 0) return false;
+            if (i < d.Length && (d[i] == 'e' || d[i] == 'E'))
+            {
+                i++;
+                if (i < d.Length && (d[i] == '+' || d[i] == '-')) i++;
+                if (Digits(d, ref i) == 0) return false;
+            }
+            return double.TryParse(d.Substring(start, i - start), NumberStyles.Float, CultureInfo.InvariantCulture, out n);
+        }
+
+        static int Digits(string d, ref int i) { var start = i; while (i < d.Length && d[i] >= '0' && d[i] <= '9') i++; return i - start; }
+        static int Skip(string d, int i) { while (i < d.Length && (char.IsWhiteSpace(d[i]) || d[i] == ',')) i++; return i; }
+        static void Step(List<SvgStep> steps, char op, params double[] args) { steps.Add(new SvgStep { Op = op, Args = args }); }
     }
 }

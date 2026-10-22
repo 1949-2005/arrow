@@ -25,7 +25,7 @@ after(async () => {
 test('the ported helpers pass Tests.cs', win, async () => {
   const exe = path.join(await temp(), 'Tests.exe');
   await compileTests(exe);
-  const r = spawnSync(exe, [], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const r = spawnSync(exe, [path.join(repo, 'assets', 'types', 'programs.svg')], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 

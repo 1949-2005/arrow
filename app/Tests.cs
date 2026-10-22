@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 
@@ -63,7 +64,8 @@ namespace Arrow
     'Programs': ['exe','msi','apk','dmg','deb','rpm','appimage']}
 }");
 
-        public static int Main()
+        // args: the repo's assets/types/programs.svg, passed by app.test.js since Tests.exe runs from a temp folder
+        public static int Main(string[] args)
         {
             Thread.CurrentThread.CurrentCulture = Inv;
             var state = State.From(Json.Parse(StateJson));
@@ -263,22 +265,43 @@ namespace Arrow
             Eq(Core.IconExt("v1.2 final", "Video"), ".mp4", "a dot inside the name is no extension");
             Eq(Core.IconExt("https://x.com/", "Other") + "/" + Core.IconExt(null, "Music"), "/.mp3", "icon ext of a bare URL and of nothing");
 
-            // the sidebar's SVG Types icons: absolute M, L, C, Z only, else null (the glyph)
+            // the sidebar's SVG Types icons: any path data as absolute M, L, C, Z steps (rounded to 4 decimals here), else null (the glyph)
             Func<string, string> svg = d =>
             {
                 var s = Core.ParseSvg("<svg viewBox=\"0 0 128 96\" fill-rule=\"evenodd\"><path d=\"" + d + "\"/></svg>");
                 return s == null ? null : s.Width.ToString(Inv) + "x" + s.Height.ToString(Inv) + ": "
-                    + L(s.Steps.Select(p => p.Op + string.Concat(p.Args.Select(a => " " + a.ToString("R", Inv)))));
+                    + L(s.Steps.Select(p => p.Op + string.Concat(p.Args.Select(a => " " + Math.Round(a, 4).ToString("R", Inv)))));
             };
             Eq(svg("M1 2L3.5 4C5 6 7 8 9 10.25Z"), "128x96: M 1 2 | L 3.5 4 | C 5 6 7 8 9 10.25 | Z", "svg path");
             Eq(svg("M0 0 10 0 10 10Z M20 20L30 30 40 40Z"), "128x96: M 0 0 | L 10 0 | L 10 10 | Z | M 20 20 | L 30 30 | L 40 40 | Z", "svg lines after M and L");
-            Eq(svg("m0 0l10 10z"), null, "svg relative commands");
-            Eq(svg("M0 0L10 10H5Z"), null, "svg another command");
+            Eq(svg("m0 0l10 10z"), "128x96: M 0 0 | L 10 10 | Z", "svg relative commands");
+            Eq(svg("m1 2 3 4c1 1 2 2 3 3z l1 1m2 2"), "128x96: M 1 2 | L 4 6 | C 5 7 6 8 7 9 | Z | L 2 3 | M 4 5", "svg relative, the pen carried and back at the start after z");
+            Eq(svg("M0 0L10 10H5Z"), "128x96: M 0 0 | L 10 10 | L 5 10 | Z", "svg H");
+            Eq(svg("M1 1H5V7h-2v-3"), "128x96: M 1 1 | L 5 1 | L 5 7 | L 3 7 | L 3 4", "svg H and V");
+            Eq(svg("M0 0C1 2 3 4 5 5S9 8 10 10"), "128x96: M 0 0 | C 1 2 3 4 5 5 | C 7 6 9 8 10 10", "svg S mirrors the last control point");
+            Eq(svg("M0 0S1 2 3 4"), "128x96: M 0 0 | C 0 0 1 2 3 4", "svg S without a curve before");
+            Eq(svg("M0 0Q3 6 6 0T12 0"), "128x96: M 0 0 | C 2 4 4 4 6 0 | C 8 -4 10 -4 12 0", "svg Q and T as cubics");
+            Eq(svg("M1 0A1 1 0 0 1 0 1"), "128x96: M 1 0 | C 1 0.5523 0.5523 1 0 1", "svg quarter-circle arc");
+            Eq(svg("M0 0A1 1 0 0 1 2 0"), "128x96: M 0 0 | C 0 -0.5523 0.4477 -1 1 -1 | C 1.5523 -1 2 -0.5523 2 0", "svg half-circle arc");
+            Eq(svg("M1 1A0 5 0 0 1 4 5A2 2 0 0 1 4 5Z"), "128x96: M 1 1 | L 4 5 | Z", "svg arc of radius 0 and arc to its own start");
+            Ok(svg("M0 0a1 1 0 01.5.5") != null && svg("M0 0a1 1 0 01.5.5") == svg("M0 0a1 1 0 0 1 .5 .5"), "svg packed arc flags");
+            Eq(svg("M1.5.5-1-2"), "128x96: M 1.5 0.5 | L -1 -2", "svg numbers split at a second dot and a sign");
             Eq(svg("M0 0L10Z"), null, "svg wrong number count");
             Eq(svg("M0 0C1 2 3 4 5Z"), null, "svg short curve");
+            Eq(svg("L1 1"), null, "svg not starting with a move");
+            Eq(svg("M0 0Z 1 1"), null, "svg numbers after Z");
+            Eq(svg("M0 0a1 1 0 2 1 1 1"), null, "svg arc flag not 0 or 1");
             Eq(Core.ParseSvg("<svg><path d=\"M0 0L1 1Z\"/></svg>"), null, "svg without viewBox");
             Eq(Core.ParseSvg("<svg viewBox=\"10 0 128 128\"><path d=\"M0 0L1 1Z\"/></svg>"), null, "svg viewBox not at 0 0");
             Eq(Core.ParseSvg("<svg viewBox=\"0 0 128 128\"></svg>"), null, "svg without path");
+            Func<string, SvgShape> file = rest => Core.ParseSvg("<svg viewBox=\"0 0 48 48\"" + rest + "</svg>");
+            Eq(file(" fill-rule=\"evenodd\"><path d=\"M0 0L1 1Z\"/>").EvenOdd, true, "svg fill-rule evenodd");
+            Eq(file("><path style=\"fill-rule: evenodd\" d=\"M0 0L1 1Z\"/>").EvenOdd, true, "svg fill-rule evenodd in a style");
+            Eq(file("><path d=\"M0 0L1 1Z\"/>").EvenOdd, false, "svg nonzero by default");
+            Eq(file("><path transform=\"scale(2)\" d=\"M0 0L1 1Z\"/>"), null, "svg with a transform");
+            Eq(file("><circle cx=\"1\" cy=\"1\" r=\"1\"/><path d=\"M0 0L1 1Z\"/>"), null, "svg with a circle");
+            Eq(file(" fill=\"none\" stroke=\"#000\"><path d=\"M0 0L1 1Z\"/>"), null, "svg stroke-only");
+            if (args.Length > 0) Ok(Core.ParseSvg(File.ReadAllText(args[0])) != null, "svg the real " + Path.GetFileName(args[0]));
 
             // the user's regional format
             Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");

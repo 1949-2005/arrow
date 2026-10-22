@@ -65,7 +65,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - The **Download File Info** window opens (see below). Pick where the file goes, then click **Start Download**.
 - To add several links at once, click **Add several links**. "Save as" is used only for a single link. If you tick "Start later (scheduled)", the downloads are added as scheduled.
 - Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Arrow tells you how many links that makes before it adds them. At most 1000 at a time.
-- The left side shows the downloads by status (All, Active, Finished, Failed, Scheduled) and by file type (Video, Music, Documents, Programs, Compressed, Other). The search field filters by name or link.
+- The left side shows the downloads by status (All, Active, Finished, Failed, Scheduled) and by file type (Video, Music, Programs, Documents, Compressed, Other). The search field filters by name or link.
 - Select like in a file list: click, Ctrl+click, Shift+click, Ctrl+A. Enter or a double-click opens a finished file, or the progress window of an unfinished one. Space pauses or resumes. Delete removes. Right-click for more.
 - The right side shows the selected download: progress, speed, time left, connections, and buttons for Pause or Resume, Open, Show in folder, Copy link, Change link (for a paused or failed download whose link expired) and Remove. When you remove finished downloads, Arrow asks if it should also delete the files.
 - **Options** holds the settings. **Scheduler** opens them at "Start scheduled downloads at".
