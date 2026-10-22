@@ -1,6 +1,6 @@
 # 03 Engine: editable categories
 
-Status: open
+Status: in progress
 Blocked by: 02
 Tier: medium
 

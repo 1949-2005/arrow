@@ -84,6 +84,8 @@ const server = http.createServer(async (req, res) => {
     // The native app shows its window when `open` in /api/state rises
     if (url === '/api/open') { opens++; return send(res, 200, { ok: true }); }
     if (url === '/api/pause-all') { mgr.pauseAll(); return send(res, 200, { ok: true }); }
+    // The Scheduler: add, update, remove, start and stop queues (not for extensions: a queue's whenDone can shut down)
+    if (url === '/api/queues') return send(res, 200, mgr.queues(body));
     if (url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
     if (url === '/api/settings') {
       mgr.update(body);

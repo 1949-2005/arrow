@@ -64,7 +64,7 @@ test('extensions may only ping, add, list YouTube formats and show the window', 
   const site = await call('/api/formats', { origin: 'https://evil.example', body: { url: 'https://youtu.be/jNQXAC9IVRw' } });
   assert.equal(site.status, 403, 'other websites never reach it');
   const forbidden = [['/api/settings', { dir, startup: true, whenDone: 'shutdown' }], ['/api/action', { id: 'x', op: 'open' }], ['/api/state'],
-    ['/api/pause-all', {}], ['/api/quit', {}], ['/api/confirm', { id: 'x', action: 'start', path: 'C:\\Users\\Public\\a.exe' }],
+    ['/api/pause-all', {}], ['/api/quit', {}], ['/api/queues', { op: 'add', name: 'From a page' }], ['/api/confirm', { id: 'x', action: 'start', path: 'C:\\Users\\Public\\a.exe' }],
     ['/api/state?x=1']];
   for (const [url, body] of forbidden) {
     const res = await call(url, { origin, body });
@@ -139,7 +139,7 @@ test('extension downloads wait as pending only while the native app is open; it 
   assert.equal(bad.status, 400);
   assert.match((await bad.json()).error, /full path/);
   assert.equal((await call('/api/confirm', { origin: base, body: { id, action: 'later', path: path.join(dir, 'Later', 'f.zip') } })).status, 200);
-  assert.equal((await find()).status, 'paused');
+  assert.deepEqual([(await find()).status, (await find()).queue], ['scheduled', 'main'], 'Later waits in the main queue');
   assert.equal((await find()).file, path.join(dir, 'Later', 'f.zip'));
   assert.ok(existsSync(path.join(dir, 'Later')), 'folder created');
   const { id: id2 } = await (await call('/api/add', { body: { url: 'http://127.0.0.1:1/z/g.zip', confirm: true } })).json();
@@ -223,4 +223,37 @@ test('request bodies keep UTF-8 intact', async () => {
   assert.equal((await call('/api/add', { body: { ...scheduled, title } })).status, 200);
   const { downloads } = await (await call('/api/state')).json();
   assert.ok(downloads.some(d => d.name === title), JSON.stringify(downloads.map(d => d.name)));
+});
+
+test('queues through the API: add, update, remove, start, stop; actions queue, up and down; view() counts', async () => {
+  const queues = async body => {
+    const res = await call('/api/queues', { body });
+    return [res.status, await res.json()];
+  };
+  const state = async () => (await call('/api/state')).json();
+  const [, { id }] = await queues({ op: 'add', name: 'API queue' });
+  const [dupStatus, dup] = await queues({ op: 'add', name: 'api QUEUE' });
+  assert.deepEqual([dupStatus, dup], [400, { error: 'There is already a queue named "api QUEUE"' }]);
+  assert.deepEqual(await queues({ op: 'update', id, maxActive: 2, startAt: '03:00', days: [5] }), [200, { ok: true }]);
+  assert.deepEqual((await state()).queues.find(q => q.id === id),
+    { id, name: 'API queue', maxActive: 2, startAt: '03:00', days: [5], stopAt: '', retries: 0, whenDone: '', running: false, waiting: 0, active: 0, total: 0 });
+  assert.equal((await queues({ op: 'remove', id: 'main' }))[0], 400);
+
+  const add = async () => (await (await call('/api/add', { body: { ...scheduled, queue: id } })).json()).id;
+  const a = await add(), b = await add();
+  assert.deepEqual(await (await call('/api/action', { body: { id: b, op: 'up' } })).json(), { ok: true });
+  const mine = async () => (await state()).downloads.filter(d => d.queue === id);
+  assert.deepEqual((await mine()).map(d => d.id), [b, a]);
+  assert.deepEqual(await queues({ op: 'start', id }), [200, { ok: true }]);
+  let q = (await state()).queues.find(x => x.id === id);
+  assert.deepEqual([q.running, q.active, q.waiting, q.total], [true, 2, 0, 2]);
+  assert.deepEqual(await queues({ op: 'stop', id }), [200, { ok: true }]);
+  assert.deepEqual((await mine()).map(d => d.status), ['scheduled', 'scheduled']);
+  await call('/api/action', { body: { id: a, op: 'queue', queue: null } });
+  assert.deepEqual((await mine()).map(d => d.id), [b]);
+  assert.equal((await state()).downloads.find(d => d.id === a).status, 'paused');
+  assert.deepEqual(await queues({ op: 'remove', id }), [200, { ok: true }]);
+  assert.ok(!(await state()).queues.some(x => x.id === id));
+  assert.equal((await state()).downloads.find(d => d.id === b).queue, 'main', 'its downloads go to the main queue');
+  for (const x of [a, b]) await call('/api/action', { body: { id: x, op: 'remove' } });
 });

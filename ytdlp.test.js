@@ -193,7 +193,7 @@ test('confirm: the format sets the extension; keys this video does not offer are
   const folder = path.join(dir, 'yt');
   const v = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
   await mgr.confirm(v.id, { action: 'later', path: path.join(folder, 'Clip.mp4'), format: 'webm:303+251' });
-  assert.deepEqual([v.format, v.name, v.status], ['webm:303+251', 'Clip.webm', 'paused']);
+  assert.deepEqual([v.format, v.name, v.status], ['webm:303+251', 'Clip.webm', 'scheduled']);
   assert.equal(mgr.view().downloads.find(x => x.id === v.id).format, 'webm:303+251');
   const w = mgr.add({ url: 'https://youtu.be/okConfirm01', confirm: true });
   await mgr.confirm(w.id, { action: 'later', path: path.join(folder, 'Song'), format: 'm4a:140' });

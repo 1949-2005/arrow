@@ -14,6 +14,22 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || 0));
 const describe = t => String(t ?? '').replace(/\p{Cc}/gu, '').trim().slice(0, 300).trim() || null;
 const DUPLICATES = ['ask', 'number', 'replace', 'resume'];
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAIN = 'main', MAIN_NAME = 'Main download queue';
+const cleanName = n => typeof n === 'string' ? n.replace(/\p{Cc}/gu, '').trim() : '';
+// A queue's fields: s over q, checked like the other settings (anything wrong falls back to the default)
+const queueFields = (q, s = {}) => {
+  const v = k => s[k] ?? q[k];
+  return {
+    id: q.id, name: q.name,
+    maxActive: clamp(v('maxActive'), 1, 20),
+    startAt: HHMM.test(v('startAt')) ? v('startAt') : '',
+    days: Array.isArray(v('days')) ? [...new Set(v('days').filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort() : [], // Sunday = 0; empty = every day
+    stopAt: HHMM.test(v('stopAt')) ? v('stopAt') : '',
+    retries: clamp(v('retries'), 0, 10),
+    whenDone: ['sleep', 'shutdown'].includes(v('whenDone')) ? v('whenDone') : '',
+  };
+};
 
 export const CATEGORIES = {
   Video: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', '3gp'],
@@ -69,9 +85,12 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, scheduleAt: '', categories: true, clipboard: false, folders: {}, duplicates: 'ask', showComplete: true };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, folders: {}, duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
   list = [];
   running = new Map();
+  // Running queues, never saved: id → {tries: download id → retries used this run, waiting: download id → retry time, worked}
+  runs = new Map();
+  fired = new Map(); // '<queue id> start|stop' → the day and time it last fired, so each fires once a day
   limiter = new Limiter();
   stallMs = 30000;
   dirty = false;
@@ -102,8 +121,13 @@ export class Manager {
       if (e.code !== 'ENOENT') throw e; // never overwrite a state file we could not read
     }
     this.list = this.list.filter(d => d.status !== 'pending'); // its Download File Info window is gone
-    for (const d of this.list) if (d.status === 'downloading') d.status = 'queued';
+    for (const d of this.list) {
+      if (d.status === 'downloading') d.status = 'queued';
+      if (d.status === 'scheduled') d.queue ??= MAIN; // from before queues
+      if (d.queue && d.status === 'queued') d.status = 'scheduled'; // no queue runs after a restart: as if it was stopped
+    }
     this.update({});
+    for (const d of this.list) if (d.queue && !this.queue(d.queue)) d.queue = MAIN; // its queue was dropped as broken
     setInterval(() => this.tick(), 1000).unref();
   }
 
@@ -118,12 +142,24 @@ export class Manager {
     t.showComplete = !!(s.showComplete ?? t.showComplete);
     const dup = s.duplicates ?? t.duplicates;
     t.duplicates = DUPLICATES.includes(dup) ? dup : 'ask';
-    if (s.scheduleAt != null) t.scheduleAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(s.scheduleAt) ? s.scheduleAt : '';
     if (s.categories != null) t.categories = !!s.categories;
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
     // "Remember this folder for <Category>": category → absolute folder; anything else is dropped (also from a loaded state.json)
     const f = s.folders ?? t.folders;
     t.folders = Object.fromEntries(Object.entries(f && typeof f === 'object' ? f : {}).filter(([k, v]) => isCategory(k) && typeof v === 'string' && path.isAbsolute(v)));
+    // Queues change through queues(), never here; this checks a loaded state.json: the main queue first and always there,
+    // the others with a unique id and name. The old single start time (also from an older app) is the main queue's.
+    const old = Array.isArray(t.queues) ? t.queues : [];
+    const ids = new Set([MAIN]), names = new Set([MAIN_NAME.toLowerCase()]);
+    t.queues = [queueFields({ ...old.find(q => q?.id === MAIN), id: MAIN, name: MAIN_NAME }, { startAt: s.scheduleAt ?? t.scheduleAt })];
+    for (const q of old) {
+      const name = cleanName(q?.name);
+      if (typeof q?.id !== 'string' || ids.has(q.id) || !name || name.length > 40 || names.has(name.toLowerCase())) continue; // the main one, or a broken or doubled entry
+      ids.add(q.id);
+      names.add(name.toLowerCase());
+      t.queues.push(queueFields({ ...q, name }));
+    }
+    delete t.scheduleAt;
     if (s.whenDone != null) {
       this.whenDone = ['sleep', 'shutdown'].includes(s.whenDone) ? s.whenDone : '';
       if (!this.whenDone) this.powerAt = 0; // Cancel stops any countdown at once, also one a download started
@@ -135,12 +171,15 @@ export class Manager {
 
   // confirm: the extension's downloads wait as 'pending' until the Download File Info window starts them
   // format: a key from formats(); checked against the video's list before yt-dlp gets it (confirm(), downloadVideo())
-  add({ url, name, title, headers, scheduled, quality, format, confirm, description }) {
+  // scheduled: into a queue (default the main one) as 'scheduled'
+  add({ url, name, title, headers, scheduled, quality, format, confirm, description, queue }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
     if (yt && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
     if (yt && format != null && !FORMAT_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`);
+    const q = scheduled && !confirm ? String(queue ?? MAIN) : null;
+    if (q && !this.queue(q)) throw new Error('queue not found');
     const d = {
       id: crypto.randomUUID(),
       url: yt ? `https://www.youtube.com/watch?v=${yt}` : u.href,
@@ -153,7 +192,8 @@ export class Manager {
       kind: yt ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
       ...(yt && { quality }),
       ...(yt && format != null && { format }),
-      status: confirm ? 'pending' : scheduled ? 'scheduled' : 'queued',
+      status: confirm ? 'pending' : q ? 'scheduled' : 'queued',
+      queue: q,
       added: Date.now(),
       description: describe(description),
     };
@@ -236,7 +276,8 @@ export class Manager {
   // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
   // format: a key from the video's list (fetched again when the cache expired); quality: a legacy choice.
   // replace: the duplicate's id (probe.duplicate), which goes and leaves its file to this one; rememberDuplicates: the Duplicate window's "remember".
-  async confirm(id, { action, path: file, quality, format, remember, description, replace, rememberDuplicates } = {}) {
+  // later: into queue (default the main one) as 'scheduled'; startQueue starts that queue.
+  async confirm(id, { action, path: file, quality, format, remember, description, replace, rememberDuplicates, queue, startQueue } = {}) {
     const gone = 'This download is no longer waiting to start.';
     const d = this.list.find(x => x.id === id);
     if (d?.status !== 'pending') throw new Error(gone);
@@ -247,6 +288,8 @@ export class Manager {
       return;
     }
     if (action !== 'start' && action !== 'later') throw new Error('unknown action');
+    const q = action === 'later' ? String(queue ?? MAIN) : null;
+    if (q && !this.queue(q)) throw new Error('queue not found');
     const video = d.kind === 'video';
     if (video && quality != null && !QUALITIES.includes(String(quality))) throw new Error(`unknown quality "${quality}"`);
     const p = String(file ?? '').trim();
@@ -275,14 +318,16 @@ export class Manager {
     if (description !== undefined) d.description = describe(description);
     if (isCategory(remember)) this.settings.folders[remember] = path.dirname(d.file);
     delete d.probe;
-    d.status = action === 'start' ? 'queued' : 'paused';
+    d.status = action === 'start' ? 'queued' : 'scheduled';
+    d.queue = q && (this.queue(q) ? q : MAIN); // removed while we waited: the main queue takes it, as remove does
     if (action === 'start') d.notify = true; // the app shows its Download complete window for it
     this.dirty = true;
+    if (q && startQueue) this.startQueue(d.queue);
     this.pump();
   }
 
-  // url: for 'url'; description, kb, value: for 'describe', 'limit', 'whenDone'
-  async act(id, op, url, { description, kb, value } = {}) {
+  // url: for 'url'; description, kb, value, queue: for 'describe', 'limit', 'whenDone', 'queue'
+  async act(id, op, url, { description, kb, value, queue } = {}) {
     const d = this.list.find(x => x.id === id);
     if (!d) throw new Error('download not found');
     const ctl = this.running.get(id);
@@ -303,6 +348,24 @@ export class Manager {
       d.limitKB = clamp(kb, 0, 1e7);
     } else if (op === 'whenDone') {
       d.whenDone = ['open', 'sleep', 'shutdown'].includes(value) ? value : '';
+    } else if (op === 'queue') { // into a queue as 'scheduled' (a running one keeps running), or out of every queue (null)
+      if (queue == null) {
+        d.queue = null;
+        if (d.status === 'scheduled') d.status = 'paused';
+      } else {
+        if (!this.queue(queue)) throw new Error('queue not found');
+        if (['pending', 'done', 'removed'].includes(d.status)) throw new Error('only unfinished downloads can go into a queue');
+        d.queue = queue;
+        if (['paused', 'error', 'queued'].includes(d.status)) d.status = 'scheduled';
+      }
+    } else if (op === 'up' || op === 'down') { // a queue's order is the list's order among its downloads
+      if (!d.queue) throw new Error('not in a queue');
+      const same = this.list.filter(x => x.queue === d.queue);
+      const o = same[same.indexOf(d) + (op === 'up' ? -1 : 1)];
+      if (o) {
+        const i = this.list.indexOf(d), j = this.list.indexOf(o);
+        [this.list[i], this.list[j]] = [o, d];
+      }
     } else if (op === 'remove' || op === 'removeFile') {
       const wasDone = d.status === 'done';
       if (ctl) { d.status = 'removed'; ctl.ac.abort(); await ctl.done; }
@@ -315,18 +378,87 @@ export class Manager {
     this.pump();
   }
 
-  // Tray "Pause all": running and waiting downloads. Scheduled ones keep their start time.
+  // Tray "Pause all": running queues stop (their downloads wait in them again), other running and waiting downloads pause.
+  // Scheduled ones keep their start time.
   pauseAll() {
+    for (const id of this.runs.keys()) this.stopQueue(id);
     for (const d of this.list) if (['downloading', 'queued'].includes(d.status)) d.status = 'paused';
     for (const ctl of this.running.values()) ctl.ac.abort();
     this.dirty = true;
   }
 
+  // At most maxActive downloads run, and at most a running queue's own maxActive of its downloads.
+  // A queue that is not running holds nothing back: its downloads only run when resumed by hand.
   pump() {
+    const n = {}; // running downloads per queue
+    for (const d of this.list) {
+      if (d.status === 'scheduled' && this.runs.has(d.queue)) d.status = 'queued'; // added to a queue while it runs
+      if (d.queue && this.running.has(d.id)) n[d.queue] = (n[d.queue] ?? 0) + 1;
+    }
     for (const d of this.list) {
       if (this.running.size >= this.settings.maxActive) break;
-      if (d.status === 'queued' && !this.running.has(d.id)) this.start(d); // a paused run may still be stopping
+      if (d.status !== 'queued' || this.running.has(d.id)) continue; // a paused run may still be stopping
+      const q = this.runs.has(d.queue) && this.queue(d.queue);
+      if (q && (n[q.id] ?? 0) >= q.maxActive) continue;
+      if (q) n[q.id] = (n[q.id] ?? 0) + 1;
+      this.start(d);
     }
+  }
+
+  queue(id) {
+    return this.settings.queues.find(q => q.id === id);
+  }
+
+  // A new or changed queue name: 1–40 characters, not another queue's (case does not count)
+  queueName(name, id) {
+    const n = cleanName(name), taken = this.settings.queues.some(q => q.id !== id && q.name.toLowerCase() === n.toLowerCase());
+    if (!n || n.length > 40 || taken) throw new Error(taken ? `There is already a queue named "${n}"` : 'A queue name needs 1 to 40 characters');
+    return n;
+  }
+
+  // The Scheduler (POST /api/queues): add {name, …fields} → {id}; update {id, …fields}; remove, start, stop {id} → {ok}
+  queues({ op, id, ...s } = {}) {
+    const t = this.settings;
+    if (op === 'add') {
+      const q = queueFields({ id: crypto.randomUUID(), name: this.queueName(s.name) }, s);
+      t.queues.push(q);
+      this.dirty = true;
+      return { id: q.id };
+    }
+    const q = this.queue(id);
+    if (!q) throw new Error('queue not found');
+    if (op === 'update') {
+      if (id === MAIN && s.name != null && s.name !== q.name) throw new Error('The main queue keeps its name');
+      Object.assign(q, queueFields({ ...q, name: s.name == null ? q.name : this.queueName(s.name, id) }, s));
+    } else if (op === 'remove') {
+      if (id === MAIN) throw new Error('The main queue cannot be removed');
+      if (this.runs.has(id)) this.stopQueue(id); // its downloads wait in the main queue instead
+      for (const d of this.list) if (d.queue === id) d.queue = MAIN;
+      t.queues.splice(t.queues.indexOf(q), 1);
+    } else if (op === 'start') this.startQueue(id);
+    else if (op === 'stop') this.stopQueue(id);
+    else throw new Error('unknown queue action');
+    this.dirty = true;
+    this.pump();
+    return { ok: true };
+  }
+
+  startQueue(id) {
+    if (!this.queue(id)) throw new Error('queue not found');
+    if (!this.runs.has(id)) this.runs.set(id, { tries: new Map(), waiting: new Map(), worked: false });
+    this.dirty = true;
+    this.pump(); // its 'scheduled' downloads become 'queued' there
+  }
+
+  // No pump() here: Pause all must not start other downloads in between; callers pump
+  stopQueue(id) {
+    this.runs.delete(id);
+    for (const d of this.list) {
+      if (d.queue !== id || !['downloading', 'queued'].includes(d.status)) continue;
+      d.status = 'scheduled'; // paused like Pause, but it stays in the queue
+      this.running.get(d.id)?.ac.abort();
+    }
+    this.dirty = true;
   }
 
   start(d) {
@@ -336,6 +468,8 @@ export class Manager {
     d.status = 'downloading';
     d.lastTry = Date.now();
     d.error = null;
+    const run = this.runs.get(d.queue);
+    if (run) run.worked = true;
     ctl.done = (async () => {
       try {
         await (d.kind === 'hls' ? downloadHls(d, ctl, this) : d.kind === 'video' ? downloadVideo(d, ctl, this) : this.runHttp(d, ctl));
@@ -348,6 +482,12 @@ export class Manager {
         }
       } catch (e) {
         if (d.status === 'downloading') { d.status = 'error'; d.error = e.cause?.message || e.message; }
+        // its queue tries it again in 10 s (tick()), up to the queue's retries in this run
+        const run = this.runs.get(d.queue), tries = run?.tries.get(d.id) ?? 0;
+        if (d.status === 'error' && run && tries < this.queue(d.queue).retries) {
+          run.tries.set(d.id, tries + 1);
+          run.waiting.set(d.id, Date.now() + 10000);
+        }
       }
       this.running.delete(d.id);
       this.dirty = true;
@@ -566,22 +706,40 @@ export class Manager {
     }
   }
 
-  tick() {
+  // now: the clock the queues' start and stop times and retries use (tests pass their own)
+  tick(now = new Date()) {
     const stale = d => d.status === 'pending' && Date.now() - d.added >= this.pendingMs;
     if (this.list.some(stale)) this.list = this.list.filter(d => !stale(d));
     for (const ctl of this.running.values()) {
       ctl.speed = ctl.speed * 0.3 + (ctl.bytes - ctl.last) * 0.7;
       ctl.last = ctl.bytes;
     }
-    const at = this.settings.scheduleAt, now = new Date(), key = now.toDateString() + at;
-    if (at && now.toTimeString().startsWith(at) && this.fired !== key) {
-      this.fired = key;
-      for (const d of this.list) if (d.status === 'scheduled') d.status = 'queued';
-      this.dirty = true;
-      this.pump();
+    // Queues start at startAt on their days and stop at stopAt, each once a day: a start or stop by hand in that minute sticks
+    const hm = now.toTimeString().slice(0, 5), day = now.toDateString();
+    const due = (q, what, at) => at === hm && this.fired.get(q.id + what) !== day + at && this.fired.set(q.id + what, day + at);
+    for (const q of this.settings.queues) {
+      if (due(q, ' start', q.startAt) && (!q.days.length || q.days.includes(now.getDay()))) this.startQueue(q.id);
+      if (due(q, ' stop', q.stopAt) && this.runs.has(q.id)) this.stopQueue(q.id);
     }
-    // Paused and failed downloads don't wait; scheduled ones do once a start time is set.
-    const busy = this.list.some(d => ['downloading', 'queued'].includes(d.status) || (d.status === 'scheduled' && at));
+    for (const [id, run] of this.runs) {
+      for (const [did, at] of run.waiting) {
+        if (+now < at) continue;
+        run.waiting.delete(did);
+        const d = this.list.find(x => x.id === did);
+        if (d?.status === 'error' && d.queue === id) { d.status = 'queued'; this.dirty = true; }
+      }
+    }
+    this.pump();
+    // A running queue with nothing left to do stops; its own whenDone counts down even while other downloads run
+    for (const [id, run] of this.runs) {
+      if (run.waiting.size || this.list.some(d => d.queue === id && ['queued', 'downloading', 'scheduled'].includes(d.status))) continue;
+      this.runs.delete(id);
+      const q = this.queue(id);
+      if (run.worked && q.whenDone) this.countdown(q.whenDone, false); // a queue started with nothing in it does nothing
+    }
+    // Paused and failed downloads don't wait; scheduled ones do when their queue runs or has a start time, and so do retries.
+    const busy = this.list.some(d => ['downloading', 'queued'].includes(d.status) || (d.status === 'scheduled' && (this.runs.has(d.queue) || !!this.queue(d.queue)?.startAt)))
+      || [...this.runs.values()].some(r => r.waiting.size);
     if (this.powerAll && busy) this.powerAt = 0; // new work came in
     if (this.whenDone && !busy && this.worked && (!this.powerAt || this.powerAll)) this.countdown(this.whenDone, true); // the last download just ended
     else if (this.powerAt && Date.now() >= this.powerAt) {
@@ -594,7 +752,7 @@ export class Manager {
     if (this.dirty || this.running.size) this.save();
   }
 
-  // The one 60 s countdown: "When all downloads finish" (all = true) or a download's own whenDone
+  // The one 60 s countdown: "When all downloads finish" (all = true), or a download's or a queue's own whenDone
   countdown(op, all) {
     this.powerOp = op;
     this.powerAll = all;
@@ -635,12 +793,17 @@ export class Manager {
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
           resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, format: d.format, added: d.added, probe: d.probe,
-          description: d.description ?? null, limitKB: d.limitKB ?? 0, whenDone: d.whenDone ?? '', lastTry: d.lastTry ?? null, notify: !!d.notify,
+          description: d.description ?? null, limitKB: d.limitKB ?? 0, whenDone: d.whenDone ?? '', lastTry: d.lastTry ?? null, notify: !!d.notify, queue: d.queue ?? null,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,
           segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos, ctl?.active.has(s) ? 1 : 0]), // 1: a connection works on it now
         };
+      }),
+      queues: this.settings.queues.map(q => {
+        const own = this.list.filter(d => d.queue === q.id);
+        const count = (...st) => own.filter(d => st.includes(d.status)).length;
+        return { ...q, running: this.runs.has(q.id), waiting: count('scheduled', 'queued'), active: count('downloading'), total: own.length };
       }),
       whenDone: this.whenDone, // the status bar's "When done" choice
       powerOp: this.powerAt ? this.powerOp : null, // what the running countdown does: its strip names it

@@ -657,10 +657,10 @@ test('confirm: taken names are numbered, file names are cleaned, bad paths are r
   for (const x of [d, e, f]) await mgr.act(x.id, 'remove');
 });
 
-test('confirm later pauses, cancel removes, and only a pending download can be confirmed', async () => {
+test('confirm later waits in the main queue, cancel removes, and only a pending download can be confirmed', async () => {
   const d = mgr.add({ url: base + '/file.bin', confirm: true });
   await mgr.confirm(d.id, { action: 'later', path: path.join(dir, 'later', 'f.bin') });
-  assert.equal(d.status, 'paused');
+  assert.deepEqual([d.status, d.queue], ['scheduled', 'main']);
   assert.equal(d.probe, undefined);
   await sleep(50);
   assert.ok(!mgr.running.has(d.id), 'later must not start it');
@@ -745,6 +745,252 @@ test('pending downloads are never saved, are dropped on load, and expire after 3
   p.added -= m.pendingMs;
   m.tick();
   assert.deepEqual(m.list, [kept]);
+});
+
+// Queues: never-loaded Managers (no 1 s timer) ticked by hand with their own clock. 2026-10-18 is a Sunday (day 0).
+const clock = (hm, day) => new Date(`2026-10-${18 + day}T${hm}:30`);
+const slow = (m, queue) => { const d = m.add({ url: base + '/slow.bin', scheduled: true, queue }); d.limitKB = 1024; return d; }; // runs for seconds
+const qview = (m, id) => m.view().queues.find(q => q.id === id);
+const removeAll = async m => { for (const x of [...m.list]) await m.act(x.id, 'remove'); };
+
+test('queues: the main one comes first and keeps its name; fields are checked; names are unique; remove sends downloads to the main queue', async () => {
+  const m = new Manager(path.join(dir, 'queues.json'));
+  m.update({ dir: path.join(dir, 'out') });
+  const fields = { maxActive: 1, startAt: '', days: [], stopAt: '', retries: 0, whenDone: '' };
+  assert.deepEqual(m.settings.queues, [{ id: 'main', name: 'Main download queue', ...fields }]);
+  const { id } = m.queues({ op: 'add', name: '  Night ' });
+  assert.ok(id && id !== 'main', 'the engine makes the id');
+  assert.equal(m.queue(id).name, 'Night');
+  for (const name of ['night', 'MAIN download queue', '', ' \n ', 'x'.repeat(41), undefined, 5]) {
+    assert.throws(() => m.queues({ op: 'add', name }), /already a queue|1 to 40/, String(name));
+  }
+  m.queues({ op: 'update', id, maxActive: 50, startAt: '23:30', days: [6, 1, 1, 9, '2', 0], stopAt: '24:00', retries: 3, whenDone: 'shutdown' });
+  assert.deepEqual(m.queue(id), { id, name: 'Night', maxActive: 20, startAt: '23:30', days: [0, 1, 6], stopAt: '', retries: 3, whenDone: 'shutdown' });
+  m.queues({ op: 'update', id, maxActive: 'x', retries: 99, whenDone: 'reboot', name: 'Late night' });
+  assert.deepEqual(m.queue(id), { id, name: 'Late night', maxActive: 1, startAt: '23:30', days: [0, 1, 6], stopAt: '', retries: 10, whenDone: '' }, 'unknown values fall back, the others stay');
+  assert.throws(() => m.queues({ op: 'update', id, name: 'main download queue' }), /already a queue/);
+  assert.throws(() => m.queues({ op: 'update', id: 'main', name: 'Mine' }), /keeps its name/);
+  m.queues({ op: 'update', id: 'main', name: 'Main download queue', maxActive: 2 });
+  assert.equal(m.queue('main').maxActive, 2);
+  assert.throws(() => m.queues({ op: 'remove', id: 'main' }), /cannot be removed/);
+  assert.throws(() => m.queues({ op: 'start', id: 'nope' }), /queue not found/);
+  assert.throws(() => m.queues({ op: 'fly', id }), /unknown queue action/);
+  m.update({ queues: [] });
+  assert.deepEqual(m.settings.queues.map(q => q.id), ['main', id], 'settings cannot replace the queues');
+
+  const a = m.add({ url: base + '/file.bin', scheduled: true, queue: id }), b = m.add({ url: base + '/file.bin', scheduled: true });
+  assert.deepEqual([a.status, a.queue, b.status, b.queue], ['scheduled', id, 'scheduled', 'main']);
+  assert.throws(() => m.add({ url: base + '/file.bin', scheduled: true, queue: 'nope' }), /queue not found/);
+  assert.deepEqual(qview(m, id), { ...m.queue(id), running: false, waiting: 1, active: 0, total: 1 });
+  assert.equal(m.view().downloads.find(x => x.id === a.id).queue, id);
+  m.queues({ op: 'remove', id });
+  assert.deepEqual([a.queue, a.status], ['main', 'scheduled']);
+  assert.deepEqual(m.settings.queues.map(q => q.id), ['main']);
+  assert.equal(qview(m, 'main').total, 2);
+  await removeAll(m);
+});
+
+test('queues: start at HH:MM on its days only, once a day; stop at HH:MM or by hand puts its downloads back to scheduled', async () => {
+  const m = new Manager(path.join(dir, 'clock.json'));
+  m.update({ dir: path.join(dir, 'out'), maxActive: 5 });
+  const { id } = m.queues({ op: 'add', name: 'Night', startAt: '02:00', days: [1, 3], stopAt: '06:00', maxActive: 2 });
+  const a = slow(m, id), b = slow(m, id), other = slow(m, 'main');
+  const st = () => [a.status, b.status];
+  m.tick(clock('02:00', 0)); // Sunday: not one of its days
+  m.tick(clock('01:59', 1));
+  assert.deepEqual(st(), ['scheduled', 'scheduled']);
+  assert.equal(qview(m, id).running, false);
+  m.tick(clock('02:00', 1)); // Monday
+  assert.deepEqual(st(), ['downloading', 'downloading']);
+  assert.deepEqual([qview(m, id).running, qview(m, id).active, other.status], [true, 2, 'scheduled']);
+  m.queues({ op: 'stop', id }); // by hand, in that same minute
+  assert.deepEqual(st(), ['scheduled', 'scheduled']);
+  m.tick(clock('02:00', 1));
+  assert.deepEqual(st(), ['scheduled', 'scheduled'], 'once a day');
+  await until(() => !m.running.size);
+  m.tick(clock('02:00', 3)); // Wednesday
+  assert.deepEqual(st(), ['downloading', 'downloading']);
+  m.tick(clock('06:00', 3));
+  assert.deepEqual(st(), ['scheduled', 'scheduled']);
+  assert.equal(qview(m, id).running, false);
+  await until(() => !m.running.size);
+  m.queues({ op: 'start', id }); // by hand, at any time
+  assert.deepEqual(st(), ['downloading', 'downloading']);
+  m.tick(clock('06:00', 3));
+  assert.deepEqual(st(), ['downloading', 'downloading'], 'the stop time fired already today');
+  await removeAll(m);
+});
+
+test('queues: at most the queue\'s maxActive of its downloads run, within the global maxActive; Resume is not held back by a queue that is not running', async () => {
+  const m = new Manager(path.join(dir, 'active.json'));
+  m.update({ dir: path.join(dir, 'out'), maxActive: 2 });
+  const { id } = m.queues({ op: 'add', name: 'Two', maxActive: 2 });
+  const a = [slow(m, id), slow(m, id), slow(m, id)], x = [slow(m, 'main'), slow(m, 'main')];
+  m.queues({ op: 'start', id });
+  m.queues({ op: 'start', id: 'main' });
+  assert.deepEqual([...a, ...x].map(d => d.status), ['downloading', 'downloading', 'queued', 'queued', 'queued'], 'the global limit');
+  m.update({ maxActive: 10 });
+  assert.deepEqual([...a, ...x].map(d => d.status), ['downloading', 'downloading', 'queued', 'downloading', 'queued'], 'each queue\'s own limit');
+  assert.deepEqual(qview(m, id), { ...m.queue(id), running: true, waiting: 1, active: 2, total: 3 });
+
+  const { id: idle } = m.queues({ op: 'add', name: 'Idle' }); // maxActive 1, not running
+  const h = [slow(m, idle), slow(m, idle)];
+  for (const d of h) await m.act(d.id, 'resume');
+  assert.deepEqual(h.map(d => d.status), ['downloading', 'downloading']);
+  await removeAll(m);
+});
+
+test('queues: the order is the list\'s; up and down swap within the queue; downloads move into and out of queues', async () => {
+  const m = new Manager(path.join(dir, 'order.json'));
+  m.update({ dir: path.join(dir, 'out') });
+  const { id } = m.queues({ op: 'add', name: 'Other' });
+  const a = m.add({ url: base + '/file.bin', scheduled: true }), b = m.add({ url: base + '/file.bin', scheduled: true, queue: id });
+  const c = m.add({ url: base + '/file.bin', scheduled: true }), e = m.add({ url: base + '/file.bin', scheduled: true });
+  const order = q => m.list.filter(d => d.queue === q);
+  await m.act(c.id, 'up');
+  assert.deepEqual(order('main'), [c, a, e]);
+  assert.deepEqual(m.list, [c, b, a, e], 'other downloads keep their place');
+  await m.act(c.id, 'up'); // the first stays first
+  await m.act(b.id, 'down'); // the only one in its queue
+  assert.deepEqual(m.list, [c, b, a, e]);
+  await m.act(c.id, 'down');
+  await m.act(e.id, 'down');
+  assert.deepEqual(order('main'), [a, c, e]);
+
+  await m.act(b.id, 'queue', undefined, { queue: 'main' });
+  assert.deepEqual([b.queue, b.status], ['main', 'scheduled']);
+  await m.act(c.id, 'queue', undefined, { queue: null });
+  assert.deepEqual([c.queue, c.status], [null, 'paused'], 'out of every queue');
+  await assert.rejects(() => m.act(c.id, 'up'), /not in a queue/);
+  await m.act(c.id, 'queue', undefined, { queue: id });
+  assert.deepEqual([c.queue, c.status], [id, 'scheduled'], 'a paused one waits in the queue');
+  await assert.rejects(() => m.act(c.id, 'queue', undefined, { queue: 'nope' }), /queue not found/);
+  await removeAll(m);
+});
+
+test('queues: while a queue runs, a failed download is tried again after 10 s, up to its retries', async () => {
+  const m = new Manager(path.join(dir, 'retry.json'));
+  m.update({ dir: path.join(dir, 'out') });
+  const { id } = m.queues({ op: 'add', name: 'Retry', retries: 2 });
+  const d = m.add({ url: base + '/denied/x.zip', scheduled: true, queue: id }); // 404: fails at once
+  m.queues({ op: 'start', id });
+  const tries = [];
+  for (let i = 0; i < 2; i++) {
+    await until(() => d.status === 'error' && !m.running.size);
+    tries.push(d.lastTry);
+    m.tick(new Date(Date.now() + 9000));
+    assert.equal(d.status, 'error', 'not before 10 s');
+    assert.equal(qview(m, id).running, true, 'a retry still to come keeps the queue running');
+    m.tick(new Date(Date.now() + 10001));
+    assert.notEqual(d.status, 'error', 'tried again');
+  }
+  await until(() => d.status === 'error' && !m.running.size);
+  tries.push(d.lastTry);
+  m.tick(new Date(Date.now() + 10001));
+  assert.equal(d.status, 'error', 'two retries, then it stays failed');
+  assert.equal(new Set(tries).size, 3);
+  assert.equal(qview(m, id).running, false, 'nothing left: the queue stopped');
+
+  const z = m.add({ url: base + '/denied/z.zip', scheduled: true }); // the main queue tries nothing again
+  m.queues({ op: 'start', id: 'main' });
+  await until(() => z.status === 'error' && !m.running.size);
+  m.tick(new Date(Date.now() + 10001));
+  assert.equal(z.status, 'error');
+  await m.act(d.id, 'resume'); // by hand, its queue not running: no retry
+  await until(() => d.status === 'error' && !m.running.size);
+  m.tick(new Date(Date.now() + 10001));
+  assert.equal(d.status, 'error');
+  await removeAll(m);
+});
+
+test("queues: a done queue stops and its whenDone starts the countdown, which new work does not stop; Cancel does", () => withPower(async (m, ops) => {
+  const { id } = m.queues({ op: 'add', name: 'Then sleep', whenDone: 'sleep' });
+  m.queues({ op: 'start', id });
+  m.tick();
+  assert.equal(qview(m, id).running, false, 'an empty queue stops at once');
+  assert.equal(m.view().powerIn, null, 'and does nothing');
+  const a = m.add({ url: base + '/file.bin', scheduled: true, queue: id });
+  m.queues({ op: 'start', id });
+  await finished(a);
+  m.tick();
+  assert.equal(qview(m, id).running, false);
+  assert.equal(m.view().powerOp, 'sleep');
+  const b = m.add({ url: base + '/slow.bin' }); // new work
+  b.limitKB = 1024;
+  m.tick();
+  assert.ok(m.view().powerIn > 0, 'new work does not stop it');
+  await sleep(250);
+  m.tick();
+  assert.deepEqual(ops, ['sleep']);
+  assert.equal(m.view().powerIn, null);
+
+  const c = m.add({ url: base + '/file.bin', scheduled: true, queue: id });
+  m.queues({ op: 'start', id });
+  await finished(c);
+  m.tick();
+  assert.ok(m.view().powerIn > 0);
+  m.update({ whenDone: '' }); // the strip's Cancel
+  await sleep(250);
+  m.tick();
+  assert.deepEqual(ops, ['sleep']);
+  await removeAll(m);
+}));
+
+test('queues: Later goes into the chosen queue and can start it; Pause all stops running queues', async () => {
+  const m = new Manager(path.join(dir, 'later.json'));
+  m.update({ dir: path.join(dir, 'out'), maxActive: 5 });
+  const { id } = m.queues({ op: 'add', name: 'Later' });
+  const p = m.add({ url: base + '/slow.bin', confirm: true });
+  p.limitKB = 1024;
+  await assert.rejects(() => m.confirm(p.id, { action: 'later', path: path.join(dir, 'later2', 'p.bin'), queue: 'nope' }), /queue not found/);
+  assert.equal(p.status, 'pending');
+  await m.confirm(p.id, { action: 'later', path: path.join(dir, 'later2', 'p.bin'), queue: id, startQueue: true });
+  assert.deepEqual([p.queue, p.status, qview(m, id).running], [id, 'downloading', true]);
+  const s = m.add({ url: base + '/file.bin', confirm: true });
+  await m.confirm(s.id, { action: 'start', path: path.join(dir, 'later2', 's.bin'), queue: id });
+  assert.equal(s.queue, null, 'Start Download puts it in no queue');
+  await finished(s);
+
+  const free = m.add({ url: base + '/slow.bin' });
+  free.limitKB = 1024;
+  const later = slow(m, 'main');
+  m.pauseAll();
+  assert.deepEqual([p.status, free.status, later.status, qview(m, id).running], ['scheduled', 'paused', 'scheduled', false]);
+  await until(() => !m.running.size);
+  assert.deepEqual([p.status, free.status], ['scheduled', 'paused'], 'nothing started again');
+  await removeAll(m);
+});
+
+test('queues: migration of the old start time and scheduled downloads; running is not saved', async () => {
+  const file = path.join(dir, 'migrate.json');
+  const dl = (id, status, queue) => ({ id, url: base + '/slow.bin', name: null, title: null, headers: {}, cookieHost: '127.0.0.1', kind: 'http', status, added: 1, limitKB: 1024, ...(queue && { queue }) });
+  await fs.writeFile(file, JSON.stringify({
+    settings: { dir: path.join(dir, 'out'), scheduleAt: '02:30', queues: [{ id: 'main', name: 'Mine', maxActive: 3 }, { id: 'n', name: 'Night', days: [1] }, { id: 'n', name: 'Again' }, { id: 'x', name: 'NIGHT' }, { name: 'No id' }, { id: 'e', name: ' ' }, null] },
+    list: [dl('s', 'scheduled'), dl('q', 'downloading', 'n'), dl('g', 'paused', 'gone')],
+  }));
+  const m = new Manager(file);
+  await m.load();
+  assert.equal(m.settings.scheduleAt, undefined);
+  assert.deepEqual(m.settings.queues, [
+    { id: 'main', name: 'Main download queue', maxActive: 3, startAt: '02:30', days: [], stopAt: '', retries: 0, whenDone: '' },
+    { id: 'n', name: 'Night', maxActive: 1, startAt: '', days: [1], stopAt: '', retries: 0, whenDone: '' },
+  ]);
+  const st = id => m.list.find(d => d.id === id);
+  assert.deepEqual([st('s').queue, st('s').status], ['main', 'scheduled'], 'an old scheduled download waits in the main queue');
+  assert.deepEqual([st('q').queue, st('q').status], ['n', 'scheduled'], 'no queue runs after a restart');
+  assert.deepEqual([st('g').queue, st('g').status], ['main', 'paused']);
+  assert.ok(!m.running.size);
+
+  m.queues({ op: 'start', id: 'n' });
+  assert.equal(st('q').status, 'downloading');
+  assert.ok(!('running' in JSON.parse(m.json()).settings.queues[1]));
+  m.saveSync();
+  const m2 = new Manager(file);
+  await m2.load();
+  assert.ok(m2.view().queues.every(q => !q.running));
+  assert.equal(m2.list.find(d => d.id === 'q').status, 'scheduled');
+  assert.ok(!m2.running.size);
+  await removeAll(m);
 });
 
 test('file names cannot escape the folder', () => {
