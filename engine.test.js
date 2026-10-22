@@ -313,11 +313,11 @@ test('browser cookies are not passed on to another host after a redirect', async
 });
 
 test('speed limit slows the download down', async () => {
-  mgr.update({ speedLimitKB: 2048 });
+  mgr.update({ speedLimitKB: 2048, speedLimitOn: true });
   const t = Date.now();
   const d = mgr.add({ url: base + '/file.bin' });
   await finished(d);
-  mgr.update({ speedLimitKB: 0 });
+  mgr.update({ speedLimitKB: 0, speedLimitOn: false });
   assert.ok(Date.now() - t > 1800, `6 MB at 2 MB/s took only ${Date.now() - t} ms`);
 });
 
@@ -367,6 +367,214 @@ test('when all downloads finish: Cancel keeps the PC on; choosing while idle wai
   assert.deepEqual(ops, []);
 }));
 
+test("a download's own shutdown starts the countdown while another still runs; Cancel stops it", () => withPower(async (m, ops) => {
+  const other = m.add({ url: base + '/slow.bin' });
+  await m.act(other.id, 'limit', undefined, { kb: 1024 }); // keeps it running for seconds
+  const d = m.add({ url: base + '/file.bin' });
+  await m.act(d.id, 'whenDone', undefined, { value: 'shutdown' });
+  await finished(d);
+  m.tick();
+  assert.equal(other.status, 'downloading');
+  assert.ok(m.view().powerIn > 0, 'other downloads do not hold it back');
+  assert.equal(m.view().powerOp, 'shutdown', 'view names the countdown');
+  assert.equal(m.view().whenDone, '', 'the status bar choice stays as it was');
+  m.update({ whenDone: '' }); // the strip's Cancel
+  assert.equal(m.view().powerIn, null);
+  await sleep(250);
+  m.tick();
+  assert.deepEqual(ops, []);
+
+  const e = m.add({ url: base + '/file.bin' });
+  await m.act(e.id, 'whenDone', undefined, { value: 'sleep' });
+  await finished(e);
+  m.tick();
+  assert.deepEqual(ops, []);
+  await sleep(250);
+  m.tick();
+  assert.deepEqual(ops, ['sleep'], 'fires while the other one still runs');
+  assert.equal(other.status, 'downloading');
+  assert.equal(m.view().powerIn, null);
+  await m.act(other.id, 'pause');
+  await until(() => !m.running.size);
+}));
+
+test("a download's own when done 'open' calls the opener; other downloads open nothing", () => withPower(async (m, ops) => {
+  const opened = [];
+  m.opener = d => opened.push(d.id);
+  const a = m.add({ url: base + '/file.bin' }), b = m.add({ url: base + '/file.bin' });
+  await m.act(a.id, 'whenDone', undefined, { value: 'open' });
+  await finished(a);
+  await finished(b);
+  assert.deepEqual(opened, [a.id]);
+  m.tick();
+  assert.equal(m.view().powerIn, null);
+  assert.deepEqual(ops, []);
+}));
+
+test('per-download limit: slows that download while another runs at full speed; HLS too', async () => {
+  const t = Date.now();
+  const slow = mgr.add({ url: base + '/file.bin' });
+  await mgr.act(slow.id, 'limit', undefined, { kb: 4096 }); // 6 MB at 4 MB/s
+  assert.equal(slow.status, 'downloading', 'it applies to a running download');
+  const fast = mgr.add({ url: base + '/file.bin' });
+  await finished(fast);
+  assert.equal(slow.status, 'downloading', 'the other one was not held back');
+  assert.equal(sha(await finished(slow)), sha(data));
+  assert.ok(Date.now() - t > 1200, `6 MB at 4 MB/s took only ${Date.now() - t} ms`);
+  const h = mgr.add({ url: base + '/master.m3u8', title: 'Limited' });
+  await mgr.act(h.id, 'limit', undefined, { kb: 200 }); // 310 kB at 200 kB/s
+  const th = Date.now();
+  assert.equal(sha(await finished(h)), sha(Buffer.concat(parts)));
+  assert.ok(Date.now() - th > 1000, `310 kB at 200 kB/s took only ${Date.now() - th} ms`);
+});
+
+test('segments: a 4th value says which pieces a connection works on now', async () => {
+  const d = mgr.add({ url: base + '/slow.bin' });
+  await until(() => got(d) > 1e6 && mgr.running.get(d.id)?.active.size > 1);
+  const rows = () => mgr.view().downloads.find(x => x.id === d.id).segments;
+  const r = rows(), n = mgr.running.get(d.id).active.size;
+  assert.ok(r.every(s => s.length === 4 && [0, 1].includes(s[3])), JSON.stringify(r));
+  assert.equal(r.filter(s => s[3] === 1).length, n);
+  await mgr.act(d.id, 'pause');
+  await until(() => !mgr.running.has(d.id));
+  assert.ok(rows().every(s => s[3] === 0));
+  await mgr.act(d.id, 'remove');
+});
+
+test('description, limit and when done: set through add, confirm and act, checked, saved and in view()', async () => {
+  const m = new Manager(path.join(dir, 'fields.json')); // never loaded: no timer
+  m.update({ dir: path.join(dir, 'out') });
+  const d = m.add({ url: base + '/file.bin', scheduled: true, description: '  a\tb\nc\x7f\u0085 ' });
+  assert.equal(d.description, 'abc', 'control characters removed, trimmed');
+  const v = () => m.view().downloads.find(x => x.id === d.id);
+  assert.deepEqual([v().limitKB, v().whenDone, v().lastTry, v().notify], [0, '', null, false]);
+  await m.act(d.id, 'describe', undefined, { description: 'x'.repeat(400) });
+  assert.equal(d.description.length, 300);
+  await m.act(d.id, 'describe', undefined, { description: ' \n ' });
+  assert.equal(v().description, null, 'empty is null');
+  for (const [kb, want] of [['250', 250], [-1, 0], [1e9, 1e7], ['x', 0], [64, 64]]) {
+    await m.act(d.id, 'limit', undefined, { kb });
+    assert.equal(v().limitKB, want, String(kb));
+  }
+  for (const [value, want] of [['open', 'open'], ['reboot', ''], ['shutdown', 'shutdown'], [undefined, ''], ['sleep', 'sleep']]) {
+    await m.act(d.id, 'whenDone', undefined, { value });
+    assert.equal(v().whenDone, want, String(value));
+  }
+  await assert.rejects(() => m.act('nope', 'limit', undefined, { kb: 1 }), /download not found/);
+  const saved = JSON.parse(m.json()).list.find(x => x.id === d.id);
+  assert.deepEqual([saved.limitKB, saved.whenDone], [64, 'sleep']);
+
+  // the Download File Info window: its description wins, and only "Start Download" asks for the complete window
+  const later = m.add({ url: base + '/file.bin', confirm: true, description: 'from the page' });
+  await m.confirm(later.id, { action: 'later', path: path.join(dir, 'fields', 'later.bin') });
+  assert.equal(later.description, 'from the page', 'kept when the window sends none');
+  assert.equal(later.notify, undefined);
+  const s = m.add({ url: base + '/file.bin', confirm: true });
+  const t = Date.now();
+  await m.confirm(s.id, { action: 'start', path: path.join(dir, 'fields', 'start.bin'), description: ' Mine ' });
+  assert.equal(s.description, 'Mine');
+  assert.equal(m.view().downloads.find(x => x.id === s.id).notify, true);
+  assert.ok(s.lastTry >= t, 'start() sets the last try');
+  await finished(s);
+  for (const x of [...m.list]) await m.act(x.id, 'remove');
+});
+
+test('settings: the speed limit switch and its migration, duplicates, complete window', async () => {
+  const file = path.join(dir, 'switch.json');
+  const m = new Manager(file);
+  assert.deepEqual([m.settings.speedLimitOn, m.settings.duplicates, m.settings.showComplete], [false, 'ask', true]);
+  m.update({ speedLimitKB: 300 });
+  assert.equal(m.limiter.rate, 0, 'off: the number alone does not limit');
+  m.update({ speedLimitOn: true });
+  assert.equal(m.limiter.rate, 300 * 1024);
+  m.update({ speedLimitOn: false });
+  assert.equal(m.limiter.rate, 0);
+  assert.equal(m.settings.speedLimitKB, 300, 'turning it off keeps the number');
+  m.update({ duplicates: 'replace', showComplete: false });
+  assert.deepEqual([m.settings.duplicates, m.settings.showComplete], ['replace', false]);
+  m.update({ duplicates: 'always' });
+  assert.equal(m.settings.duplicates, 'ask', 'unknown values fall back to the default');
+
+  for (const [settings, on, rate] of [[{ speedLimitKB: 500 }, true, 500], [{ speedLimitKB: 500, speedLimitOn: false }, false, 0], [{ speedLimitKB: 0 }, false, 0], [{}, false, 0]]) {
+    await fs.writeFile(file, JSON.stringify({ settings, list: [] }));
+    const l = new Manager(file);
+    await l.load();
+    assert.equal(l.settings.speedLimitOn, on, JSON.stringify(settings));
+    assert.equal(l.limiter.rate, rate * 1024, JSON.stringify(settings));
+  }
+  await fs.writeFile(file, JSON.stringify({ settings: { duplicates: 'nope', showComplete: 0 }, list: [] }));
+  const l = new Manager(file);
+  await l.load();
+  assert.deepEqual([l.settings.duplicates, l.settings.showComplete], ['ask', false]);
+});
+
+test('duplicates: the probe names the existing download; number, replace, resume, remember, and adds without the window', async () => {
+  const m = new Manager(path.join(dir, 'dup.json')); // never loaded: no timer
+  m.update({ dir: path.join(dir, 'dup'), categories: false });
+  const url = base + '/file.bin';
+  const x = m.add({ url });
+  await finished(x);
+  await fs.writeFile(x.file, 'old');
+  const p = m.add({ url, confirm: true });
+  await until(() => p.probe);
+  assert.deepEqual(p.probe.duplicate, { id: x.id, name: 'file.bin', status: 'done' });
+  assert.deepEqual(m.view().downloads.find(v => v.id === p.id).probe.duplicate, p.probe.duplicate);
+
+  // number: as before
+  await m.confirm(p.id, { action: 'later', path: x.file });
+  assert.equal(p.name, 'file (1).bin');
+  await m.act(p.id, 'remove');
+
+  // replace: the existing entry goes and the new one writes over its file
+  const r = m.add({ url, confirm: true });
+  await m.confirm(r.id, { action: 'start', path: x.file, replace: x.id, rememberDuplicates: 'replace' });
+  assert.ok(!m.list.includes(x));
+  assert.equal(r.file, x.file);
+  assert.equal(sha(await finished(r)), sha(data));
+  assert.equal(m.settings.duplicates, 'replace');
+
+  // replace a running one: it stops and its temp file goes before the new one uses the name
+  const slowUrl = base + '/slow.bin';
+  const s = m.add({ url: slowUrl });
+  await m.act(s.id, 'limit', undefined, { kb: 1024 });
+  await until(() => s.file && got(s) > 0);
+  const q = m.add({ url: slowUrl, confirm: true });
+  await until(() => q.probe);
+  assert.equal(q.probe.duplicate.status, 'downloading');
+  await m.confirm(q.id, { action: 'start', path: s.file, replace: s.id });
+  assert.ok(!m.list.includes(s) && !m.running.has(s.id));
+  assert.equal(q.file, s.file);
+  assert.equal(sha(await finished(q)), sha(data));
+
+  // resume: the app cancels the new one (and resumes or shows the existing one)
+  const c = m.add({ url, confirm: true });
+  await m.confirm(c.id, { action: 'cancel', rememberDuplicates: 'resume' });
+  assert.ok(!m.list.includes(c));
+  assert.equal(m.settings.duplicates, 'resume');
+  for (const bad of ['ask', 'always', 1]) {
+    const b = m.add({ url, confirm: true });
+    await m.confirm(b.id, { action: 'cancel', rememberDuplicates: bad });
+  }
+  assert.equal(m.settings.duplicates, 'resume');
+
+  // without the window: 'resume' and 'ask' number, 'replace' replaces
+  for (const duplicates of ['resume', 'ask']) {
+    m.update({ duplicates });
+    const n = m.add({ url });
+    await finished(n);
+    assert.notEqual(n.file, r.file, duplicates);
+    assert.ok(m.list.includes(r), duplicates);
+  }
+  m.update({ duplicates: 'replace' });
+  await fs.writeFile(r.file, 'old');
+  const z = m.add({ url });
+  await finished(z);
+  assert.ok(!m.list.includes(r));
+  assert.equal(z.file, r.file);
+  assert.equal(sha(await fs.readFile(z.file)), sha(data));
+  for (const y of [...m.list]) await m.act(y.id, 'remove');
+});
+
 // The Download File Info window: downloads from the extension wait as 'pending' until it answers.
 test('pending: never started; the probe reads name and size with a one-byte range', async () => {
   ranges.length = 0;
@@ -378,7 +586,9 @@ test('pending: never started; the probe reads name and size with a one-byte rang
   assert.equal(d.status, 'pending');
   assert.ok(!mgr.running.has(d.id));
   assert.deepEqual(ranges, ['bytes=0-0']);
-  assert.deepEqual(d.probe, { name: 'file.bin', category: 'Other', size: data.length, type: null, error: null });
+  const { duplicate, ...probe } = d.probe; // earlier tests downloaded the same link: see the duplicates test
+  assert.deepEqual(probe, { name: 'file.bin', category: 'Other', size: data.length, type: null, error: null });
+  assert.equal(duplicate.status, 'done');
   assert.equal(d.file, undefined, 'no file before the window answers');
   assert.deepEqual(mgr.view().downloads.find(x => x.id === d.id).probe, d.probe);
   await mgr.confirm(d.id, { action: 'cancel' });

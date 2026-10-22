@@ -198,6 +198,26 @@ test('the app itself (no Origin) has full access', async () => {
   assert.equal(res.status, 400); // only finished downloads can be opened
 });
 
+test('actions describe, limit and whenDone, and the new settings, through the API', async () => {
+  const { id } = await (await call('/api/add', { body: { ...scheduled, description: ' From the API ' } })).json();
+  const find = async () => (await (await call('/api/state')).json()).downloads.find(d => d.id === id);
+  assert.equal((await find()).description, 'From the API');
+  for (const body of [{ op: 'describe', description: 'Notes\n' }, { op: 'limit', kb: 5e7 }, { op: 'whenDone', value: 'open' }]) {
+    assert.deepEqual(await (await call('/api/action', { body: { id, ...body } })).json(), { ok: true }, body.op);
+  }
+  const d = await find();
+  assert.deepEqual([d.description, d.limitKB, d.whenDone, d.lastTry, d.notify], ['Notes', 1e7, 'open', null, false]);
+  const ext = await call('/api/action', { origin: 'chrome-extension://abc', body: { id, op: 'limit', kb: 1 } });
+  assert.equal(ext.status, 403, 'extensions still cannot act on downloads');
+
+  const set = async body => (await call('/api/settings', { body })).json();
+  assert.deepEqual(await set({ speedLimitKB: 100, speedLimitOn: true, duplicates: 'number', showComplete: false }),
+    { ...(await set({})), speedLimitKB: 100, speedLimitOn: true, duplicates: 'number', showComplete: false });
+  const off = await set({ speedLimitOn: false, duplicates: 'later' });
+  assert.deepEqual([off.speedLimitKB, off.speedLimitOn, off.duplicates, off.showComplete], [100, false, 'ask', false]);
+  await set({ speedLimitKB: 0, showComplete: true });
+});
+
 test('request bodies keep UTF-8 intact', async () => {
   const title = 'Vidéo – 日本';
   assert.equal((await call('/api/add', { body: { ...scheduled, title } })).status, 200);

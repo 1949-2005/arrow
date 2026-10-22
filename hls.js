@@ -158,7 +158,7 @@ export async function downloadHls(d, ctl, mgr) {
       while (queue.length) {
         const buf = await queue.shift();
         more();
-        await mgr.limiter.take(buf.length);
+        await mgr.take(d, ctl, buf.length);
         await fh.write(buf, 0, buf.length, part.bytes);
         part.bytes += buf.length;
         part.done++;

@@ -42,6 +42,8 @@ function send(res, code, body) {
 function explorer(arg) {
   spawn('explorer.exe', [arg], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).on('error', () => {}).unref();
 }
+// The Open action, and a download's own "when done: open the file"
+mgr.opener = d => explorer(`"${d.file}"`);
 
 async function readJson(req) {
   const chunks = [];
@@ -97,10 +99,10 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/action' && body.op === 'open') {
       const d = mgr.list.find(x => x.id === body.id);
       if (d?.status !== 'done') throw new Error('only finished downloads can be opened');
-      explorer(`"${d.file}"`);
+      mgr.opener(d);
       return send(res, 200, { ok: true });
     }
-    if (url === '/api/action') { await mgr.act(body.id, body.op, body.url); return send(res, 200, { ok: true }); }
+    if (url === '/api/action') { await mgr.act(body.id, body.op, body.url, body); return send(res, 200, { ok: true }); }
     send(res, 404, { error: 'not found' });
   } catch (e) {
     send(res, 400, { error: e.message });

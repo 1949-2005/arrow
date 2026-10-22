@@ -72,12 +72,14 @@ function formatArgs(d) {
 }
 
 export function ytdlpArgs(d, settings, ffmpeg) {
+  // the lower of the global limit (when on) and this download's own; read once per run
+  const kb = Math.min(...[settings.speedLimitOn && settings.speedLimitKB, d.limitKB].filter(k => k > 0));
   return [
     // --ignore-config: a user yt-dlp.conf could add cookies or change the output names we parse
     '--ignore-config', '--no-playlist', '--match-filter', '!is_live', '--newline', '--no-colors',
     '--ffmpeg-location', ffmpeg, '-P', d.tmpDir, '-o', 'media.%(ext)s',
     ...formatArgs(d),
-    ...(settings.speedLimitKB > 0 ? ['--limit-rate', `${settings.speedLimitKB}K`] : []),
+    ...(kb < Infinity ? ['--limit-rate', `${kb}K`] : []),
     // --print implies --quiet, which would hide the progress lines
     '--no-quiet',
     '--print', 'before_dl:FDLINFO %(format_id)s %(filesize,filesize_approx)s %(title)j',

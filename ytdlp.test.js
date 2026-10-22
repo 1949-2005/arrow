@@ -72,7 +72,7 @@ test('YouTube links are normalized; channels and playlists are refused', () => {
 });
 
 test('format keys and legacy qualities → yt-dlp arguments', () => {
-  const run = (quality, speedLimitKB = 0, format) => ytdlpArgs({ quality, format, tmpDir: 'T', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, { speedLimitKB }, 'F');
+  const run = (quality, speedLimitKB = 0, format, limitKB, speedLimitOn = true) => ytdlpArgs({ quality, format, limitKB, tmpDir: 'T', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, { speedLimitKB, speedLimitOn }, 'F');
   const has = (args, ...seq) => assert.ok(args.some((_, i) => seq.every((s, j) => args[i + j] === s)), `${seq.join(' ')} in ${args.join(' ')}`);
   const sel = ['-f', 'bv*+ba/b', '-S'];
   has(run('best'), ...sel, 'res,vcodec:h264,ext:mp4:m4a', '--merge-output-format', 'mp4');
@@ -91,6 +91,11 @@ test('format keys and legacy qualities → yt-dlp arguments', () => {
   assert.equal(base.at(-1), 'https://www.youtube.com/watch?v=jNQXAC9IVRw');
   assert.ok(!base.includes('--limit-rate'));
   has(run('best', 250), '--limit-rate', '250K');
+  // the lower of the global limit (only when switched on) and the download's own
+  has(run('best', 250, undefined, 100), '--limit-rate', '100K');
+  has(run('best', 250, undefined, 400), '--limit-rate', '250K');
+  has(run('best', 250, undefined, 400, false), '--limit-rate', '400K');
+  assert.ok(!run('best', 250, undefined, 0, false).includes('--limit-rate'));
   assert.ok(!run('mp3', 5).some(a => /cookie/i.test(a)), 'never cookies');
 });
 

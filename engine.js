@@ -12,6 +12,8 @@ const UA = 'Mozilla/5.0 (compatible; FastDL/1.0)';
 const HEADERS_ALLOWED = ['cookie', 'referer', 'user-agent'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || 0));
+const describe = t => String(t ?? '').replace(/\p{Cc}/gu, '').trim().slice(0, 300).trim() || null;
+const DUPLICATES = ['ask', 'number', 'replace', 'resume'];
 
 export const CATEGORIES = {
   Video: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', '3gp'],
@@ -51,7 +53,7 @@ export async function markOfTheWeb(d) {
   await fs.writeFile(d.file + ':Zone.Identifier', lines.filter(Boolean).join('\r\n') + '\r\n').catch(() => {}); // FAT/exFAT have no streams
 }
 
-// Global speed limit shared by every connection. Callers go into debt and sleep it off,
+// Global speed limit shared by every connection (and each download's own, ctl.limiter). Callers go into debt and sleep it off,
 // so chunks bigger than one second's budget still work.
 class Limiter {
   rate = 0;
@@ -67,7 +69,7 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, scheduleAt: '', categories: true, clipboard: false, folders: {} };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, scheduleAt: '', categories: true, clipboard: false, folders: {}, duplicates: 'ask', showComplete: true };
   list = [];
   running = new Map();
   limiter = new Limiter();
@@ -77,8 +79,11 @@ export class Manager {
   // "When all downloads finish": used once and never saved, so a forgotten "shut down" can't fire days later
   whenDone = ''; // '' | 'sleep' | 'shutdown'
   powerAt = 0; // end of the countdown, 0 when none runs
+  powerOp = ''; // what the running countdown does
+  powerAll = false; // started by "When all downloads finish" (new work stops it), not by one download's own whenDone
   powerDelayMs = 60000;
   power = () => {}; // server.js puts the real sleep/shutdown here; tests and other users of Manager stay harmless
+  opener = () => {}; // a download's whenDone 'open': server.js opens the file like the Open action
   worked = false; // a download started since the last tick, so even one that ended between ticks counts
   pendingMs = 30 * 60000; // a Download File Info window left open longer than this loses its download
   formatCache = new Map(); // YouTube video id → {at, list}, see listFormats()
@@ -91,6 +96,7 @@ export class Manager {
     try {
       const s = JSON.parse(await fs.readFile(this.stateFile, 'utf8'));
       Object.assign(this.settings, s.settings);
+      if (s.settings?.speedLimitKB > 0 && s.settings.speedLimitOn == null) this.settings.speedLimitOn = true; // the limit was on before the switch existed
       this.list = s.list ?? [];
     } catch (e) {
       if (e.code !== 'ENOENT') throw e; // never overwrite a state file we could not read
@@ -107,6 +113,11 @@ export class Manager {
     if (s.connections != null) t.connections = clamp(s.connections, 1, 32);
     if (s.maxActive != null) t.maxActive = clamp(s.maxActive, 1, 20);
     if (s.speedLimitKB != null) t.speedLimitKB = clamp(s.speedLimitKB, 0, 1e7);
+    // checked from t too, so a loaded state.json gets the same rules
+    t.speedLimitOn = !!(s.speedLimitOn ?? t.speedLimitOn);
+    t.showComplete = !!(s.showComplete ?? t.showComplete);
+    const dup = s.duplicates ?? t.duplicates;
+    t.duplicates = DUPLICATES.includes(dup) ? dup : 'ask';
     if (s.scheduleAt != null) t.scheduleAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(s.scheduleAt) ? s.scheduleAt : '';
     if (s.categories != null) t.categories = !!s.categories;
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
@@ -115,16 +126,16 @@ export class Manager {
     t.folders = Object.fromEntries(Object.entries(f && typeof f === 'object' ? f : {}).filter(([k, v]) => isCategory(k) && typeof v === 'string' && path.isAbsolute(v)));
     if (s.whenDone != null) {
       this.whenDone = ['sleep', 'shutdown'].includes(s.whenDone) ? s.whenDone : '';
-      if (!this.whenDone) this.powerAt = 0; // Cancel stops the countdown at once
+      if (!this.whenDone) this.powerAt = 0; // Cancel stops any countdown at once, also one a download started
     }
-    this.limiter.rate = t.speedLimitKB * 1024;
+    this.limiter.rate = t.speedLimitOn ? t.speedLimitKB * 1024 : 0;
     this.dirty = true;
     this.pump();
   }
 
   // confirm: the extension's downloads wait as 'pending' until the Download File Info window starts them
   // format: a key from formats(); checked against the video's list before yt-dlp gets it (confirm(), downloadVideo())
-  add({ url, name, title, headers, scheduled, quality, format, confirm }) {
+  add({ url, name, title, headers, scheduled, quality, format, confirm, description }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
@@ -144,7 +155,19 @@ export class Manager {
       ...(yt && format != null && { format }),
       status: confirm ? 'pending' : scheduled ? 'scheduled' : 'queued',
       added: Date.now(),
+      description: describe(description),
     };
+    // Without a window to ask (Add links, batches) only 'replace' differs from numbering
+    const x = !confirm && this.settings.duplicates === 'replace' && this.duplicate(d);
+    if (x) {
+      // d waits outside the list until x's temp files are gone: they have the same names as d's
+      this.act(x.id, 'remove').then(() => x.file && this.setFile(d, x.file), () => {}).then(() => {
+        this.list.push(d);
+        this.dirty = true;
+        this.pump();
+      });
+      return d;
+    }
     this.list.push(d);
     if (confirm) this.probe(d);
     this.dirty = true;
@@ -152,15 +175,21 @@ export class Manager {
     return d;
   }
 
+  // Another download of the same link, not one waiting for its window or being removed
+  duplicate(d, id) {
+    return this.list.find(x => x !== d && x.url === d.url && !['pending', 'removed'].includes(x.status) && (id == null || x.id === id));
+  }
+
   // Defaults for the Download File Info window: name, category, size. Never throws; a failed probe keeps its error for the window.
   async probe(d) {
     let name, size = null, type = null, error = null, list = null;
+    const dup = () => { const x = this.duplicate(d); return x && { duplicate: { id: x.id, name: x.name ?? x.title, status: x.status } }; };
     const catOf = n => Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(path.extname(n).slice(1).toLowerCase())) ?? 'Other';
     if (d.kind === 'video') {
       // Until yt-dlp's list is in, the window shows "Getting formats…" with the tab title ("(3) Title - YouTube") as the name.
       const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '') || 'video';
       name = sanitize(tab + extOf(d.format, d.quality));
-      if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, listing: true };
+      if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, listing: true, ...dup() };
       try {
         const { title, options } = await this.formats(d.url);
         if (d.format && !options.some(o => o.key === d.format)) delete d.format; // not offered: the window picks again
@@ -197,7 +226,7 @@ export class Manager {
       }
       name = this.baseName(d, found);
     }
-    if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...(d.kind === 'video' && { options: [], format: null, ...list }) };
+    if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...(d.kind === 'video' && { options: [], format: null, ...list }), ...dup() };
   }
 
   formats(url) {
@@ -206,10 +235,13 @@ export class Manager {
 
   // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
   // format: a key from the video's list (fetched again when the cache expired); quality: a legacy choice.
-  async confirm(id, { action, path: file, quality, format, remember } = {}) {
+  // replace: the duplicate's id (probe.duplicate), which goes and leaves its file to this one; rememberDuplicates: the Duplicate window's "remember".
+  async confirm(id, { action, path: file, quality, format, remember, description, replace, rememberDuplicates } = {}) {
     const gone = 'This download is no longer waiting to start.';
     const d = this.list.find(x => x.id === id);
     if (d?.status !== 'pending') throw new Error(gone);
+    // also on cancel: the Duplicate window's "resume the existing one" cancels the new one
+    if (DUPLICATES.includes(rememberDuplicates) && rememberDuplicates !== 'ask') { this.settings.duplicates = rememberDuplicates; this.dirty = true; }
     if (action === 'cancel') {
       this.list.splice(this.list.indexOf(d), 1);
       return;
@@ -233,15 +265,24 @@ export class Manager {
     if (video) name = name.slice(0, name.length - path.extname(name).length) + extOf(d.format, d.quality);
     const dir = path.dirname(p);
     try { mkdirSync(dir, { recursive: true }); } catch (e) { throw new Error('Could not create the folder: ' + e.message); }
-    this.setFile(d, this.uniqueFile(dir, name));
+    const old = replace != null && this.duplicate(d, replace);
+    if (old) {
+      await this.act(old.id, 'remove'); // before d gets its file: the old temp files have the same names
+      if (d.status !== 'pending' || !this.list.includes(d)) throw new Error(gone);
+    }
+    // the existing file is allowed: the finished download replaces it
+    this.setFile(d, old && path.join(dir, name) === old.file ? old.file : this.uniqueFile(dir, name));
+    if (description !== undefined) d.description = describe(description);
     if (isCategory(remember)) this.settings.folders[remember] = path.dirname(d.file);
     delete d.probe;
     d.status = action === 'start' ? 'queued' : 'paused';
+    if (action === 'start') d.notify = true; // the app shows its Download complete window for it
     this.dirty = true;
     this.pump();
   }
 
-  async act(id, op, url) {
+  // url: for 'url'; description, kb, value: for 'describe', 'limit', 'whenDone'
+  async act(id, op, url, { description, kb, value } = {}) {
     const d = this.list.find(x => x.id === id);
     if (!d) throw new Error('download not found');
     const ctl = this.running.get(id);
@@ -256,6 +297,12 @@ export class Manager {
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
       d.url = u.href;
+    } else if (op === 'describe') {
+      d.description = describe(description);
+    } else if (op === 'limit') { // HTTP and HLS read it per chunk, yt-dlp at its next run
+      d.limitKB = clamp(kb, 0, 1e7);
+    } else if (op === 'whenDone') {
+      d.whenDone = ['open', 'sleep', 'shutdown'].includes(value) ? value : '';
     } else if (op === 'remove' || op === 'removeFile') {
       const wasDone = d.status === 'done';
       if (ctl) { d.status = 'removed'; ctl.ac.abort(); await ctl.done; }
@@ -283,10 +330,11 @@ export class Manager {
   }
 
   start(d) {
-    const ctl = { ac: new AbortController(), active: new Set(), bytes: 0, last: 0, speed: 0 };
+    const ctl = { ac: new AbortController(), active: new Set(), bytes: 0, last: 0, speed: 0, limiter: new Limiter() };
     this.running.set(d.id, ctl);
     this.worked = true;
     d.status = 'downloading';
+    d.lastTry = Date.now();
     d.error = null;
     ctl.done = (async () => {
       try {
@@ -295,6 +343,8 @@ export class Manager {
           d.status = 'done';
           d.finished = Date.now();
           delete d.headers.cookie; // no reason to keep a login session on disk once the file is here
+          if (d.whenDone === 'open') this.opener(d);
+          else if (d.whenDone) this.countdown(d.whenDone, false); // even while other downloads still run
         }
       } catch (e) {
         if (d.status === 'downloading') { d.status = 'error'; d.error = e.cause?.message || e.message; }
@@ -303,6 +353,13 @@ export class Manager {
       this.dirty = true;
       this.pump();
     })();
+  }
+
+  // A chunk waits for the global limit and for this download's own one
+  async take(d, ctl, n) {
+    await this.limiter.take(n);
+    ctl.limiter.rate = (d.limitKB ?? 0) * 1024;
+    await ctl.limiter.take(n);
   }
 
   // Follows redirects by hand so browser cookies only go to the host they came from.
@@ -485,7 +542,7 @@ export class Manager {
             // the segment can shrink while we stream, when a free connection splits it
             const n = s.end == null ? chunk.length : Math.min(chunk.length, s.end - s.pos);
             if (n > 0) {
-              await this.limiter.take(n);
+              await this.take(d, ctl, n);
               await fh.write(chunk, 0, n, s.pos);
               s.pos = s.end == null ? s.pos + n : Math.min(s.pos + n, s.end);
               ctl.bytes += n;
@@ -525,16 +582,23 @@ export class Manager {
     }
     // Paused and failed downloads don't wait; scheduled ones do once a start time is set.
     const busy = this.list.some(d => ['downloading', 'queued'].includes(d.status) || (d.status === 'scheduled' && at));
-    if (busy || !this.whenDone) this.powerAt = 0; // new work came in, or the user cancelled
-    else if (this.worked) this.powerAt = Date.now() + this.powerDelayMs; // the last download just ended
+    if (this.powerAll && busy) this.powerAt = 0; // new work came in
+    if (this.whenDone && !busy && this.worked && (!this.powerAt || this.powerAll)) this.countdown(this.whenDone, true); // the last download just ended
     else if (this.powerAt && Date.now() >= this.powerAt) {
-      const op = this.whenDone;
-      this.whenDone = '';
+      const op = this.powerOp;
+      if (this.powerAll) this.whenDone = '';
       this.powerAt = 0;
       this.power(op);
     }
     this.worked = busy;
     if (this.dirty || this.running.size) this.save();
+  }
+
+  // The one 60 s countdown: "When all downloads finish" (all = true) or a download's own whenDone
+  countdown(op, all) {
+    this.powerOp = op;
+    this.powerAll = all;
+    this.powerAt = Date.now() + this.powerDelayMs;
   }
 
   async save() {
@@ -571,13 +635,15 @@ export class Manager {
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
           resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, format: d.format, added: d.added, probe: d.probe,
+          description: d.description ?? null, limitKB: d.limitKB ?? 0, whenDone: d.whenDone ?? '', lastTry: d.lastTry ?? null, notify: !!d.notify,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
           connections: ctl ? ctl.active.size : 0,
-          segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos]),
+          segments: d.status === 'done' ? null : d.segments?.map(s => [s.start, s.end, s.pos, ctl?.active.has(s) ? 1 : 0]), // 1: a connection works on it now
         };
       }),
-      whenDone: this.whenDone,
+      whenDone: this.whenDone, // the status bar's "When done" choice
+      powerOp: this.powerAt ? this.powerOp : null, // what the running countdown does: its strip names it
       powerIn: this.powerAt ? Math.max(0, Math.ceil((this.powerAt - Date.now()) / 1000)) : null, // seconds left
       exts: Object.values(CATEGORIES).flat(), // file types the UI offers from the clipboard
       categories: CATEGORIES, // the UI's sidebar sorts by these
