@@ -64,7 +64,7 @@ namespace Arrow
     'Programs': ['exe','msi','apk','dmg','deb','rpm','appimage']}
 }");
 
-        // args: the repo's assets/types/programs.svg, passed by app.test.js since Tests.exe runs from a temp folder
+        // args: every assets/types/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
         public static int Main(string[] args)
         {
             Thread.CurrentThread.CurrentCulture = Inv;
@@ -301,7 +301,7 @@ namespace Arrow
             Eq(file("><path transform=\"scale(2)\" d=\"M0 0L1 1Z\"/>"), null, "svg with a transform");
             Eq(file("><circle cx=\"1\" cy=\"1\" r=\"1\"/><path d=\"M0 0L1 1Z\"/>"), null, "svg with a circle");
             Eq(file(" fill=\"none\" stroke=\"#000\"><path d=\"M0 0L1 1Z\"/>"), null, "svg stroke-only");
-            if (args.Length > 0) Ok(Core.ParseSvg(File.ReadAllText(args[0])) != null, "svg the real " + Path.GetFileName(args[0]));
+            foreach (var f in args) Ok(Core.ParseSvg(File.ReadAllText(f)) != null, "svg the real " + Path.GetFileName(f));
 
             // the user's regional format
             Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");

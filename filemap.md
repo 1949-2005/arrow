@@ -44,7 +44,7 @@
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)
 - `app.test.js` — the native app (Windows): `Tests.cs` passes, the exe builds with the brand icon, `--check` against `server.js` on a free port with temp state
 - `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into both exes and the tray as is
-- `assets/types/` — the user's SVG icons for Video, Music, Documents, Programs and Compressed (paths with any commands, filled in the text color with the file's fill rule; a transform, another shape or fill="none" shows the glyph); Other has none and shows its glyph
+- `assets/types/` — the user's SVG icons for Video, Music, Documents, Programs, Compressed and Other (paths with any commands, filled in the text color with the file's fill rule; a transform, another shape or fill="none" shows the glyph), the glyph being only the fallback for a missing or unreadable file
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `<name> Engine.exe`, `installed.json` — made by `install.js` (gitignored)

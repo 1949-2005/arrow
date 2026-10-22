@@ -58,7 +58,7 @@ in the Download File Info and progress headers. The sidebar's Types at 28 px: th
 file's icon comes from whatever app opens that type: a .pdf showed the Claude app's logo). `Core.ParseSvg` reads any
 path data (arcs and quadratics become cubics); a transform, another shape or fill="none" shows the glyph instead. The
 path is cached per category and filled with the file's fill rule (nonzero unless evenodd), anti-aliased, in `Theme.Text` at paint
-time so it follows the theme. Other has none: a missing or unreadable file shows the category glyph in its color.
+time so it follows the theme. Other uses assets/types/other.svg like the others; a missing or unreadable file shows the category glyph in its color.
 
 ## Main window
 Default 1180 x 700, minimum 900 x 560; remembers bounds, maximized state and the selected section
@@ -118,7 +118,7 @@ right (muted). Selected: soft background, bold label. Hover: hover token. Keyboa
 Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled — glyphs at 18 px, muted
 (text when selected).
 Types (Core.Category): Video, Music, Programs, Documents, Compressed, Other — the user's SVG icons in the text color at
-28 px; Other shows its glyph.
+28 px; Other uses assets/types/other.svg like the others, with its glyph only as the fallback for a missing or unreadable file.
 
 ### List (list token)
 - Search field on top (height 32, margin 12, field + line, Search glyph, cue "Search downloads", Ctrl+F focuses it,

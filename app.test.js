@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import fs from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -25,7 +25,7 @@ after(async () => {
 test('the ported helpers pass Tests.cs', win, async () => {
   const exe = path.join(await temp(), 'Tests.exe');
   await compileTests(exe);
-  const r = spawnSync(exe, [path.join(repo, 'assets', 'types', 'programs.svg')], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const r = spawnSync(exe, readdirSync(path.join(repo, 'assets', 'types')).filter(f => f.endsWith('.svg')).sort().map(f => path.join(repo, 'assets', 'types', f)), { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
