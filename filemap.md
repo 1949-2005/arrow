@@ -13,7 +13,7 @@
   - `Api.cs` — the engine's HTTP API (`FASTDL_PORT`, no proxy, timeouts, `ApiException` with `Offline`) and `Poller` (`/api/state` every 700 ms on a background thread)
   - `Program.cs` — entry point: one instance (a second start tells the first to show), starts `<name> Engine.exe` (or `node desktop.js`) when the engine does not answer; `--tray`, `--no-engine`, `--check`; `ARROW_SHOTS` screenshot mode; `AppIcon` (the brand .ico through user32 `LoadImage`)
   - `Theme.cs` — `docs/NATIVE_UI.md` tokens for light and dark (follows Windows, live), fonts, text drawing and measuring, `Glyph` codes and drawing (Segoe Fluent Icons), tiles, dark title bar, native control theming, menu renderer
-  - `FileIcons.cs` — the icon Windows shows for a file type (SHGetFileInfo on the extension only), scaled and cached per extension and size, for list rows and the dialogs' headers; Windows' own icon per kind (known folders, stock icons) for the sidebar's Types
+  - `FileIcons.cs` — the icon Windows shows for a file type (SHGetFileInfo on the extension only), scaled and cached per extension and size, for list rows and the dialogs' headers; the sidebar's Types: known-folder icons for Video, Music and Documents, a .zip file's icon for Compressed, `assets/types/` pictures in the text color for Programs and Other
   - `ColorText.cs` — text with emoji in color: DirectWrite layouts drawn through a cached Direct2D DC render target (COM interop), with TextRenderer's alignment, wrapping, ellipsis and GDI's line height; Theme falls back to TextRenderer on any failure
   - `Controls.cs` — reusable custom-drawn controls: `FlatButton`, `TextField`, `Picker`, `FlatCheck`, `SegmentBar`, `Sparkline`, `Tile`, `Caption`, `FactRow`, `Strip`, `Canvas`, `Sidebar`, `DownloadList` (with row accessibility)
   - `Inspector.cs` — the right column: one download, several, or the overview; `ErrorBox`
@@ -44,6 +44,7 @@
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)
 - `app.test.js` — the native app (Windows): `Tests.cs` passes, the exe builds with the brand icon, `--check` against `server.js` on a free port with temp state
 - `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into both exes and the tray as is
+- `assets/types/` — `programs.png` and `other.png`: the sidebar's Programs and Other pictures, black on transparent, drawn in the text color
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `<name> Engine.exe`, `installed.json` — made by `install.js` (gitignored)

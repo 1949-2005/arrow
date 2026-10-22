@@ -53,11 +53,12 @@ File types show the icon Windows shows for them, as File Explorer and IDM do (`F
 extension alone (SHGFI_USEFILEATTRIBUTES, never the disk), the 16 px image up to 16 px, else the 32 px one scaled
 down with high-quality bicubic, cached per extension and size. The extension is the file's own, else its category's
 typical one (.mp4, .mp3, .pdf, .exe, .zip; none = the generic file). Sizes: 24 px in list rows, 32 px (native, crisp)
-in the Download File Info and progress headers. The sidebar's Types show Windows' own icon for the kind at 20 px, the
-same on every PC: the Videos, Music and Documents folders' icons (SHGetKnownFolderIDList), and the stock software
-(Programs and Features), zip folder and folder icons (SHGetStockIconInfo) for Programs, Compressed and Other. A typical
-file's icon comes from whatever app opens that type: a .pdf showed the Claude app's logo for Documents. When Windows
-gives no icon, the category glyph in its color is drawn instead.
+in the Download File Info and progress headers. The sidebar's Types at 20 px: the Videos, Music and Documents folders'
+icons (SHGetKnownFolderIDList), the same on every PC, since a typical file's icon comes from whatever app opens that
+type (a .pdf showed the Claude app's logo for Documents); a .zip file's icon for Compressed (the archiver's); and the
+user's pictures `assets/types/programs.png` and `other.png` (black on transparent, read into memory, scaled and cached
+like the icons) for Programs and Other, drawn in `Theme.Text` through a ColorMatrix at paint time so they follow the
+theme. When there is no icon or picture, the category glyph in its color is drawn instead.
 
 ## Main window
 Default 1180 x 700, minimum 900 x 560; remembers bounds, maximized state and the selected section
@@ -116,7 +117,7 @@ Two groups with a 12 px muted heading ("Library", "Types"), items 30 high, radiu
 right (muted). Selected: soft background, bold label. Hover: hover token. Keyboard: Up/Down move, the list follows.
 Library: All, Active (downloading, queued, paused), Finished (done), Failed (error), Scheduled — glyphs at 18 px, muted
 (text when selected).
-Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — Windows' icon for the kind at 20 px.
+Types (Core.Category): Video, Music, Documents, Programs, Compressed, Other — Windows' folder icons, a .zip file's icon, the user's pictures for Programs and Other, at 20 px.
 
 ### List (list token)
 - Search field on top (height 32, margin 12, field + line, Search glyph, cue "Search downloads", Ctrl+F focuses it,
