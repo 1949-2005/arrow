@@ -7,7 +7,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
-import { ytdlpArgs, youtubeId } from './ytdlp.js';
+import { ytdlpArgs, youtubeId, formatOptions } from './ytdlp.js';
 
 // Stands in for googlevideo.com: answers the one-byte range request for formats that have no exact filesize
 const ranges = [];
@@ -97,6 +97,35 @@ test('format keys and legacy qualities → yt-dlp arguments', () => {
   has(run('best', 250, undefined, 400, false), '--limit-rate', '400K');
   assert.ok(!run('best', 250, undefined, 0, false).includes('--limit-rate'));
   assert.ok(!run('mp3', 5).some(a => /cookie/i.test(a)), 'never cookies');
+  // fragments at once, as many as the connections setting; one while a limit is on (--limit-rate holds per fragment)
+  const n = (settings, limitKB) => { const a = ytdlpArgs({ quality: 'best', limitKB, tmpDir: 'T', url: 'u' }, settings, 'F'); return a[a.indexOf('-N') + 1]; };
+  assert.equal(n({ connections: 8 }), '8');
+  assert.equal(n({ connections: 8, speedLimitOn: true, speedLimitKB: 250 }), '1');
+  assert.equal(n({ connections: 8, speedLimitOn: false, speedLimitKB: 250 }), '8');
+  assert.equal(n({ connections: 8 }, 100), '1');
+});
+
+test('format list of a recording YouTube is still processing (post_live): pieces, approximate sizes, no range requests', async () => {
+  const f = (format_id, ext, vcodec, acodec, filesize_approx, more) => ({ format_id, ext, vcodec, acodec, filesize_approx, protocol: 'http_dash_segments', url: 'https://x/' + format_id, ...more });
+  const v = (id, h, size, fps = 30) => f(id, 'mp4', 'avc1.4d401f', 'none', size, { width: h * 16 / 9, height: h, fps, dynamic_range: 'SDR' });
+  const info = { live_status: 'post_live', duration: 3480, formats: [
+    f('139', 'm4a', 'none', 'mp4a.40.5', 20880000), f('140', 'm4a', 'none', 'mp4a.40.2', 62640000),
+    v('160', 144, 83617005), v('133', 240, 182376360), v('134', 360, 336094050), v('135', 480, 468688574),
+    v('298', 720, 1147967175, 60), v('299', 1080, 2237727000, 60),
+    f('sb0', 'mhtml', 'none', 'none', null, { protocol: 'mhtml' }),
+  ] };
+  const noRange = { get: async () => { throw new Error('no range requests for pieces'); } };
+  assert.deepEqual(await formatOptions(info, noRange), [
+    { key: 'mp4:299+140', group: 'MP4', label: '1080p60', tag: 'HD', approx: true, size: 2300367000 },
+    { key: 'mp4:298+140', group: 'MP4', label: '720p60', tag: 'HD', approx: true, size: 1210607175 },
+    { key: 'mp4:135+140', group: 'MP4', label: '480p', approx: true, size: 531328574 },
+    { key: 'mp4:134+140', group: 'MP4', label: '360p', approx: true, size: 398734050 },
+    { key: 'mp4:133+140', group: 'MP4', label: '240p', approx: true, size: 245016360 },
+    { key: 'mp4:160+140', group: 'MP4', label: '144p', approx: true, size: 146257005 },
+    { key: 'm4a:140', group: 'Audio', label: 'M4A', approx: true, size: 62640000 },
+    { key: 'mp3', group: 'Audio', label: 'MP3', size: 83520000 }, // duration × 192 kbit/s, as for any video
+  ]);
+  assert.ok(OPTIONS.every(o => !('approx' in o)), 'normal videos: exact sizes');
 });
 
 test('video download: title, size and progress from yt-dlp, filed under Video, temp folder removed, Mark-of-the-Web', async () => {

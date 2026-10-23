@@ -80,6 +80,8 @@ export function ytdlpArgs(d, settings, ffmpeg) {
     '--ffmpeg-location', ffmpeg, '-P', d.tmpDir, '-o', 'media.%(ext)s',
     ...formatArgs(d),
     ...(kb < Infinity ? ['--limit-rate', `${kb}K`] : []),
+    // fragments at once (a recording YouTube is still processing comes in pieces); --limit-rate holds per fragment, so one while limited
+    '-N', String(kb < Infinity ? 1 : settings.connections || 1),
     // --print implies --quiet, which would hide the progress lines
     '--no-quiet',
     '--print', 'before_dl:FDLINFO %(format_id)s %(filesize,filesize_approx)s %(title)j',
@@ -134,16 +136,19 @@ async function exactSize(mgr, f) {
   }
 }
 
-// yt-dlp's -J → [{key, group, label, tag?, size}]. Every size is real: yt-dlp's filesize, else the range answer,
-// else the format is left out. MP4/WEBM sizes are the video plus the audio stream.
+// yt-dlp's -J → [{key, group, label, tag?, approx?, size}]. Every size is real: yt-dlp's filesize, else the range answer,
+// else the format is left out. MP4/WEBM sizes are the video plus the audio stream. A recording YouTube is still processing
+// (post_live) only has http_dash_segments formats: their size is yt-dlp's filesize_approx, and their options get approx: true.
 export async function formatOptions(info, mgr) {
   const p = f => Math.min(f.width ?? f.height, f.height); // shorts are 1080x1920: YouTube calls that 1080p
-  const usable = (info.formats ?? []).filter(f => f.protocol === 'https' && f.url && /^[\w-]+$/.test(f.format_id ?? ''));
+  const usable = (info.formats ?? []).filter(f => ['https', 'http_dash_segments'].includes(f.protocol) && f.url && /^[\w-]+$/.test(f.format_id ?? ''));
   const video = usable.filter(f => f.vcodec && f.vcodec !== 'none' && f.acodec === 'none' && ['mp4', 'webm'].includes(f.ext)
     && (!f.dynamic_range || f.dynamic_range === 'SDR') && p(f) >= 144);
   const audio = usable.filter(f => f.vcodec === 'none' && f.acodec && f.acodec !== 'none');
+  const dash = f => f.protocol === 'http_dash_segments'; // in pieces: a range request would give one piece's size
+  const approx = (...list) => list.some(dash) && { approx: true };
   const sized = new Map(await Promise.all([...video, ...audio.filter(f => ['m4a', 'webm'].includes(f.ext))]
-    .map(async f => [f, f.filesize > 0 ? f.filesize : await exactSize(mgr, f)])));
+    .map(async f => [f, f.filesize > 0 ? f.filesize : dash(f) ? f.filesize_approx : await exactSize(mgr, f)])));
   const ok = list => list.filter(f => sized.get(f) > 0);
   const tag = h => h >= 720 && h <= 1080 ? 'HD' : h === 1440 ? '2K' : h === 2160 ? '4K' : null;
   // yt-dlp lists formats worst first, so the last one is the best
@@ -157,10 +162,10 @@ export async function formatOptions(info, mgr) {
       // at equal height prefer H.264: AV1/VP9 inside MP4 doesn't play in every player
       const v = (ext === 'mp4' && same.filter(f => f.vcodec.startsWith('avc1')).at(-1)) || same.at(-1);
       options.push({ key: `${ext}:${v.format_id}+${a.format_id}`, group, label: `${h}p${v.fps >= 50 ? '60' : ''}`,
-        ...(tag(h) && { tag: tag(h) }), size: sized.get(v) + sized.get(a) });
+        ...(tag(h) && { tag: tag(h) }), ...approx(v, a), size: sized.get(v) + sized.get(a) });
     }
   }
-  if (m4a) options.push({ key: `m4a:${m4a.format_id}`, group: 'Audio', label: 'M4A', size: sized.get(m4a) });
+  if (m4a) options.push({ key: `m4a:${m4a.format_id}`, group: 'Audio', label: 'M4A', ...approx(m4a), size: sized.get(m4a) });
   if (audio.length && info.duration > 0) options.push({ key: 'mp3', group: 'Audio', label: 'MP3', size: Math.round(info.duration * MP3_KBPS * 1000 / 8) });
   return options;
 }

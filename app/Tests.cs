@@ -172,6 +172,7 @@ namespace Arrow
             Eq(Core.FormatText(new FormatOption { Key = "webm:303+251", Group = "WEBM", Label = "1080p60", Size = 102860390 }), "WEBM · 1080p60 · 98.1 MB", "formatText webm");
             Eq(Core.FormatText(new FormatOption { Key = "m4a:140", Group = "Audio", Label = "M4A", Size = 3565158 }), "M4A · audio · 3.4 MB", "formatText m4a");
             Eq(Core.FormatText(new FormatOption { Key = "mp3", Group = "Audio", Label = "MP3", Size = 456000 }), "MP3 · audio · 445.3 KB", "formatText mp3");
+            Eq(Core.FormatText(new FormatOption { Key = "mp4:299+140", Group = "MP4", Label = "1080p60", Tag = "HD", Size = 1116691200, Approx = true }), "MP4 · 1080p60 · ~1.04 GB", "formatText approximate");
             Eq(L(new[] { "mp4:137+140", "webm:248+251", "m4a:140-drc", "mp3", "best" }.Select(Core.FormatExt)), ".mp4 | .webm | .m4a | .mp3 | .mp4", "formatExt");
             Eq(L(new[] { "mp4:137+140", "webm:248+251", "m4a:140", "mp3", "best" }.Select(Core.FormatCategory)), "Video | Video | Music | Music | Video", "formatCategory");
             Eq(Core.Subtitle(new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=jNQXAC9IVRw" }, "Me at the zoo.mp4"), "Me at the zoo · youtube.com", "subtitle video");

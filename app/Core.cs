@@ -218,10 +218,11 @@ namespace Arrow
     {
         public string Key, Group, Label, Tag;
         public long? Size;
+        public bool Approx; // the size is yt-dlp's estimate (a recording YouTube is still processing)
 
         public static FormatOption From(IDictionary<string, object> o)
         {
-            return new FormatOption { Key = o.Str("key"), Group = o.Str("group"), Label = o.Str("label"), Tag = o.Str("tag"), Size = o.Long("size") };
+            return new FormatOption { Key = o.Str("key"), Group = o.Str("group"), Label = o.Str("label"), Tag = o.Str("tag"), Size = o.Long("size"), Approx = o.Bool("approx") ?? false };
         }
     }
 
@@ -625,7 +626,7 @@ namespace Arrow
         public static string FormatText(FormatOption o)
         {
             var audio = o.Group == "Audio";
-            return string.Join(" · ", audio ? o.Label : o.Group, audio ? "audio" : o.Label, Size(o.Size));
+            return string.Join(" · ", audio ? o.Label : o.Group, audio ? "audio" : o.Label, (o.Approx ? "~" : "") + Size(o.Size));
         }
         public static string FormatExt(string key) { return key == "best" ? ".mp4" : "." + key.Split(':')[0]; }
         public static string FormatCategory(string key) { return AudioKey.IsMatch(key) ? "Music" : "Video"; }

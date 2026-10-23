@@ -287,7 +287,7 @@ namespace Arrow
             var o = YouTube ? Option() : null;
             var n = YouTube ? (o != null ? o.Size : null) : p.Size;
             size.Font = n != null ? Theme.Bold : Theme.Body;
-            size.Text = chosen && Spinning ? "Getting details…" : n != null ? Core.Size(n) : YouTube ? "Known once the download starts" : "Unknown";
+            size.Text = chosen && Spinning ? "Getting details…" : n != null ? (o != null && o.Approx ? "~" : "") + Core.Size(n) : YouTube ? "Known once the download starts" : "Unknown";
             size.Invalidate();
         }
 

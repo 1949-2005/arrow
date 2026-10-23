@@ -204,6 +204,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - Paste the link in the bar at the top of Arrow's window. The Download File Info window lists the formats.
 - The Download File Info window has one **Format** list, with real sizes. While Arrow reads the list, it says "Getting formats…". Only Cancel works until then.
 - Sizes are real: Arrow asks YouTube. A format without a known size is not shown. The final file can be a few KB bigger (merging, MP3 header).
+- Just after a live stream, YouTube is still processing the recording. Its sizes are then approximate ("~1.04 GB"), and it downloads in many small pieces, several at once.
 - MP3 is made at 192 kbps. So Arrow knows its size before the download.
 - The file name is the video's title: `<title>.mp4`, `.webm`, `.m4a` or `.mp3`.
 - Videos go to the `Video` folder. M4A and MP3 files go to the `Music` folder.

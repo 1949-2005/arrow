@@ -548,6 +548,8 @@ test('optionsFromPlayer: HDR, DRC, other audio tracks, unsized formats, bad itag
   assert.deepEqual(keys([v(136, 720, '100'), a(140, '11', { track: { id: 'de.3', isDefault: false } }), a(140, '10', { track: { id: 'en.4', isDefault: true } })]),
     ['mp4:136+140-1', 'm4a:140-1', 'mp3'], 'default track only, named as yt-dlp names it');
   assert.deepEqual(keys([v(137, 1080, undefined), v(136, 720, '100'), a(139, null), a(140, '10')]), ['mp4:136+140', 'm4a:140', 'mp3'], 'no contentLength');
+  // a recording YouTube is still processing: no video has a size, so nothing (not MP3 alone): the app's list is used
+  assert.deepEqual(keys([v(299, 1080, undefined, { fps: 60 }), v(160, 144, undefined), a(139, undefined), a(140, undefined)]), [], 'post-live recording');
   assert.deepEqual(keys([v('1 --exec x', 1080, '100'), v(136, 720, '100'), a(140, '10'), { itag: 1 }, null]), ['mp4:136+140', 'm4a:140', 'mp3'], 'bad entries');
   assert.deepEqual(keys([v(136, 720, '100', { fps: 60 })]), [], 'no audio: no MP4, no MP3');
   assert.equal(optionsFromPlayer(data([v(299, 1080, '9', { fps: 60, width: 1080, height: 1920 }), a(140, '1')]))[0].label, '1080p60', 'Shorts: the short side');
@@ -632,6 +634,7 @@ test('content.js helpers: the YouTube check agrees with common.js, menu groups, 
   ]);
   assert.equal(content.menuGroups([]).length, 0);
   assert.deepEqual([content.sizeText(126353408), content.sizeText(456000), content.sizeText(900), content.sizeText(6291456000)], ['120.5 MB', '445.3 KB', '900 B', '5.86 GB']);
+  assert.equal(content.sizeText(1116691200, true), '~1.04 GB', 'approximate');
   assert.deepEqual([content.step(-1, 3, 'ArrowDown'), content.step(-1, 3, 'ArrowUp'), content.step(2, 3, 'ArrowDown'), content.step(0, 3, 'ArrowUp'), content.step(1, 3, 'ArrowDown')], [0, 2, 0, 2, 2]);
 });
 

@@ -84,7 +84,8 @@ const MP3_KBPS = 192; // as ytdlp.js
 const EXTS = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mp4': 'm4a', 'audio/webm': 'webm' };
 
 // playerData() → the same [{key, group, label, tag?, size}] as ytdlp.js formatOptions() for that video, so a pick is a key
-// the app knows. The page is not trusted: only numeric itags make keys. Formats without contentLength are left out.
+// the app knows. The page is not trusted: only numeric itags make keys. Formats without contentLength are left out;
+// video with none at all (a recording YouTube is still processing) gives [], so the app's list is used.
 export function optionsFromPlayer(data) {
   if (!data || data.live || !Array.isArray(data.formats)) return [];
   const all = data.formats.map(f => {
@@ -96,6 +97,7 @@ export function optionsFromPlayer(data) {
   // the player can list one itag several times (a DRC copy, other variants): yt-dlp keeps the first, so its size is the one the app shows
   const seen = new Set();
   const sized = all.filter(f => f.size > 0 && !f.drc && (!f.track || f.track.isDefault) && !seen.has(f.id) && seen.add(f.id));
+  if (!sized.some(f => !f.audio) && all.some(f => !f.audio)) return [];
   const video = sized.filter(f => !f.audio && !f.hdr && f.p >= 144);
   const audio = sized.filter(f => f.audio);
   const tag = h => h >= 720 && h <= 1080 ? 'HD' : h === 1440 ? '2K' : h === 2160 ? '4K' : null;

@@ -39,7 +39,7 @@ var isYouTubePage = href => !!ytWatchUrl(href);
 var GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
 var menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: options.filter(o => o.group === g) })).filter(g => g.items.length);
 // As confirm.html size(), so the list and the window show the same number
-var sizeText = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+var sizeText = (n, approx) => (approx ? '~' : '') + (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB'); // ~: approximate (a recording YouTube is still processing)
 // Up/Down through n items, wrapping; from nothing focused (-1) Down goes to the first, Up to the last.
 var step = (i, n, key) => i < 0 ? (key === 'ArrowUp' ? n - 1 : 0) : (i + (key === 'ArrowUp' ? n - 1 : 1)) % n;
 // The file the app will save for a format key: engine.js sanitize(title + extOf(key)), ported (no imports in a classic script).
@@ -288,10 +288,10 @@ function main() {
       const h3 = g => h('h3', { 'aria-hidden': 'true' }, ...[...new Set(g.items.map(o => o.key.split(':')[0].toUpperCase()))].map(f => h('span', { class: 'fmtchip' }, f)), g.title.split(' · ')[0]);
       const item = o => {
         const name = fileName(title, o.key);
-        const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size))),
+        const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size, o.approx))),
           h('div', { class: 'name', dir: 'auto' }, name)], () => pick(o));
         b.classList.add('fmt');
-        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size)}, ${name}`); // one name for screen readers: format, size, file
+        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size, o.approx)}, ${name}`); // one name for screen readers: format, size, file
         return b;
       };
       menu.setAttribute('aria-label', `Choose a format for ${title}`);
