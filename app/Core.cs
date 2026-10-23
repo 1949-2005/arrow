@@ -327,6 +327,18 @@ namespace Arrow
             return Get(HeadingText, d.Status) ?? d.Status;
         }
 
+        // A progress window in the tray: "45% · 2.4 MB/s" (else the heading), then the name on its own line, within max
+        // characters (Windows' tray tooltip limit). The only place a name is shortened: its end gives way to "…".
+        public static string TrayTip(Download d, int max)
+        {
+            var head = d.Status == "downloading" && d.Phase != "merging" && d.Phase != "converting" ? Math.Floor(Fraction(d, true) * 100) + "% · " + Size(d.Speed) + "/s" : Heading(d);
+            var tip = head + "\n" + ShortName(d);
+            if (tip.Length <= max) return tip;
+            var cut = max - 1;
+            if (cut > 0 && char.IsHighSurrogate(tip[cut - 1])) cut--; // never half an emoji
+            return tip.Substring(0, Math.Max(0, cut)).TrimEnd() + "…";
+        }
+
         // Progress window status row
         public static string StatusText(Download d)
         {

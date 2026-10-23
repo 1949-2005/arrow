@@ -172,6 +172,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - **Connections** lists each connection: how much it downloaded, and "Receiving data…", "Done" or "Waiting".
   - **Options** has the speed limit and "When this download is done" for this download.
   - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Arrow remembers it.
+  - The **—** button at the top right (Minimize to system tray) hides the window. A green arrow next to the clock shows the download's progress. Click it to bring the window back. It comes back by itself when the download finishes or fails.
 - **Download complete**: when a download you started with Start Download finishes, this window opens once. Click **Open**, **Open with…**, **Open folder** or **Close**. Tick **Don't show this window again** to stop it (turn it back on in Options › General, "Show the Download complete window").
 
 ### With the browser extension

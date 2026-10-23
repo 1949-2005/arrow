@@ -302,7 +302,7 @@ namespace Arrow
         const byte VK_MENU = 0x12;
         const uint KEYEVENTF_KEYUP = 2;
 
-        static void Front(Form f)
+        internal static void Front(Form f)
         {
             if (!f.Visible) f.Show();
             if (Dialog.Offscreen) return;
@@ -610,6 +610,8 @@ namespace Arrow
                 var prog = new ProgressDialog(null, running.Id);
                 prog.Fill(running, cats, speeds);
                 Shot(folder, "progress-running", prog);
+                foreach (var px in new[] { 16, 32 }) // the icon a progress window leaves in the tray
+                    using (var bmp = ProgressDialog.TrayBitmap(px)) bmp.Save(Path.Combine(folder, "tray-download-" + px + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
 
                 var done = new Download
                 {

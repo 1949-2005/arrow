@@ -243,6 +243,17 @@ namespace Arrow
             Eq(Core.StatusText(video("converting")), "Converting to MP3", "status converting");
             Eq(Core.StatusText(video(null)), "Starting…", "status video starting");
             Eq(Core.Heading(video("merging")), "Merging", "heading merging");
+            // a progress window in the tray: its tooltip, within Windows' 127 (or 63) characters
+            var tray = http(); tray.Name = "file.zip"; tray.Speed = 2516582;
+            Eq(Core.TrayTip(tray, 127), "45% · 2.4 MB/s\nfile.zip", "tray tip running");
+            var held = with("paused"); held.Name = "file.zip";
+            Eq(Core.TrayTip(held, 127), "Paused · 45%\nfile.zip", "tray tip paused");
+            Eq(Core.TrayTip(video("merging"), 127), "Merging\nYouTube video", "tray tip merging");
+            tray.Name = new string('a', 200);
+            Eq(Core.TrayTip(tray, 127).Length, 127, "tray tip fits 127");
+            Eq(Core.TrayTip(tray, 63), "45% · 2.4 MB/s\n" + new string('a', 47) + "…", "tray tip cut at 63");
+            tray.Name = new string('a', 46) + "\U0001F3BB.mp4";
+            Eq(Core.TrayTip(tray, 63), "45% · 2.4 MB/s\n" + new string('a', 46) + "…", "tray tip keeps emoji whole");
             Eq(P(Core.Pieces(video("audio"))), "0,0.25", "one fill for video");
             var hls = new Download { Kind = "hls", Status = "downloading", Got = 300, Hls = new HlsInfo { Done = 3, Total = 6, Bytes = 300 } };
             Eq(Core.StatusText(hls), "Receiving data…", "status hls");

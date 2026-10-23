@@ -56,7 +56,7 @@ Icons: "Segoe Fluent Icons" (fallback "Segoe MDL2 Assets"), drawn in the token c
 Download E896, Link E71B, Add E710, List E8FD, Clock E121, Options E9E9, More E712, Pause E769, Play E768, Stop E71A,
 Delete E74D, Folder E8B7, Open folder E838, Open file E8E5, Copy E8C8, Search E721, Check circle E930, Warning E7BA,
 Error E783, Clipboard E77F, Close E8BB, Chevron down E70D, Chevron up E70E, Check mark E73E, Sort E8CB, View E8A9,
-Speed limit EC4A, Move up E74A, Move down E74B. Categories: All E8B7, Active E896, Finished E930, Failed E783,
+Speed limit EC4A, Move up E74A, Move down E74B, Minimize E921. Categories: All E8B7, Active E896, Finished E930, Failed E783,
 Scheduled E121, Video E714, Music EC4F, Documents E8A5, Programs ECAA, Compressed F012, Other E7C3.
 
 File types show the icon Windows shows for them, as File Explorer and IDM do (`FileIcons.cs`): SHGetFileInfo on the
@@ -272,6 +272,17 @@ errors show inline or in an Error dialog.
     "When this download is done" + a Picker 180 wide: Nothing / Open the file / Sleep / Shut down → op 'whenDone'.
     Polls don't overwrite a change on its way.
   Footer: Pause/Resume and Cancel ("Cancel this download? The partial file is deleted."). Window title "45% · name".
+  - Minimize to system tray (IDM's extra caption button; the native caption keeps only Close): an icon-only ghost
+    button 28 x 28, radius 6, Minimize glyph, at the right of the title's line (the title gives up its width + 8),
+    tooltip and AccessibleName "Minimize to system tray", in the tab order after the title; shown while the download
+    runs (not failed, Download complete or removed). Click: the window hides (it keeps updating) and the download gets
+    its own tray icon: the Download glyph in done green on a transparent square at the system's small-icon size, so
+    it doesn't read as the app's icon. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
+    "Paused · 45%"), then the name on a second line, within 127 characters (NotifyIcon's text field set by
+    reflection; 63 if that fails): the only place a name is cut, its end giving way to "…". Left, right or double
+    click: the window shows again where it was, in front, and the icon goes. When the download finishes, fails or is
+    removed, the window shows again (Download complete, the error, "This download was removed."); closing the window
+    or quitting the app removes the icon.
 - Download complete (the progress window's done view, also opening by itself once for a download with `notify` that
   the app saw unfinished and then done, when `showComplete` is on; an open progress window turns into it): green
   check tile, "Download complete", the name; facts Saved to (folder), File size, Address (ellipsis); no segment bar;
