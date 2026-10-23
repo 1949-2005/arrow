@@ -16,7 +16,8 @@ namespace Arrow
         public const char Download = '\uE896', Link = '\uE71B', Add = '\uE710', List = '\uE8FD', Clock = '\uE121', Options = '\uE9E9',
             More = '\uE712', Pause = '\uE769', Play = '\uE768', Stop = '\uE71A', Delete = '\uE74D', Folder = '\uE8B7', OpenFolder = '\uE838',
             OpenFile = '\uE8E5', Copy = '\uE8C8', Search = '\uE721', CheckCircle = '\uE930', Warning = '\uE7BA', Error = '\uE783',
-            Clipboard = '\uE77F', Close = '\uE8BB', ChevronDown = '\uE70D', CheckMark = '\uE73E';
+            Clipboard = '\uE77F', Close = '\uE8BB', ChevronDown = '\uE70D', ChevronUp = '\uE70E', CheckMark = '\uE73E',
+            Sort = '\uE8CB', View = '\uE8A9', SpeedLimit = '\uEC4A';
         public const char All = '\uE8B7', Active = '\uE896', Finished = '\uE930', Failed = '\uE783', Scheduled = '\uE121',
             Video = '\uE714', Music = '\uEC4F', Documents = '\uE8A5', Programs = '\uECAA', Compressed = '\uF012', Other = '\uE7C3';
 

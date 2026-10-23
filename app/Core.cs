@@ -65,10 +65,12 @@ namespace Arrow
     {
         public Settings Settings;
         public List<Download> Downloads;
-        public string WhenDone;
+        public string WhenDone, PowerOp; // PowerOp: what the running countdown does ('sleep', 'shutdown'), null when none runs
         public int? PowerIn;
+        public bool PowerAll; // the running countdown is "When all downloads finish", not a download's or a queue's own
         public List<string> Exts;
-        public Dictionary<string, List<string>> Categories;
+        public Dictionary<string, List<string>> Categories; // the sidebar's Types, in order (settings.types)
+        public List<Queue> Queues; // with running and the counts
         public int Open;
 
         public static State From(object json)
@@ -79,7 +81,10 @@ namespace Arrow
                 Settings = Settings.From(o.Obj("settings")),
                 Downloads = (o.List("downloads") ?? new List<object>()).Select(x => Download.From(x as IDictionary<string, object>)).ToList(),
                 WhenDone = o.Str("whenDone") ?? "",
+                PowerOp = o.Str("powerOp"),
                 PowerIn = o.Int("powerIn"),
+                PowerAll = o.Bool("powerAll") ?? false,
+                Queues = Queue.ListFrom(o.List("queues")),
                 Exts = o.Strings("exts"),
                 Categories = new Dictionary<string, List<string>>(),
                 Open = o.Int("open") ?? 0,
@@ -92,26 +97,64 @@ namespace Arrow
 
     public class Settings
     {
-        public string Dir, ScheduleAt;
+        public string Dir, ScheduleAt, Duplicates;
         public int Connections, MaxActive, SpeedLimitKB;
-        public bool Categories, Clipboard, Startup;
+        public bool Categories, Clipboard, Startup, SpeedLimitOn, ShowComplete;
         public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
+        public Dictionary<string, List<string>> Types = new Dictionary<string, List<string>>(); // category → file types, in sidebar order
+        public List<Queue> Queues = new List<Queue>();
 
         public static Settings From(IDictionary<string, object> o)
         {
             var f = o.Obj("folders");
+            var t = o.Obj("types");
+            var queues = Queue.ListFrom(o.List("queues"));
+            var main = queues.FirstOrDefault(q => q.Id == Queue.Main);
             return new Settings
             {
                 Dir = o.Str("dir") ?? "",
                 Connections = o.Int("connections") ?? 0,
                 MaxActive = o.Int("maxActive") ?? 0,
                 SpeedLimitKB = o.Int("speedLimitKB") ?? 0,
-                ScheduleAt = o.Str("scheduleAt") ?? "",
+                SpeedLimitOn = o.Bool("speedLimitOn") ?? false,
+                // the engine moved it into the main queue's start time; Options shows it there until it has a Scheduler page
+                ScheduleAt = o.Str("scheduleAt") ?? (main != null ? main.StartAt : ""),
+                Duplicates = o.Str("duplicates") ?? "ask",
+                ShowComplete = o.Bool("showComplete") ?? true,
                 Categories = o.Bool("categories") ?? false,
                 Clipboard = o.Bool("clipboard") ?? false,
                 Startup = o.Bool("startup") ?? false,
                 Folders = f == null ? new Dictionary<string, string>() : f.Keys.Where(k => !string.IsNullOrEmpty(f[k] as string)).ToDictionary(k => k, k => (string)f[k]),
+                Types = t == null ? new Dictionary<string, List<string>>() : t.Keys.ToDictionary(k => k, k => t.Strings(k)),
+                Queues = queues,
             };
+        }
+    }
+
+    // A download queue (settings.queues; /api/state's queues add Running and the counts)
+    public class Queue
+    {
+        public const string Main = "main";
+        public string Id, Name, StartAt, StopAt, WhenDone;
+        public int MaxActive, Retries, Waiting, Active, Total;
+        public List<int> Days = new List<int>(); // Sunday = 0; empty = every day
+        public bool Running;
+
+        public static Queue From(IDictionary<string, object> o)
+        {
+            var days = o.List("days");
+            return new Queue
+            {
+                Id = o.Str("id"), Name = o.Str("name") ?? "", StartAt = o.Str("startAt") ?? "", StopAt = o.Str("stopAt") ?? "", WhenDone = o.Str("whenDone") ?? "",
+                MaxActive = o.Int("maxActive") ?? 1, Retries = o.Int("retries") ?? 0,
+                Waiting = o.Int("waiting") ?? 0, Active = o.Int("active") ?? 0, Total = o.Int("total") ?? 0, Running = o.Bool("running") ?? false,
+                Days = days == null ? new List<int>() : days.Where(v => v is int).Cast<int>().ToList(),
+            };
+        }
+
+        public static List<Queue> ListFrom(List<object> l)
+        {
+            return (l ?? new List<object>()).OfType<IDictionary<string, object>>().Select(From).Where(q => q.Id != null).ToList();
         }
     }
 
@@ -123,13 +166,16 @@ namespace Arrow
     public class Download
     {
         public string Id, Url, Name, File, Status, Error, Kind, Title, Phase, Quality, Format;
+        public string Description, Queue; // Queue: the id of its queue, null when in none
+        public string WhenDone = ""; // '' | 'open' | 'sleep' | 'shutdown'
         public long? Size;
         public bool? Resumable;
+        public bool Notify; // started from Download File Info: its Download complete window opens once
         public HlsInfo Hls;
-        public long Added, Got, Speed;
-        public int Connections;
+        public long Added, Got, Speed, LastTry; // LastTry: time of the last start, 0 when never
+        public int Connections, LimitKB; // LimitKB: its own speed limit, 0 = none
         public Probe Probe;
-        public List<long[]> Segments; // [start, end, pos]; null when the engine sends none
+        public List<long[]> Segments; // [start, end, pos, working (1 when a connection works on it now)]; null when the engine sends none
 
         public static Download From(IDictionary<string, object> o)
         {
@@ -139,6 +185,8 @@ namespace Arrow
             {
                 Id = o.Str("id"), Url = o.Str("url"), Name = o.Str("name"), File = o.Str("file"), Status = o.Str("status"), Error = o.Str("error"),
                 Kind = o.Str("kind"), Title = o.Str("title"), Phase = o.Str("phase"), Quality = o.Str("quality"), Format = o.Str("format"),
+                Description = o.Str("description"), Queue = o.Str("queue"), WhenDone = o.Str("whenDone") ?? "", Notify = o.Bool("notify") ?? false,
+                LastTry = o.Long("lastTry") ?? 0, LimitKB = o.Int("limitKB") ?? 0,
                 Size = o.Long("size"), Resumable = o.Bool("resumable"),
                 Hls = h == null ? null : new HlsInfo { Done = h.Long("done") ?? 0, Bytes = h.Long("bytes") ?? 0, Total = h.Long("total") ?? 0 },
                 Added = o.Long("added") ?? 0, Got = o.Long("got") ?? 0, Speed = o.Long("speed") ?? 0, Connections = o.Int("connections") ?? 0,
@@ -311,10 +359,150 @@ namespace Arrow
             return last != "" ? last : url;
         }
 
-        public static string Eta(Download d)
+        // Seconds left while downloading at a known speed and size, else null
+        public static double? EtaSeconds(Download d)
         {
             var t = Total(d);
-            return d.Status == "downloading" && d.Speed != 0 && t != null && t != 0 && !double.IsNaN(t.Value) ? Time((t.Value - d.Got) / d.Speed) : "";
+            return d.Status == "downloading" && d.Speed != 0 && t != null && t != 0 && !double.IsNaN(t.Value) ? (t.Value - d.Got) / d.Speed : (double?)null;
+        }
+
+        public static string Eta(Download d) { var s = EtaSeconds(d); return s == null ? "" : Time(s.Value); }
+
+        // ---- the list's columns, cells and order
+
+        // Key, title and width at 96 DPI; Name takes the rest, at least its width
+        public static readonly string[] Columns = { "name", "size", "status", "left", "speed", "lastTry", "description", "saveTo", "added" };
+        public static readonly string[] ColumnTitles = { "Name", "Size", "Status", "Time left", "Speed", "Last try", "Description", "Save to", "Added" };
+        public static readonly int[] ColumnWidths = { 220, 86, 120, 92, 96, 112, 150, 160, 112 };
+        public static readonly string[] DefaultColumns = { "size", "status", "left", "speed", "lastTry", "description" };
+
+        // The chosen columns that fit a list width (pixels at scale), in column order after Name: the first that doesn't fit
+        // and every one right of it are left out
+        public static List<string> FitColumns(IEnumerable<string> chosen, int width, double scale)
+        {
+            var set = new HashSet<string>(chosen);
+            var used = (int)Math.Round(ColumnWidths[0] * scale);
+            var fit = new List<string>();
+            for (var i = 1; i < Columns.Length; i++)
+            {
+                if (!set.Contains(Columns[i])) continue;
+                used += (int)Math.Round(ColumnWidths[i] * scale);
+                if (used > width) break;
+                fit.Add(Columns[i]);
+            }
+            return fit;
+        }
+
+        public static string QueueName(Queue q) { return q.Id == Queue.Main ? "Main queue" : q.Name; }
+
+        // The Status column: "45%", the video phases, "Queued", "In <queue>", "Paused · 30%", "Failed", "Complete"
+        public static string ListStatus(Download d, IList<Queue> queues)
+        {
+            var pct = Num(Math.Floor(Fraction(d, true) * 100)) + "%";
+            switch (d.Status)
+            {
+                case "downloading": return d.Phase == "merging" ? "Merging" : d.Phase == "converting" ? "Converting to MP3" : pct;
+                case "queued": return "Queued";
+                case "scheduled":
+                    var q = queues == null ? null : queues.FirstOrDefault(x => x.Id == d.Queue);
+                    return q != null ? "In " + QueueName(q) : "Scheduled";
+                case "paused": return "Paused · " + pct;
+                case "error": return "Failed";
+                case "done": return "Complete";
+                default: return StatusText(d);
+            }
+        }
+
+        // A list cell's text; Time left and Speed only while downloading, empty when unknown
+        public static string Cell(Download d, string column, IList<Queue> queues, DateTime now)
+        {
+            switch (column)
+            {
+                case "name": return ShortName(d);
+                case "size": var t = Total(d); return t == null ? "" : Size(t);
+                case "status": return ListStatus(d, queues);
+                case "left": return Eta(d);
+                case "speed": return d.Status == "downloading" ? Size(d.Speed) + "/s" : "";
+                case "lastTry": return DateLabel(d.LastTry, now);
+                case "description": return d.Description ?? "";
+                case "saveTo": return string.IsNullOrEmpty(d.File) ? "" : SplitPath(d.File)[0];
+                case "added": return DateLabel(d.Added, now);
+                default: return "";
+            }
+        }
+
+        // Unfinished first (downloading, queued, paused, failed, scheduled), then finished
+        public static int Rank(Download d)
+        {
+            switch (d.Status)
+            {
+                case "downloading": return 0;
+                case "queued": return 1;
+                case "paused": return 2;
+                case "error": return 3;
+                case "done": return 5;
+                default: return 4;
+            }
+        }
+
+        // The list's default order: by Rank, newest first within each
+        public static List<Download> DefaultOrder(IEnumerable<Download> list)
+        {
+            return list.OrderBy(Rank).ThenByDescending(d => d.Added).ThenBy(d => d.Id, StringComparer.Ordinal).ToList();
+        }
+
+        // A column's sort key: a string or a double, null for an empty cell
+        static object SortKey(Download d, string column, IList<Queue> queues)
+        {
+            switch (column)
+            {
+                case "size": return Total(d);
+                case "status": return Rank(d) + Math.Min(1, Fraction(d, true)) / 2; // the groups in Rank order, less done first within one
+                case "left": return EtaSeconds(d);
+                case "speed": return d.Status == "downloading" ? (double?)d.Speed : null;
+                case "lastTry": return d.LastTry == 0 ? (double?)null : d.LastTry;
+                case "added": return d.Added == 0 ? (double?)null : d.Added;
+                default: var s = Cell(d, column, queues, DateTime.Now); return s == "" ? null : s; // name, description, save to
+            }
+        }
+
+        // The rows sorted by a column; empty cells stay last either way, ties keep the given order
+        public static List<Download> Sort(IList<Download> items, string column, bool descending, IList<Queue> queues)
+        {
+            var keyed = items.Select(d => new { d, k = SortKey(d, column, queues) }).ToList();
+            var cmp = Comparer<object>.Create((a, b) => a is string ? StringComparer.CurrentCultureIgnoreCase.Compare((string)a, (string)b) : ((double)a).CompareTo((double)b));
+            var full = keyed.Where(x => x.k != null);
+            var sorted = descending ? full.OrderByDescending(x => x.k, cmp) : full.OrderBy(x => x.k, cmp);
+            return sorted.Concat(keyed.Where(x => x.k == null)).Select(x => x.d).ToList();
+        }
+
+        // A header click: a new column sorts ascending, the same one again reverses, a third time goes back to the default (null)
+        public static void NextSort(string clicked, ref string column, ref bool descending)
+        {
+            if (clicked != column) { column = clicked; descending = false; }
+            else if (!descending) descending = true;
+            else { column = null; descending = false; }
+        }
+
+        // The global limit counts only when on and above 0 (the engine's rate is speedLimitOn ? speedLimitKB : 0)
+        public static bool LimitOn(Settings s) { return s.SpeedLimitOn && s.SpeedLimitKB > 0; }
+        public static string SpeedLimitText(Settings s) { return "Speed limit: " + (LimitOn(s) ? Num(s.SpeedLimitKB) + " KB/s" : "Off"); }
+
+        // The status bar's next queue start, "Main queue at 02:00": the queue not running whose start comes first; null when none
+        public static string NextStart(IList<Queue> queues, DateTime now)
+        {
+            Queue best = null;
+            var bestAt = DateTime.MaxValue;
+            foreach (var q in queues)
+            {
+                var hm = ScheduleTime(q.StartAt);
+                if (q.Running || string.IsNullOrEmpty(hm)) continue;
+                var at = now.Date.AddHours(int.Parse(hm.Substring(0, 2), CultureInfo.InvariantCulture)).AddMinutes(int.Parse(hm.Substring(3), CultureInfo.InvariantCulture));
+                if (at <= now) at = at.AddDays(1);
+                for (var i = 0; i < 7 && q.Days.Count > 0 && !q.Days.Contains((int)at.DayOfWeek); i++) at = at.AddDays(1);
+                if (at < bestAt) { best = q; bestAt = at; }
+            }
+            return best == null ? null : QueueName(best) + " at " + best.StartAt;
         }
 
         public static bool CanResume(Download d) { return d.Status == "paused" || d.Status == "error" || d.Status == "scheduled"; }

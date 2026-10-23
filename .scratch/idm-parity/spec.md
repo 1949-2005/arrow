@@ -60,7 +60,8 @@ finished, used once, as today), a download's own `whenDone` sleep/shutdown when 
 `whenDone` when the queue is done. The per-download and per-queue triggers start the countdown even while other
 downloads run. `POST /api/settings {whenDone: ''}` (the strip's Cancel) cancels any running countdown. view():
 `whenDone` stays the status bar's choice, `powerOp` names what the running countdown does (null when none),
-`powerIn` as today; the app's strip reads `powerOp` ("Shutting down in 42 s" stays).
+`powerAll` says it is "When all downloads finish" (not one download's or queue's own), `powerIn` as today; the app's
+strip reads `powerOp` and `powerAll` ("All downloads finished. Shutting down in 42 s" only for `powerAll`).
 
 ### Duplicates
 A duplicate is a download whose url equals one already in the list (not pending). For `add({confirm: true})` the

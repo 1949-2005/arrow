@@ -68,6 +68,9 @@ namespace Arrow
         public ButtonKind Kind;
         public char Icon;
         public bool Destructive; // err text on Secondary and Ghost
+        public bool MutedGlyph; // the glyph in muted next to its text (command bar)
+        public bool Chevron; // a 10 px chevron after the content: the button opens a menu
+        public int Pad = Theme.Px(12); // left and right of the content (the command bar's ghost buttons: 8)
         public int Radius = Theme.Px(8);
         protected bool hover, pressed;
 
@@ -92,10 +95,11 @@ namespace Arrow
         {
             get
             {
-                var w = Theme.Px(12) * 2;
+                var w = Pad * 2;
                 if (Icon != '\0') w += Theme.Px(16);
                 if (!string.IsNullOrEmpty(Text)) w += Theme.Measure(Text, Font).Width + (Icon != '\0' ? Theme.Px(8) : 0);
-                return Icon != '\0' && string.IsNullOrEmpty(Text) ? Theme.Px(34) : w;
+                var chevron = Chevron ? Theme.Px(4 + 10) : 0;
+                return Icon != '\0' && string.IsNullOrEmpty(Text) ? Theme.Px(34) + chevron : w + chevron;
             }
         }
 
@@ -156,10 +160,12 @@ namespace Arrow
             var textW = iconOnly ? 0 : Theme.Measure(Text, Font).Width;
             var icon = Icon != '\0' ? Theme.Px(16) : 0;
             var gap = icon > 0 && textW > 0 ? Theme.Px(8) : 0;
-            var x = (r.Width - (icon + gap + textW)) / 2;
-            if (Kind == ButtonKind.Ghost && !iconOnly && x < Theme.Px(12)) x = Theme.Px(12);
-            if (icon > 0) Theme.DrawGlyph(g, Icon, new Rectangle(x, 0, icon, r.Height), fore, 16);
+            var chevron = Chevron ? Theme.Px(4 + 10) : 0;
+            var x = (r.Width - (icon + gap + textW + chevron)) / 2;
+            if (Kind == ButtonKind.Ghost && !iconOnly && x < Pad) x = Pad;
+            if (icon > 0) Theme.DrawGlyph(g, Icon, new Rectangle(x, 0, icon, r.Height), MutedGlyph && Enabled ? Theme.Muted : fore, 16);
             if (textW > 0) Theme.DrawText(g, Text, Font, new Rectangle(x + icon + gap, 0, Math.Min(textW + 1, r.Width - x - icon - gap), r.Height), fore);
+            if (Chevron) Theme.DrawGlyph(g, Glyph.ChevronDown, new Rectangle(x + icon + gap + textW + Theme.Px(4), 0, Theme.Px(10), r.Height), Enabled ? Theme.Muted : Theme.Faint, 10);
             if (Focused && ShowFocusCues) Theme.FocusRing(g, r, Radius);
         }
     }
@@ -604,21 +610,22 @@ namespace Arrow
         public override AccessibleObject GetChild(int index) { return index >= 0 && index < count() ? child(index) : null; }
     }
 
-    // Left column: headed groups of items (glyph, label, count). Up/Down move the selection.
+    // Left column: headed groups of items (glyph, label, count), scrolled by the wheel when they don't fit. Up/Down move the selection.
     public class Sidebar : Painted
     {
         public class Item
         {
             public string Key, Label;
             public char Icon;
-            public bool Category; // glyph in its category color
+            public string Type; // a category's icon (its SVG, else its glyph in its color); null: the glyph in muted
+            public bool Dot; // a done-color dot before the count: a running queue
             public int Count;
         }
 
         public readonly List<Item> Items = new List<Item>();
         readonly Dictionary<int, string> headings = new Dictionary<int, string>(); // before item index
         string selected;
-        int hover = -1;
+        int hover = -1, scroll;
         public event Action SelectedChanged;
 
         public Sidebar()
@@ -629,7 +636,9 @@ namespace Arrow
         }
 
         public void Heading(string text) { headings[Items.Count] = text; }
-        public void Add(string key, string label, char icon, bool category) { Items.Add(new Item { Key = key, Label = label, Icon = icon, Category = category }); }
+        public void Add(string key, string label, char icon, string type) { Items.Add(new Item { Key = key, Label = label, Icon = icon, Type = type }); }
+        // Before building the items again; the selection stays when its key comes back
+        public void Clear() { Items.Clear(); headings.Clear(); hover = -1; }
 
         public string Selected
         {
@@ -653,7 +662,7 @@ namespace Arrow
 
         Rectangle ItemRect(int index)
         {
-            int y = Theme.Px(8), pad = Theme.Px(8);
+            int y = Theme.Px(8) - scroll, pad = Theme.Px(8);
             for (var i = 0; i <= index; i++)
             {
                 if (headings.ContainsKey(i)) y += (i > 0 ? Theme.Px(12) : 0) + Theme.Px(28);
@@ -682,6 +691,16 @@ namespace Arrow
             if (i >= 0) { Focus(); Selected = Items[i].Key; }
             base.OnMouseDown(e);
         }
+
+        void ScrollTo(int y)
+        {
+            var max = Items.Count == 0 ? 0 : Math.Max(0, ItemRect(Items.Count - 1).Bottom + scroll + Theme.Px(8) - Height);
+            y = Math.Max(0, Math.Min(max, y));
+            if (y != scroll) { scroll = y; Invalidate(); }
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e) { ScrollTo(scroll - e.Delta * Theme.Px(30) / 120); base.OnMouseWheel(e); }
+        protected override void OnResize(EventArgs e) { base.OnResize(e); ScrollTo(scroll); }
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
         protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
         protected override bool IsInputKey(Keys k) { return k == Keys.Up || k == Keys.Down || k == Keys.Home || k == Keys.End || base.IsInputKey(k); }
@@ -689,7 +708,17 @@ namespace Arrow
         {
             var i = Items.FindIndex(x => x.Key == selected);
             var j = e.KeyCode == Keys.Up ? i - 1 : e.KeyCode == Keys.Down ? i + 1 : e.KeyCode == Keys.Home ? 0 : e.KeyCode == Keys.End ? Items.Count - 1 : -2;
-            if (j != -2) { Selected = Items[Math.Max(0, Math.Min(Items.Count - 1, j))].Key; e.Handled = true; }
+            if (j != -2 && Items.Count > 0)
+            {
+                j = Math.Max(0, Math.Min(Items.Count - 1, j));
+                Selected = Items[j].Key;
+                // keep it in view, with its group's heading above the first item
+                var r = ItemRect(j);
+                var head = headings.ContainsKey(j) ? Theme.Px(28) : 0;
+                if (r.Top - head < 0) ScrollTo(scroll + r.Top - head - Theme.Px(8));
+                else if (r.Bottom > Height) ScrollTo(scroll + r.Bottom - Height + Theme.Px(8));
+                e.Handled = true;
+            }
             base.OnKeyDown(e);
         }
 
@@ -712,11 +741,16 @@ namespace Arrow
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
                 // Types: the user's SVG icon at 28 px; Library: its glyph at 18 px, centered in the same 28 px slot
                 var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(28), r.Height);
-                if (!it.Category || !FileIcons.DrawType(g, it.Key, slot, 28))
-                    Theme.DrawGlyph(g, it.Icon, slot, it.Category ? Theme.Category(it.Key) : sel ? Theme.Text : Theme.Muted, it.Category ? 16 : 18);
+                if (it.Type == null || !FileIcons.DrawType(g, it.Type, slot, 28))
+                    Theme.DrawGlyph(g, it.Icon, slot, it.Type != null ? Theme.Category(it.Type) : sel ? Theme.Text : Theme.Muted, it.Type != null ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Theme.Measure(count, Theme.Body).Width;
                 Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);
+                if (it.Dot)
+                {
+                    cw += Theme.Px(10 + 8);
+                    Theme.Fill(g, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y + (r.Height - Theme.Px(8)) / 2, Theme.Px(8), Theme.Px(8)), Theme.Px(4), Theme.Done);
+                }
                 var x = r.X + Theme.Px(8 + 28 + 10);
                 Theme.DrawText(g, it.Label, sel ? Theme.Bold : Theme.Body, new Rectangle(x, r.Y, r.Right - Theme.Px(16) - cw - x, r.Height), Theme.Text);
                 if (sel && Focused && ShowFocusCues) Theme.FocusRing(g, r, Theme.Px(6));
@@ -729,7 +763,7 @@ namespace Arrow
             var me = this;
             ListAccessible list = null;
             list = new ListAccessible(this, () => Items.Count, i => new ItemAccessible(list,
-                () => Items[i].Label + ", " + Items[i].Count,
+                () => Items[i].Label + (Items[i].Dot ? ", running" : "") + ", " + Items[i].Count,
                 () => Items[i].Key == selected, () => Focused && Items[i].Key == selected,
                 () => me.RectangleToScreen(ItemRect(i)), () => Selected = Items[i].Key));
             return list;
@@ -745,6 +779,16 @@ namespace Arrow
         public event Action<Download> Activated; // Enter or double-click
         public event Action ToggleRequested;     // Space: pause or resume
         public event Action<Point> MenuRequested;
+        public event Action<string> HeaderClicked;       // a column title: sort by it
+        public event Action<Point> HeaderMenuRequested;  // right-click on the header: the column chooser, at a point in Header
+
+        // Columns: the chosen ones (Core.Columns keys after Name), those that fit, the sort shown in the header
+        public List<string> Chosen = new List<string>(Core.DefaultColumns);
+        public List<string> Shown;
+        public string SortColumn;
+        public bool SortDesc;
+        public IList<Queue> Queues = new List<Queue>(); // for "In <queue>"
+        public readonly ListHeader Header;
 
         // Empty state: FirstRun shows the logo, the title, the hint and EmptyButton; else the title and the hint
         public bool FirstRun;
@@ -768,6 +812,8 @@ namespace Arrow
             AccessibleRole = AccessibleRole.List;
             EmptyButton.Visible = false;
             Controls.Add(EmptyButton);
+            Header = new ListHeader(this);
+            Fit();
             scroller.Tick += (s, e) =>
             {
                 var y = -AutoScrollPosition.Y;
@@ -952,23 +998,46 @@ namespace Arrow
             e.Handled = e.SuppressKeyPress = true;
         }
 
-        // Trailing text of a row and its color
-        public static string Trailing(Download d)
+        // ---- columns: Name takes the rest; the chosen ones that don't fit are left out from the right (Core.FitColumns)
+
+        public void SetColumns(IEnumerable<string> chosen)
         {
-            var pct = Math.Floor(Core.Fraction(d, true) * 100) + "%";
-            switch (d.Status)
-            {
-                case "downloading":
-                    if (d.Phase == "merging") return "Merging";
-                    if (d.Phase == "converting") return "Converting to MP3";
-                    return pct + " · " + Core.Size(d.Speed) + "/s";
-                case "queued": return "Queued";
-                case "paused": return "Paused · " + pct;
-                case "error": return "Failed";
-                case "scheduled": return "Scheduled";
-                case "done": return Core.Size(Core.Total(d));
-                default: return Core.StatusText(d);
-            }
+            var set = new HashSet<string>(chosen);
+            Chosen = Core.Columns.Where(c => c != "name" && set.Contains(c)).ToList();
+            Fit();
+        }
+
+        void Fit()
+        {
+            var fit = Core.FitColumns(Chosen, ClientSize.Width, Theme.Scale);
+            if (Shown != null && fit.SequenceEqual(Shown)) return;
+            Shown = fit;
+            Invalidate();
+            Header.Invalidate();
+        }
+
+        protected override void OnResize(EventArgs e) { base.OnResize(e); Fit(); Header.Invalidate(); }
+
+        // [column, x, width] from Name to the right
+        public List<Tuple<string, int, int>> Spans()
+        {
+            var widths = Shown.Select(c => Theme.Px(Core.ColumnWidths[Array.IndexOf(Core.Columns, c)])).ToList();
+            var spans = new List<Tuple<string, int, int>> { Tuple.Create("name", 0, Math.Max(Theme.Px(220), ClientSize.Width - widths.Sum())) };
+            var x = spans[0].Item3;
+            for (var i = 0; i < Shown.Count; i++) { spans.Add(Tuple.Create(Shown[i], x, widths[i])); x += widths[i]; }
+            return spans;
+        }
+
+        // The row's text for screen readers: the name and the shown cells
+        string RowName(Download d)
+        {
+            return string.Join(", ", new[] { Core.ShortName(d) }.Concat(Shown.Select(c => Core.Cell(d, c, Queues, DateTime.Now))).Where(s => s != ""));
+        }
+
+        internal void HeaderClick(string column, MouseButtons button, Point p)
+        {
+            if (button == MouseButtons.Left) { var h = HeaderClicked; if (h != null && column != null) h(column); }
+            else if (button == MouseButtons.Right) { var h = HeaderMenuRequested; if (h != null) h(p); }
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)
@@ -1003,13 +1072,17 @@ namespace Arrow
             var icon = new Rectangle(r.X + pad, lineY + (lineH - Theme.Px(24)) / 2, Theme.Px(24), Theme.Px(24));
             if (!FileIcons.Draw(g, Core.IconExt(string.IsNullOrEmpty(d.File) ? Core.ShortName(d) : d.File, cat), icon, 24))
                 Theme.DrawGlyph(g, Glyph.Of(cat), icon, sel ? Theme.OnSel : Theme.Category(cat), 16);
-            var trailing = Trailing(d);
-            var tw = Theme.Measure(trailing, Theme.Body).Width;
-            var right = r.Right - pad;
-            var tColor = sel ? Theme.OnSel : d.Status == "error" ? Theme.Err : d.Status == "done" ? Theme.Muted : Theme.Text;
-            Theme.DrawText(g, trailing, Theme.Body, new Rectangle(right - tw, lineY, tw, lineH), tColor, Theme.Line1Right);
+            var spans = Spans();
+            var now = DateTime.Now;
+            // finished rows: everything but the name in muted; the status of a failed one in err
+            foreach (var c in spans.Skip(1))
+            {
+                var color = sel ? Theme.OnSel : d.Status == "done" ? Theme.Muted : c.Item1 == "status" && d.Status == "error" ? Theme.Err : Theme.Text;
+                Theme.DrawText(g, Core.Cell(d, c.Item1, Queues, now), Theme.Body, new Rectangle(r.X + c.Item2, lineY, Math.Max(0, c.Item3 - pad), lineH), color);
+            }
+            var right = r.X + spans[0].Item3 - pad;
             var x = r.X + pad + Theme.Px(24 + 12);
-            Theme.DrawText(g, Core.ShortName(d), Theme.Body, new Rectangle(x, lineY, Math.Max(0, right - tw - Theme.Px(12) - x), lineH), sel ? Theme.OnSel : Theme.Text);
+            Theme.DrawText(g, Core.ShortName(d), Theme.Body, new Rectangle(x, lineY, Math.Max(0, right - x), lineH), sel ? Theme.OnSel : Theme.Text);
             if (bar)
             {
                 var kind = d.Status == "error" ? BarKind.Err : d.Status == "paused" || d.Status == "scheduled" ? BarKind.Paused : BarKind.Normal;
@@ -1081,7 +1154,7 @@ namespace Arrow
             list = new ListAccessible(this, () => items.Count, i =>
             {
                 var d = items[i];
-                return new ItemAccessible(list, () => Core.ShortName(d) + ", " + Trailing(d), () => selected.Contains(d.Id), () => Focused && d.Id == cursor,
+                return new ItemAccessible(list, () => RowName(d), () => selected.Contains(d.Id), () => Focused && d.Id == cursor,
                     () => me.RectangleToScreen(RowRect(items.IndexOf(d))), () => { var k = items.IndexOf(d); if (k >= 0) Pick(k, "only"); });
             });
             return list;
@@ -1091,6 +1164,53 @@ namespace Arrow
         {
             if (disposing) scroller.Dispose();
             base.Dispose(disposing);
+        }
+    }
+
+    // The list's column titles (32 high, muted 12 px, bottom hairline), on the list's columns. Click sorts (the list's
+    // HeaderClicked), right-click opens the column chooser; the keyboard sorts through the Sort menu.
+    public class ListHeader : Painted
+    {
+        readonly DownloadList list;
+
+        public ListHeader(DownloadList list)
+        {
+            this.list = list;
+            Height = Theme.Px(32);
+            AccessibleName = "Column headers";
+            AccessibleRole = AccessibleRole.ColumnHeader;
+        }
+
+        string ColumnAt(int x)
+        {
+            var c = list.Spans().FirstOrDefault(s => x >= s.Item2 && x < s.Item2 + s.Item3);
+            return c == null ? null : c.Item1;
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e) { list.HeaderClick(ColumnAt(e.X), e.Button, e.Location); base.OnMouseClick(e); }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            using (var b = new SolidBrush(Theme.List)) e.Graphics.FillRectangle(b, ClientRectangle);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            var pad = Theme.Px(12);
+            var h = Height - 1;
+            foreach (var c in list.Spans())
+            {
+                var title = Core.ColumnTitles[Array.IndexOf(Core.Columns, c.Item1)];
+                // over the cells: Name's title above the icon, the others where their text starts
+                var x = c.Item2 + (c.Item1 == "name" ? pad : 0);
+                var w = Math.Max(0, c.Item3 - (c.Item1 == "name" ? 2 * pad : pad));
+                var sorted = c.Item1 == list.SortColumn;
+                var tw = Math.Min(Theme.Measure(title, Theme.Small).Width + Theme.Px(1), w);
+                Theme.DrawText(g, title, Theme.Small, new Rectangle(x, 0, tw, h), sorted ? Theme.Text : Theme.Muted);
+                if (sorted) Theme.DrawGlyph(g, list.SortDesc ? Glyph.ChevronDown : Glyph.ChevronUp, new Rectangle(x + tw + Theme.Px(4), 0, Theme.Px(9), h), Theme.Text, 9);
+            }
+            Theme.HLine(g, 0, Width, h);
         }
     }
 }

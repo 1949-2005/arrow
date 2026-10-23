@@ -427,6 +427,19 @@ namespace Arrow
 
         public static void About(IWin32Window owner) { Modal(AboutDialog(), owner); }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct OpenAsInfo { public string File, Class; public int Flags; }
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        static extern int SHOpenWithDialog(IntPtr parent, ref OpenAsInfo info);
+
+        // Windows' own "Open with" dialog for a file, which then opens it (OAIF_ALLOW_REGISTRATION | OAIF_EXEC)
+        public static void OpenWith(IWin32Window owner, string file)
+        {
+            if (!File.Exists(file)) { Error(owner, "The file isn't there anymore. It may have been moved or deleted."); return; }
+            var info = new OpenAsInfo { File = file, Flags = 0x1 | 0x4 };
+            SHOpenWithDialog(owner == null ? IntPtr.Zero : owner.Handle, ref info);
+        }
+
         // ---- ARROW_SHOTS: every dialog from made-up downloads (no engine calls, no Save dialogs), as PNGs
 
         public static void Shots(Form owner, string folder)

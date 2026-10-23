@@ -387,7 +387,9 @@ export class Manager {
       }
     } else if (op === 'up' || op === 'down') { // a queue's order is the list's order among its downloads
       if (!d.queue) throw new Error('not in a queue');
-      const same = this.list.filter(x => x.queue === d.queue);
+      if (d.status === 'done') throw new Error('a finished download does not wait in its queue');
+      // finished downloads keep their queue, but the queue's list hides them: a move skips them
+      const same = this.list.filter(x => x.queue === d.queue && x.status !== 'done');
       const o = same[same.indexOf(d) + (op === 'up' ? -1 : 1)];
       if (o) {
         const i = this.list.indexOf(d), j = this.list.indexOf(o);
@@ -838,6 +840,7 @@ export class Manager {
       }),
       whenDone: this.whenDone, // the status bar's "When done" choice
       powerOp: this.powerAt ? this.powerOp : null, // what the running countdown does: its strip names it
+      powerAll: !!this.powerAt && this.powerAll, // that countdown is "When all downloads finish" (not one download's or queue's)
       powerIn: this.powerAt ? Math.max(0, Math.ceil((this.powerAt - Date.now()) / 1000)) : null, // seconds left
       exts: Object.values(this.settings.types).flat(), // file types the UI offers from the clipboard
       categories: this.settings.types, // the UI's sidebar sorts by these

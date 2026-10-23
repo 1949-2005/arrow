@@ -64,6 +64,23 @@ namespace Arrow
     'Programs': ['exe','msi','apk','dmg','deb','rpm','appimage']}
 }");
 
+        // The same with the IDM-parity fields (engine issues 01–03)
+        static readonly string IdmJson = Q(@"{
+  'settings': {'dir': 'D:\\Downloads', 'speedLimitKB': 500, 'speedLimitOn': true, 'duplicates': 'replace', 'showComplete': false,
+    'types': {'Video': ['mp4'], 'Music': ['mp3'], 'Programs': ['exe'], 'Documents': ['pdf'], 'Compressed': ['zip'], 'Ebooks': ['epub', 'mobi']},
+    'queues': [{'id': 'main', 'name': 'Main download queue', 'maxActive': 1, 'startAt': '02:00', 'days': [], 'stopAt': '', 'retries': 0, 'whenDone': ''},
+               {'id': 'n1', 'name': 'Night', 'maxActive': 2, 'startAt': '23:30', 'days': [1, 5], 'stopAt': '06:00', 'retries': 3, 'whenDone': 'shutdown'}]},
+  'downloads': [
+    {'id': 'q1', 'url': 'https://x.com/r.pdf', 'name': 'r.pdf', 'status': 'downloading', 'kind': 'http', 'size': 1000, 'got': 350, 'speed': 10, 'connections': 1,
+     'description': 'Annual report', 'limitKB': 250, 'whenDone': 'open', 'lastTry': 1760860800000, 'notify': true, 'queue': 'main',
+     'segments': [[0, 500, 250, 1], [500, 1000, 600, 0]]},
+    {'id': 'q2', 'url': 'https://x.com/a.zip', 'status': 'paused', 'kind': 'http', 'description': null, 'lastTry': null, 'queue': null, 'segments': null}
+  ],
+  'queues': [{'id': 'main', 'name': 'Main download queue', 'running': true, 'waiting': 1, 'active': 1, 'total': 3},
+             {'id': 'n1', 'name': 'Night', 'running': false, 'waiting': 0, 'active': 0, 'total': 0}],
+  'whenDone': '', 'powerOp': 'shutdown', 'powerIn': 42, 'powerAll': false, 'open': 0
+}");
+
         // args: every assets/types/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
         public static int Main(string[] args)
         {
@@ -337,6 +354,97 @@ namespace Arrow
             var body = Json.Parse(Json.Serialize(new Dictionary<string, object> { { "id", "a1" }, { "path", "C:\\Téléchargements\\a \"b\".zip" } })) as IDictionary<string, object>;
             Eq(body.Str("path"), "C:\\Téléchargements\\a \"b\".zip", "a request body round trip");
             Eq(body.Long("missing") + "/" + body.Bool("id") + "/" + body.Num("id") + "/" + (body.List("id") == null), "///True", "accessors tolerate missing keys and other types");
+
+            // /api/state's IDM-parity fields: queues, per-download description, limit, when done, last try, the 4th segment value
+            var idm = State.From(Json.Parse(IdmJson));
+            var st = idm.Settings;
+            Eq(st.SpeedLimitOn + "/" + st.SpeedLimitKB + "/" + st.Duplicates + "/" + st.ShowComplete + "/" + st.ScheduleAt, "True/500/replace/False/02:00", "new settings, scheduleAt from the main queue");
+            Eq(L(st.Types.Keys) + "/" + L(st.Types["Ebooks"]), "Video | Music | Programs | Documents | Compressed | Ebooks/epub | mobi", "settings types in order");
+            Eq(L(st.Queues.Select(q => q.Id + ":" + q.Name + ":" + q.MaxActive + ":" + q.StartAt + ":" + string.Join(",", q.Days) + ":" + q.StopAt + ":" + q.Retries + ":" + q.WhenDone)),
+                "main:Main download queue:1:02:00:::0: | n1:Night:2:23:30:1,5:06:00:3:shutdown", "settings queues");
+            Eq(L(idm.Queues.Select(q => q.Id + ":" + q.Running + ":" + q.Waiting + ":" + q.Active + ":" + q.Total)), "main:True:1:1:3 | n1:False:0:0:0", "state queues with counts");
+            Eq(idm.PowerAll + "/" + State.From(Json.Parse("{\"powerAll\": true}")).PowerAll + "/" + empty.PowerAll, "False/True/False", "powerAll: a download's or a queue's own countdown, or all finished");
+            Eq(idm.PowerOp + "/" + idm.PowerIn + "/" + empty.PowerOp + "/" + empty.Queues.Count + "/" + empty.Settings.Duplicates + "/" + empty.Settings.ShowComplete, "shutdown/42//0/ask/True", "powerOp and defaults");
+            var q1 = idm.Downloads[0];
+            Eq(q1.Description + "/" + q1.LimitKB + "/" + q1.WhenDone + "/" + q1.LastTry + "/" + q1.Notify + "/" + q1.Queue, "Annual report/250/open/1760860800000/True/main", "download fields");
+            Eq(q1.Segments[0].Length + "/" + q1.Segments[0][3] + "/" + q1.Segments[1][3], "4/1/0", "segments' working flag");
+            var q2 = idm.Downloads[1];
+            Eq(q2.Description + "/" + q2.LimitKB + "/" + q2.WhenDone + "/" + q2.LastTry + "/" + q2.Notify + "/" + q2.Queue, "/0//0/False/", "download fields missing or null");
+            Eq(P(Core.Pieces(q1)), "0,0.25 0.5,0.1", "pieces ignore the working flag");
+
+            // the list: cells and status texts
+            var queues = idm.Queues;
+            Func<string, Download> dl = s => new Download { Kind = "http", Status = s, Size = 1000, Got = 452, Speed = 100, Added = Ms(2026, 10, 19, 9, 5), LastTry = Ms(2026, 10, 17, 12, 0) };
+            Eq(Core.ListStatus(dl("downloading"), queues), "45%", "status downloading");
+            Eq(Core.ListStatus(video("merging"), queues) + " | " + Core.ListStatus(video("converting"), queues) + " | " + Core.ListStatus(video("audio"), queues), "Merging | Converting to MP3 | 25%", "status video phases");
+            Eq(Core.ListStatus(dl("queued"), queues), "Queued", "status queued");
+            var inQ = dl("scheduled"); inQ.Queue = "main";
+            Eq(Core.ListStatus(inQ, queues), "In Main queue", "status in the main queue");
+            inQ.Queue = "n1";
+            Eq(Core.ListStatus(inQ, queues), "In Night", "status in a named queue");
+            inQ.Queue = "gone";
+            Eq(Core.ListStatus(inQ, queues), "Scheduled", "status in an unknown queue");
+            Eq(Core.ListStatus(dl("paused"), queues) + " | " + Core.ListStatus(dl("error"), queues) + " | " + Core.ListStatus(dl("done"), queues), "Paused · 45% | Failed | Complete", "status paused, failed, complete");
+            Eq(Core.QueueName(queues[0]) + " | " + Core.QueueName(queues[1]), "Main queue | Night", "queue names");
+            var running = dl("downloading"); running.Name = "setup.exe"; running.File = "C:\\Users\\PC\\Downloads\\Programs\\setup.exe"; running.Description = "Installer";
+            Eq(L(Core.Columns.Select(c => Core.Cell(running, c, queues, now))), "setup.exe | 1000 B | 45% | 6 s | 100 B/s | Oct 17 | Installer | C:\\Users\\PC\\Downloads\\Programs | Today 09:05", "cells while downloading");
+            var paused = dl("paused"); paused.Name = "a.zip"; paused.Size = null; paused.LastTry = 0;
+            Eq(L(Core.Columns.Select(c => Core.Cell(paused, c, queues, now))), "a.zip |  | Paused · 0% |  |  |  |  |  | Today 09:05", "cells of a paused download without size or last try");
+
+            // which columns fit: Name keeps 220, the first that doesn't fit and all right of it are left out
+            var defaults = Core.DefaultColumns;
+            Eq(L(Core.FitColumns(defaults, 1000, 1)), "size | status | left | speed | lastTry | description", "all default columns fit 1000");
+            Eq(L(Core.FitColumns(defaults, 876, 1)), "size | status | left | speed | lastTry | description", "exactly 876");
+            Eq(L(Core.FitColumns(defaults, 875, 1)), "size | status | left | speed | lastTry", "one short of 876");
+            Eq(L(Core.FitColumns(defaults, 700, 1)), "size | status | left | speed", "700 (the minimum window without the details panel)");
+            Eq(L(Core.FitColumns(defaults, 300, 1)), "", "only Name");
+            Eq(L(Core.FitColumns(new[] { "added", "size", "description" }, 2000, 1)), "size | description | added", "the chosen ones in column order");
+            Eq(L(Core.FitColumns(new[] { "description", "added" }, 482, 1)), "description | added", "482 fits Name, Description and Added");
+            Eq(L(Core.FitColumns(new[] { "description", "added" }, 481, 1)), "description", "a later column is left out too");
+            Eq(L(Core.FitColumns(defaults, 1300, 1.5)), "size | status | left | speed | lastTry", "scaled widths");
+
+            // sorting: the default order, each column both ways, empty cells last, ties in the given order
+            Func<string, string, long, long?, Download> row = (id, status, added, size) => new Download { Id = id, Name = id + ".zip", Kind = "http", Status = status, Added = added, Size = size, Got = 0 };
+            var rows = new List<Download> { row("done1", "done", 50, 10), row("err", "error", 40, 30), row("run", "downloading", 10, 20), row("p-old", "paused", 5, null), row("p-new", "paused", 60, 40), row("done2", "done", 70, null), row("sch", "scheduled", 80, 5) };
+            rows[2].Speed = 5; rows[2].Got = 10; rows[4].Got = 20;
+            rows[0].LastTry = 300; rows[2].LastTry = 100; rows[3].LastTry = 200;
+            rows[0].Description = "b"; rows[1].Description = "A"; rows[4].Description = "c";
+            Func<IEnumerable<Download>, string> ids = l => string.Join(" ", l.Select(d => d.Id));
+            Eq(ids(Core.DefaultOrder(rows)), "run p-new p-old err sch done2 done1", "default order: unfinished first, newest first");
+            var byDefault = Core.DefaultOrder(rows);
+            Eq(ids(Core.Sort(byDefault, "name", false, queues)), "done1 done2 err p-new p-old run sch", "by name");
+            Eq(ids(Core.Sort(byDefault, "name", true, queues)), "sch run p-old p-new err done2 done1", "by name, descending");
+            Eq(ids(Core.Sort(byDefault, "size", false, queues)), "sch done1 run err p-new p-old done2", "by size, unknown last");
+            Eq(ids(Core.Sort(byDefault, "size", true, queues)), "p-new err run done1 sch p-old done2", "by size descending, unknown still last");
+            Eq(ids(Core.Sort(byDefault, "status", false, queues)), "run p-old p-new err sch done2 done1", "by status: the groups, less done first");
+            Eq(ids(Core.Sort(byDefault, "left", false, queues)), "run p-new p-old err sch done2 done1", "by time left: only the running one has one");
+            Eq(ids(Core.Sort(byDefault, "speed", true, queues)), "run p-new p-old err sch done2 done1", "by speed");
+            Eq(ids(Core.Sort(byDefault, "lastTry", false, queues)), "run p-old done1 p-new err sch done2", "by last try");
+            Eq(ids(Core.Sort(byDefault, "lastTry", true, queues)), "done1 p-old run p-new err sch done2", "by last try descending");
+            Eq(ids(Core.Sort(byDefault, "description", false, queues)), "err done1 p-new run p-old sch done2", "by description, case-insensitive, empty last");
+            Eq(ids(Core.Sort(byDefault, "added", true, queues)), "sch done2 p-new done1 err run p-old", "by added descending");
+            rows[0].File = "D:\\b\\done1.zip"; rows[5].File = "C:\\a\\done2.zip";
+            Eq(ids(Core.Sort(byDefault, "saveTo", false, queues)), "done2 done1 run p-new p-old err sch", "by save to");
+            string col = null; var desc = false;
+            Core.NextSort("size", ref col, ref desc);
+            Eq(col + "/" + desc, "size/False", "first click sorts ascending");
+            Core.NextSort("size", ref col, ref desc);
+            Eq(col + "/" + desc, "size/True", "second click reverses");
+            Core.NextSort("size", ref col, ref desc);
+            Eq(col + "/" + desc, "/False", "third click goes back to the default");
+            Core.NextSort("size", ref col, ref desc);
+            Core.NextSort("name", ref col, ref desc);
+            Eq(col + "/" + desc, "name/False", "another column starts ascending");
+
+            // speed limit switch, next queue start
+            Eq(Core.SpeedLimitText(st) + " | " + Core.SpeedLimitText(new Settings { SpeedLimitKB = 500 }) + " | " + Core.SpeedLimitText(new Settings { SpeedLimitOn = true }), "Speed limit: 500 KB/s | Speed limit: Off | Speed limit: Off", "speed limit text");
+            Func<string, string, int[], bool, Queue> queue = (id, at, days, run) => new Queue { Id = id, Name = id, StartAt = at, Days = days.ToList(), Running = run };
+            var mon = new DateTime(2026, 10, 19, 10, 0, 0); // a Monday
+            Eq(Core.NextStart(new[] { queue("main", "02:00", new int[0], false), queue("Night", "23:30", new int[0], false) }, mon), "Night at 23:30", "the next start today");
+            Eq(Core.NextStart(new[] { queue("main", "02:00", new int[0], false), queue("Night", "23:30", new int[0], true) }, mon), "Main queue at 02:00", "a running queue is skipped; tomorrow's start");
+            Eq(Core.NextStart(new[] { queue("main", "02:00", new[] { 5 }, false), queue("Night", "09:00", new[] { 3 }, false) }, mon), "Night at 09:00", "days of the week: Wednesday before Friday");
+            Eq(Core.NextStart(new[] { queue("main", "", new int[0], false), queue("Night", "bad", new int[0], false) }, mon), null, "no start time");
+            Eq(Core.NextStart(new[] { queue("main", "10:00", new[] { 1 }, false) }, mon), "Main queue at 10:00", "a start at this minute is next week's");
 
             Console.WriteLine(failures == 0 ? "all passed" : failures + " failed");
             return failures == 0 ? 0 : 1;

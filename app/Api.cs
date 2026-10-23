@@ -28,6 +28,24 @@ namespace Arrow
         public object Get(string path) { return Send("GET", path, null); }
         public object Post(string path, object body) { return Send("POST", path, Json.Serialize(body ?? new Dictionary<string, object>())); }
 
+        // POST /api/action {id, op} and its one field when it has one: url ('url'), description ('describe'), kb ('limit'),
+        // value ('whenDone') or queue ('queue': a queue id, null takes it out of every queue). 'up' / 'down' move it in its queue.
+        public void Action(string id, string op, string field = null, object value = null)
+        {
+            var body = new Dictionary<string, object> { { "id", id }, { "op", op } };
+            if (field != null) body[field] = value;
+            Post("/api/action", body);
+        }
+
+        // POST /api/queues {op, id, …fields}: 'add' {name, …} answers {id}; 'update', 'remove', 'start', 'stop'
+        public object Queues(string op, string id, IDictionary<string, object> fields = null)
+        {
+            var body = fields == null ? new Dictionary<string, object>() : new Dictionary<string, object>(fields);
+            body["op"] = op;
+            if (id != null) body["id"] = id;
+            return Post("/api/queues", body);
+        }
+
         public bool Ping()
         {
             try

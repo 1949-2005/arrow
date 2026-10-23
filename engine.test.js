@@ -338,6 +338,7 @@ test('when all downloads finish: counts down after the last one, then sleeps onc
   await finished(m.add({ url: base + '/file.bin' }));
   m.tick(); // what the 1 s timer does; a download that ended between two ticks still counts
   assert.ok(m.view().powerIn > 0, 'countdown should run');
+  assert.equal(m.view().powerAll, true, 'started by "When all downloads finish"');
   const d = m.add({ url: base + '/file.bin' }); // more work during the countdown: wait for it
   m.tick();
   assert.equal(m.view().powerIn, null);
@@ -377,6 +378,7 @@ test("a download's own shutdown starts the countdown while another still runs; C
   assert.equal(other.status, 'downloading');
   assert.ok(m.view().powerIn > 0, 'other downloads do not hold it back');
   assert.equal(m.view().powerOp, 'shutdown', 'view names the countdown');
+  assert.equal(m.view().powerAll, false, 'one download started it');
   assert.equal(m.view().whenDone, '', 'the status bar choice stays as it was');
   m.update({ whenDone: '' }); // the strip's Cancel
   assert.equal(m.view().powerIn, null);
@@ -957,6 +959,13 @@ test('queues: the order is the list\'s; up and down swap within the queue; downl
   await m.act(c.id, 'down');
   await m.act(e.id, 'down');
   assert.deepEqual(order('main'), [a, c, e]);
+  a.status = 'done'; // finished, still in its queue but hidden there: moves skip it
+  await m.act(c.id, 'up');
+  assert.deepEqual(order('main'), [a, c, e], 'c is already the first one waiting');
+  await m.act(e.id, 'up');
+  assert.deepEqual(order('main'), [a, e, c]);
+  await assert.rejects(() => m.act(a.id, 'down'), /finished/);
+  a.status = 'scheduled';
 
   await m.act(b.id, 'queue', undefined, { queue: 'main' });
   assert.deepEqual([b.queue, b.status], ['main', 'scheduled']);

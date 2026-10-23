@@ -74,7 +74,7 @@ namespace Arrow
             copy.Size = new Size(Theme.Px(24), Theme.Px(24));
             tips.SetToolTip(copy, "Copy link");
             copy.Click += (s, e) => Do("copy");
-            for (var i = 0; i < 9; i++)
+            for (var i = 0; i < 12; i++)
             {
                 var f = new FactRow();
                 f.Click += (s, e) => { if (s == link) Do("folder"); };
@@ -102,8 +102,8 @@ namespace Arrow
                 if (on) facts[i].Set(pairs[i * 2], pairs[i * 2 + 1]);
                 facts[i].Cursor = Cursors.Default;
                 facts[i].PathValue = false;
+                tips.SetToolTip(facts[i], null);
             }
-            tips.SetToolTip(facts[7], null);
             link = null;
         }
 
@@ -157,15 +157,21 @@ namespace Arrow
             var file = d.File;
             var folder = !string.IsNullOrEmpty(file) ? Core.SplitPath(file)[0] : Core.FolderFor(s.Settings, category);
             var youtube = d.Kind == "video";
-            Facts("Status", Core.StatusText(d),
+            var queue = s.Queues.FirstOrDefault(q => q.Id == d.Queue);
+            var pairs = new List<string> { "Status", Core.StatusText(d),
                 "Speed", running ? Core.Size(d.Speed) + "/s" : "—",
                 "Time left", Core.Eta(d) == "" ? "—" : Core.Eta(d),
                 "Connections", running ? d.Connections.ToString() : "—",
                 "Resume", d.Resumable == true ? "Yes" : d.Resumable == false ? "No" : "—",
                 "Added", Core.DateLabel(d.Added, DateTime.Now),
-                youtube ? "Format" : "Type", youtube ? (d.Format ?? d.Quality ?? "—") : category,
-                "Saved to", folder);
-            var saved = facts[7];
+                "Last try", d.LastTry == 0 ? "—" : Core.DateLabel(d.LastTry, DateTime.Now) };
+            if (queue != null) pairs.AddRange(new[] { "Queue", Core.QueueName(queue) });
+            pairs.AddRange(new[] { youtube ? "Format" : "Type", youtube ? (d.Format ?? d.Quality ?? "—") : category });
+            if (!string.IsNullOrEmpty(d.Description)) pairs.AddRange(new[] { "Description", d.Description });
+            pairs.AddRange(new[] { "Saved to", folder });
+            Facts(pairs.ToArray());
+            if (!string.IsNullOrEmpty(d.Description)) tips.SetToolTip(facts[pairs.Count / 2 - 2], d.Description); // the row ends in an ellipsis
+            var saved = facts[pairs.Count / 2 - 1];
             saved.PathValue = true;
             tips.SetToolTip(saved, string.IsNullOrEmpty(file) ? folder : file);
             if (!string.IsNullOrEmpty(file)) { link = saved; saved.Cursor = Cursors.Hand; }

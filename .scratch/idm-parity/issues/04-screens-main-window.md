@@ -1,6 +1,6 @@
 # 04 Screens: main window
 
-Status: in progress
+Status: resolved
 Blocked by: 03
 Tier: careful
 
@@ -15,3 +15,9 @@ sorting, which columns fit a width), ARROW_SHOTS pictures show the new main wind
 `npm test` passes.
 
 ## Comments
+Done (careful worker, two review rounds). Review fixes: the command bar's labels fit at the default 1180 width
+(ghost buttons padded 8 instead of 12; glyphs only below that); the countdown strip reads the engine's new
+`powerAll`; Move up/down skip finished downloads (engine) and are offered only for unfinished rows.
+Choices: first click sorts ascending, empty cells last both ways; Status sorts by group then progress; a column sort
+also applies in a queue section; Start queue starts at once with one queue, else a menu; the header is mouse-only
+(Sort ▾ is the keyboard path); section keys "type:<name>" / "queue:<id>" (old saved ones are converted).

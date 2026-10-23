@@ -1,6 +1,6 @@
 # 05 Screens: download progress and download complete
 
-Status: open
+Status: in progress
 Blocked by: 04
 Tier: medium
 
