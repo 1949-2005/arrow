@@ -661,6 +661,7 @@ namespace Arrow
         }
 
         public readonly List<Item> Items = new List<Item>();
+        public bool Counts = true; // the Scheduler's queues have none
         readonly Dictionary<int, string> headings = new Dictionary<int, string>(); // before item index
         string selected;
         int hover = -1, scroll;
@@ -782,8 +783,8 @@ namespace Arrow
                 if (it.Type == null || !FileIcons.DrawType(g, it.Type, slot, 28))
                     Theme.DrawGlyph(g, it.Icon, slot, it.Type != null ? Theme.Category(it.Type) : sel ? Theme.Text : Theme.Muted, it.Type != null ? 16 : 18);
                 var count = it.Count.ToString();
-                var cw = Theme.Measure(count, Theme.Body).Width;
-                Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);
+                var cw = Counts ? Theme.Measure(count, Theme.Body).Width : -Theme.Px(10); // no count: the dot moves to the right edge
+                if (Counts) Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);
                 if (it.Dot)
                 {
                     cw += Theme.Px(10 + 8);
@@ -801,7 +802,7 @@ namespace Arrow
             var me = this;
             ListAccessible list = null;
             list = new ListAccessible(this, () => Items.Count, i => new ItemAccessible(list,
-                () => Items[i].Label + (Items[i].Dot ? ", running" : "") + ", " + Items[i].Count,
+                () => Items[i].Label + (Items[i].Dot ? ", running" : "") + (Counts ? ", " + Items[i].Count : ""),
                 () => Items[i].Key == selected, () => Focused && Items[i].Key == selected,
                 () => me.RectangleToScreen(ItemRect(i)), () => Selected = Items[i].Key));
             return list;

@@ -121,7 +121,7 @@ namespace Arrow
             deleteDone = Command("Delete completed", Glyph.Delete, DeleteCompleted);
             startQueue = Command("Start queue", Glyph.Play, () => QueueCommand(true));
             stopQueue = Command("Stop queue", Glyph.Stop, () => QueueCommand(false));
-            scheduler = Command("Scheduler", Glyph.Clock, () => OpenOptions(true)); // the Options' schedule until the Scheduler window exists
+            scheduler = Command("Scheduler", Glyph.Clock, () => OpenScheduler(null));
             speedLimit = Command("Speed limit: Off", Glyph.SpeedLimit, SpeedMenu);
             speedLimit.Chevron = true;
             commands = new Area(() => Theme.Top) { Dock = DockStyle.Top, Height = Theme.Px(44), LineBottom = true };
@@ -131,6 +131,11 @@ namespace Arrow
 
             sidebar.Width = Theme.Px(200);
             BuildSidebar();
+            // a queue's menu (right-click, the menu key, Shift+F10): the Scheduler on that queue
+            var queueMenu = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Body };
+            Item(queueMenu, "Open Scheduler", () => OpenScheduler(sidebar.Selected.Substring(6)), true);
+            queueMenu.Opening += (s, e) => e.Cancel = sidebar.Selected == null || !sidebar.Selected.StartsWith("queue:");
+            sidebar.ContextMenuStrip = queueMenu;
 
             search.Height = Theme.Px(32);
             search.Box.AccessibleName = "Search downloads";
@@ -743,6 +748,8 @@ namespace Arrow
         void SetWhenDone(string value) { Run(() => api.Post("/api/settings", new Dictionary<string, object> { { "whenDone", value } })); }
 
         void OpenOptions(bool schedule) { if (state != null) Dialogs.Options(api, this, state, schedule); }
+
+        void OpenScheduler(string queueId) { if (state != null) Dialogs.Scheduler(api, this, state, queueId); }
 
         void StartEngine()
         {

@@ -644,6 +644,32 @@ namespace Arrow
             return m.Success ? m.Groups[1].Value.PadLeft(2, '0') + ":" + m.Groups[2].Value : null;
         }
 
+        // ---- the Scheduler (engine.js queueFields, queueName)
+
+        // Its day toggles, Monday first; the engine numbers the days Sunday = 0
+        public static readonly string[] DayNames = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+        public static List<int> QueueDays(IList<bool> toggles) { return Enumerable.Range(0, 7).Where(i => toggles[i]).Select(i => (i + 1) % 7).OrderBy(d => d).ToList(); }
+        public static bool[] DayToggles(IEnumerable<int> days)
+        {
+            var set = new HashSet<int>(days ?? new int[0]);
+            return Enumerable.Range(0, 7).Select(i => set.Contains((i + 1) % 7)).ToArray();
+        }
+
+        // A Scheduler field's value to send ("name", "maxActive", "retries", "startAt", "stopAt" as the engine takes it), null
+        // when invalid: names 1–40 characters, unique regardless of case among the other queues; a checked time is HH:MM
+        public static object QueueValue(string field, string text, string id, IEnumerable<Queue> queues)
+        {
+            var t = (text ?? "").Trim();
+            switch (field)
+            {
+                case "name": return t.Length >= 1 && t.Length <= 40 && !queues.Any(q => q.Id != id && string.Equals(q.Name, t, StringComparison.OrdinalIgnoreCase)) ? t : null;
+                case "maxActive": return WholeNumber(t, 1, 20);
+                case "retries": return WholeNumber(t, 0, 10);
+                case "startAt": case "stopAt": var hm = ScheduleTime(t); return hm == "" ? null : hm;
+                default: return null;
+            }
+        }
+
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
         public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
 

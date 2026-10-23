@@ -205,6 +205,22 @@ namespace Arrow
             Front(f);
         }
 
+        static SchedulerDialog scheduler;
+
+        // Modeless, one at a time: opening it again brings it to the front, showing queueId when given
+        public static void Scheduler(Api api, Form owner, State s, string queueId)
+        {
+            if (scheduler == null)
+            {
+                var f = scheduler = new SchedulerDialog(api);
+                f.FormClosed += (o, e) => { if (scheduler == f) scheduler = null; };
+                f.Fill(s);
+                f.Center(owner);
+            }
+            if (queueId != null) scheduler.Select(queueId);
+            Front(scheduler);
+        }
+
         static ProgressDialog NewProgress(Api api, string id)
         {
             var f = new ProgressDialog(api, id);
@@ -252,6 +268,7 @@ namespace Arrow
                 f.Fill(d, s.Categories, l);
             }
             foreach (var f in infos.Values.ToList()) f.Fill(Find(s, f.Id), s.Settings, s);
+            if (scheduler != null) scheduler.Fill(s);
         }
 
         static Download Find(State s, string id) { return s.Downloads.FirstOrDefault(d => d.Id == id); }
@@ -639,6 +656,24 @@ namespace Arrow
                 Shot(folder, "category-new", new CategoryDialog(null, withTypes, null));
                 Shot(folder, "category-courses", new CategoryDialog(null, withTypes, "Courses"));
                 Shot(folder, "category-builtin", new CategoryDialog(null, withTypes, "Documents"));
+
+                // issue 07: the Scheduler, on a queue with every field set and three files waiting (a finished one is left out)
+                var nightQueue = new Queue { Id = "night", Name = "Night", MaxActive = 2, StartAt = "02:00", Days = new List<int> { 1, 2, 3, 4, 5 }, StopAt = "07:00", Retries = 2, WhenDone = "shutdown" };
+                Func<string, string, long, string, Download> waiting = (id, file, size, status) => new Download { Id = id, Kind = "http", Status = status, Queue = "night", Name = file, Size = size, Url = "https://downloads.example.com/" + file };
+                var plan = new State
+                {
+                    Queues = new List<Queue> { new Queue { Id = Queue.Main, Name = "Main download queue", MaxActive = 1, Running = true }, nightQueue },
+                    Downloads = new List<Download> { waiting("s1", "setup-2.4.1.exe", 104857600, "scheduled"), waiting("s2", "done.zip", 1048576, "done"),
+                        waiting("s3", "Ubuntu-24.04-desktop.iso", 6120328397, "scheduled"), waiting("s4", "Lecture 07 - Thermodynamics.mp4", 1288490189, "scheduled") },
+                };
+                var sch = new SchedulerDialog(null);
+                sch.Fill(plan);
+                sch.Select("night");
+                sch.SelectFile("s1");
+                Shot(folder, "scheduler", sch);
+                sch = new SchedulerDialog(null);
+                sch.Fill(plan);
+                Shot(folder, "scheduler-main", sch);
             }
             finally { Dialog.Offscreen = false; }
         }

@@ -22,6 +22,7 @@
   - `FileInfoDialog.cs` — Download File Info for a pending download (confirm.html's behavior): format list, category (+ a new one through the category editor), Save As + Browse…, description, POST /api/confirm start / later / cancel, then the progress window; asks or applies the duplicates choice when `probe.duplicate` comes; `QueuePopover`, Download Later's Add to queue popover
   - `PropertiesDialog.cs` — Properties (row menu, details panel): header, Address (editable while stopped, not YouTube) and Description, facts, Show in folder; sends only what changed (`url`, `describe`)
   - `CategoryDialog.cs` — the category editor (Download File Info's +, Options › Categories): Name (read-only for the built-ins), File types, Folder; POST /api/settings {types, folders}
+  - `SchedulerDialog.cs` — the Scheduler (command bar, a sidebar queue's menu; one window at a time): the queues (New queue, Delete), the selected queue's fields validated inline and sent at once in order (POST /api/queues update), its unfinished files (Move up, Move down, Remove from queue), Start now / Stop; refreshed by polls without overwriting a field being edited; `DayChip`, `QueueFiles`
   - `ProgressDialog.cs` — the progress window (progress.html's behavior, the inspector's look): running, done, removed
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
   - `OptionsDialog.cs` — Options: Downloads, Schedule, Behavior, validated inline, POST /api/settings

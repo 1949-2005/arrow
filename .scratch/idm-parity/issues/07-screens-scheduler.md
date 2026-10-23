@@ -1,6 +1,6 @@
 # 07 Screens: Scheduler
 
-Status: in progress
+Status: resolved
 Blocked by: 06
 Tier: careful
 
@@ -10,3 +10,7 @@ Done when: queues can be created, edited (every field, validated inline, sent at
 from it, the file list reorders and removes, ARROW_SHOTS has its picture, and `npm test` passes.
 
 ## Comments
+Done (careful worker, reviewed by the orchestrator: matches mockup m3). Review fix: a chosen day chip is filled with
+the accent (onAccent text, an inner ring when focused); the soft fill was too faint in light mode. Choices: a sidebar
+queue opens the Scheduler from its context menu ("Open Scheduler"); typing a time ticks its "At"; changes are merged
+per queue and sent in order, and polls skip a focused or invalid field and the form for 1 s after a send.

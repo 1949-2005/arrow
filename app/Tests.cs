@@ -505,6 +505,33 @@ namespace Arrow
             Eq(sent(Core.CategoryBody(cs, "Music", "Music", new List<string> { "mp3", "flac" }, "")),
                 Q("{'types':{'Video':['mp4','srt'],'Music':['mp3','flac'],'Courses':['vtt'],'Ebooks':['epub']},'folders':{'Courses':'D:\\\\Courses'}}"), "a built-in's types; an emptied folder is dropped");
 
+            // the Scheduler: day toggles (Monday first) ↔ the engine's days (Sunday = 0), its fields as engine.js takes them
+            Func<string, bool[]> toggles = s => s.Select(c => c == '1').ToArray();
+            Eq(string.Join(",", Core.QueueDays(toggles("1111100"))), "1,2,3,4,5", "weekdays");
+            Eq(string.Join(",", Core.QueueDays(toggles("0000011"))), "0,6", "weekend: Sunday is 0");
+            Eq(Core.QueueDays(toggles("0000000")).Count, 0, "none = every day");
+            Eq(new string(Core.DayToggles(new List<int> { 0, 1, 6 }).Select(b => b ? '1' : '0').ToArray()), "1000011", "engine days → toggles");
+            Eq(new string(Core.DayToggles(new List<int>()).Select(b => b ? '1' : '0').ToArray()), "0000000", "every day → no toggle");
+            Eq(string.Join(",", Core.QueueDays(Core.DayToggles(new List<int> { 3, 0 }))), "0,3", "round trip");
+            var sq = new List<Queue> { new Queue { Id = Queue.Main, Name = "Main download queue" }, new Queue { Id = "n1", Name = "Night" } };
+            Eq(Core.QueueValue("name", " Weekend ", "n1", sq), (object)"Weekend", "queue name trimmed");
+            Eq(Core.QueueValue("name", "night", "n1", sq), (object)"night", "its own name in another case");
+            Eq(Core.QueueValue("name", "NIGHT", "x", sq), null, "taken, any case");
+            Eq(Core.QueueValue("name", "main download queue", "n1", sq), null, "the main queue's name is taken");
+            Eq(Core.QueueValue("name", "  ", "n1", sq), null, "empty name");
+            Eq(Core.QueueValue("name", new string('x', 40), "n1", sq), (object)new string('x', 40), "40 characters");
+            Eq(Core.QueueValue("name", new string('x', 41), "n1", sq), null, "41 characters");
+            Eq(Core.QueueValue("maxActive", "2", "n1", sq), (object)2, "files at the same time");
+            Eq(Core.QueueValue("maxActive", "0", "n1", sq), null, "at least 1");
+            Eq(Core.QueueValue("maxActive", "21", "n1", sq), null, "at most 20");
+            Eq(Core.QueueValue("retries", "0", "n1", sq), (object)0, "no retries");
+            Eq(Core.QueueValue("retries", "11", "n1", sq), null, "at most 10 retries");
+            Eq(Core.QueueValue("retries", "2.5", "n1", sq), null, "whole retries");
+            Eq(Core.QueueValue("startAt", "2:00", "n1", sq), (object)"02:00", "start padded");
+            Eq(Core.QueueValue("stopAt", "07:00", "n1", sq), (object)"07:00", "stop");
+            Eq(Core.QueueValue("startAt", "", "n1", sq), null, "a checked time can't be empty");
+            Eq(Core.QueueValue("stopAt", "24:00", "n1", sq), null, "no 24:00");
+
             Console.WriteLine(failures == 0 ? "all passed" : failures + " failed");
             return failures == 0 ? 0 : 1;
         }
