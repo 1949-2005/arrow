@@ -30,7 +30,8 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - Click the icon next to the clock to open the window again.
 - Right-click the icon for the menu:
   - **Open Arrow** opens the window.
-  - **Pause all** pauses the downloads that run or wait. Scheduled downloads keep their start time.
+  - **Pause all** pauses the downloads that run or wait, and stops the queues that run. Files in a queue stay in it.
+  - **Speed limit** turns the speed limit on or off. A check mark shows when it is on.
   - **Quit** stops Arrow. Unfinished downloads continue the next time you start it.
 
 ## Uninstall
@@ -63,23 +64,118 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 - Paste a link in the bar at the top of the window and click **Download** (or press Enter). Ctrl+V anywhere in the window pastes there too. You can also drop links on the window.
 - The **Download File Info** window opens (see below). Pick where the file goes, then click **Start Download**.
-- To add several links at once, click **Add several links**. "Save as" is used only for a single link. If you tick "Start later (scheduled)", the downloads are added as scheduled.
+- To add several links at once, click the **Add several links** button (the list icon at the top right). "Save as" is used only for a single link. If you tick "Start later", the downloads go into the main queue.
 - Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Arrow tells you how many links that makes before it adds them. At most 1000 at a time.
-- The left side shows the downloads by status (All, Active, Finished, Failed, Scheduled) and by file type (Video, Music, Programs, Documents, Compressed, Other). The search field filters by name or link.
-- Select like in a file list: click, Ctrl+click, Shift+click, Ctrl+A. Enter or a double-click opens a finished file, or the progress window of an unfinished one. Space pauses or resumes. Delete removes. Right-click for more.
-- The right side shows the selected download: progress, speed, time left, connections, and buttons for Pause or Resume, Open, Show in folder, Copy link, Change link (for a paused or failed download whose link expired) and Remove. When you remove finished downloads, Arrow asks if it should also delete the files.
-- **Options** holds the settings. **Scheduler** opens them at "Start scheduled downloads at".
-- Clipboard monitoring (turn it on in Options): copy a link to a file, for example a .zip or .mp4. Arrow offers "From clipboard" at the top of its window and adds the file only if you click Download.
-- When all downloads finish: at the bottom right, choose Do nothing, Sleep or Shut down. When the last download ends, a 60-second countdown appears at the top of the window. Click Cancel to stop it. The choice is used once: after the countdown, or after Cancel, it goes back to Do nothing. It is not kept when the app restarts.
+- Clipboard monitoring (turn it on in Options › General, "Offer links I copy"): copy a link to a file, for example a .zip or .mp4. Arrow offers "From clipboard" at the top of its window and adds the file only if you click Download.
+- **Options** (the sliders icon at the top right, or Ctrl+,) holds the settings. The **⋯** button has About and Quit.
+
+### The main window
+
+- The bar under the top has the main commands:
+  - **Resume**, **Pause** and **Delete** act on the selected downloads.
+  - **Pause all** pauses everything. **Delete completed** removes the finished downloads from the list. The files stay on disk.
+  - **Start queue** and **Stop queue** start or stop a queue. With more than one queue, they open a short menu.
+  - **Scheduler** opens the queues (see Queues and the Scheduler).
+  - **Speed limit** is at the right (see Speed limit).
+  - If the window is narrow, the bar shows only the icons. Point at an icon to see its name.
+- The left side shows the downloads:
+  - by status: All, Active, Finished, Failed, Scheduled;
+  - by type: Video, Music, Programs, Documents, Compressed, your own categories, and Other;
+  - by queue: Main queue and your own queues. A green dot shows that a queue runs. Right-click a queue to open the Scheduler.
+- The search field filters by name or link.
+- The list has columns: Name, Size, Status, Time left, Speed, Last try and Description. Save to and Added are there too, but hidden.
+  - Click a column title to sort by it. Click again to reverse the order. Click a third time to go back to the normal order.
+  - **Sort** (at the right of the search field) does the same from a menu.
+  - **View** shows or hides columns. Right-click the column titles for the same menu. When the window is too narrow, the columns at the right are left out.
+  - "Last try" is the last time the download started.
+- Select like in a file list: click, Ctrl+click, Shift+click, Ctrl+A. Enter or a double-click opens a finished file, or the progress window of an unfinished one. Space pauses or resumes. Delete removes. When you remove finished downloads, Arrow asks if it should also delete the files.
+- Right-click a download for more: Open, Open with…, Show in folder, Copy link, Resume or Pause, Add to queue, Remove from queue, Move up and Move down (in a queue), Progress window, Properties… and Remove….
+- **The details panel** is hidden at first. To show it, click **View**, then **Details panel**. It shows the selected download: progress, speed, time left, connections, queue, last try, description, and buttons for Pause or Resume, Open, Show in folder, Copy link, Progress window, Properties and Remove.
+- The bar at the bottom shows how many downloads run and the total speed, the speed limit, and the next queue start (for example "Main queue at 02:00").
+
+### Queues and the Scheduler
+
+- A queue is a list of downloads that start together, at a time you choose. Arrow always has the **Main queue**. You can add your own.
+- To put downloads into a queue:
+  - In the Download File Info window, click **Download Later**. Choose the queue (or click **+** for a new one). Tick **Start the queue now** if you want. Click **Add to queue**.
+  - Or right-click downloads in the list and choose **Add to queue**.
+  - A download that waits in a queue shows "In Main queue" (or the queue's name).
+- Click **Scheduler** to set up the queues. Click a queue on the left. Each change is saved at once.
+  - **Name**: the Main queue keeps its name.
+  - **Download at the same time**: how many files of this queue run together (1 to 20).
+  - **Start**: "By hand only", or "At" a time, like 02:00.
+  - **On these days**: click the days. No day chosen means every day.
+  - **Stop**: tick "At" and type a time to stop the queue then. The files stay in the queue.
+  - **If a file fails**: Arrow tries a failed file again after 10 seconds, as many times as you choose (0 to 10).
+  - **When the queue is done**: Nothing, Sleep or Shut down. See When done.
+  - Under these, the queue's files in order. **Move up** and **Move down** change the order. **Remove from queue** takes a file out.
+  - **New queue** adds a queue. **Delete** removes one. Its files go to the Main queue.
+  - **Start now** and **Stop** start or stop the selected queue at once.
+- Arrow must be running to start a queue at its time. After a restart no queue runs until its next start time, or until you start it.
+- A download you start by hand (Resume) runs at once, also when its queue does not run.
+
+### Speed limit
+
+- For all downloads: click **Speed limit** at the right of the command bar.
+  - **Turn on** uses your last limit. **Turn off** stops the limit. **Settings…** opens Options › Downloads, where you type the number in KB/s.
+  - You can also click the "Speed limit" button in the bottom bar, or the **Speed limit** item in the tray menu. They turn it on or off.
+- For one download: open its progress window. Under **Options**, tick **Limit this download to** and type a number in KB/s. It works at once.
+- When both limits are on, the lower one counts.
+
+### When a link is already in the list
+
+- If you add a link that is already in your list, Arrow asks:
+  - **Download it again with a new name**: the new file gets (1), (2) and so on.
+  - **Replace the existing file**: the old download goes from the list. The new file is saved over the old file.
+  - **Resume the existing download**: Arrow continues the old download. If it is finished, Arrow shows it instead.
+- Tick **Remember my choice** to skip this question next time. Change it in Options › General, "When a link is already in the list".
+- For links you add with "Add several links", Arrow does not ask: the new file gets a new name, or replaces the old one if you chose "Replace".
+
+### Categories
+
+- A category says which file types go together and where they are saved. Arrow has five: Video, Music, Programs, Documents and Compressed. Files of any other type go to Other.
+- Open **Options › Categories** to see them.
+  - **Edit…** (or double-click): change the file types (separated by spaces, without the dot, like `mp4 mkv`) and the folder. The five built-in categories keep their names.
+  - **Add**: make your own category, for example "Courses" with `srt vtt`. A file type belongs to one category only: when you add it to one, it leaves the other.
+  - **Remove**: only for your own categories. Its downloads go to Other. No file is moved.
+  - These changes are saved at once.
+- In the Download File Info window, the **+** next to Category makes a new category too.
+
+### When done
+
+- For all downloads: at the bottom right, choose Do nothing, Sleep or Shut down. When the last download ends, a 60-second countdown appears at the top of the window. Click Cancel to stop it. The choice is used once: after the countdown, or after Cancel, it goes back to Do nothing. It is not kept when the app restarts.
+- For one download: in its progress window, under **Options**, choose "When this download is done": Nothing, Open the file, Sleep or Shut down.
+- For a queue: in the Scheduler, choose "When the queue is done": Nothing, Sleep or Shut down.
+- Sleep and Shut down always start the same 60-second countdown, with Cancel. For one download or a queue, it starts even while other downloads still run.
+
+### Properties and Description
+
+- Right-click a download and choose **Properties…** (or use the button in the details panel).
+- It shows the address, the description, the folder, the referer (the page the link came from), when it was added, the last try and the queue.
+- **Address**: you can change it when the download is paused, failed or waits in a queue (not for YouTube). Use this when a link expired.
+- **Description**: a short note of your own (300 characters at most). It shows in the Description column.
+- Click **Save**. Only what you changed is sent.
+- You can also type a description in the Download File Info window.
+
+### Download File Info, progress and Download complete
+
 - The **Download File Info** window is Arrow's own window, like IDM's. It opens for a pasted link and for every download from the browser:
   - It shows the link, the size (when the server tells it) and where the file goes.
   - For YouTube, choose the **Format** (MP4, WEBM, M4A or MP3). Each one shows its real size. The file name is the video's title.
-  - **Category** changes the folder. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
+  - **Category** changes the folder. **+** makes a new category. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
   - Tick **Remember this folder for Video** (the name follows the category) to keep that folder. Next time, every Video download goes there, also downloads that skip this window.
-  - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** adds it as paused: start it later with Resume. **Cancel** (or Esc) drops it.
+  - **Description** is optional. It shows in the list.
+  - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** puts it into a queue (see Queues and the Scheduler). **Cancel** (or Esc) drops it.
   - If the window says "Couldn't read the file details", you can still try to start it.
-  - The download shows in the list only after you click Start Download or Download Later. A window left open for 30 minutes forgets its download.
-- The progress window shows the status, size, speed, time left and one bar piece per connection. Pause, Resume or Cancel the download there. When it is done, click **Open**, **Open folder** or **Close**.
+  - The download shows in the list only after you click Start Download or Add to queue. A window left open for 30 minutes forgets its download.
+- The progress window shows the status, size, speed, time left and one bar piece per connection.
+  - **Connections** lists each connection: how much it downloaded, and "Receiving data…", "Done" or "Waiting".
+  - **Options** has the speed limit and "When this download is done" for this download.
+  - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Arrow remembers it.
+- **Download complete**: when a download you started with Start Download finishes, this window opens once. Click **Open**, **Open with…**, **Open folder** or **Close**. Tick **Don't show this window again** to stop it (turn it back on in Options › General, "Show the Download complete window").
+
+### With the browser extension
+
 - With the extension:
   - While the app runs, browser downloads go to Arrow automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
   - Right-click a link or a video and choose "Download with Arrow".
@@ -119,7 +215,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
   - One video per link. No playlists or channels.
   - No live streams.
   - No private, members-only or age-restricted videos. Arrow never sends your YouTube login.
-  - The speed limit applies to each video. A new limit takes effect when a video starts.
+  - The speed limit applies to each video. A new limit (for all downloads or for this one) takes effect when a video starts.
 - YouTube's terms only allow saving videos through YouTube's own app. Download your own videos, or videos you are allowed to save.
 
 ## Features
@@ -129,36 +225,44 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - Automatic retries.
 - Works with servers that limit connections.
 - A connection that stops sending data is cut after 30 seconds.
-- Queue: you choose how many downloads run at the same time.
-- Scheduler: scheduled downloads start every day at the time you choose. The app must be running.
-- Global speed limit.
-- Auto-sorting into Video, Music, Compressed, Documents and Programs folders.
+- You choose how many downloads run at the same time.
+- Queues and a Scheduler: named queues with a start time, days, a stop time, files at the same time, retries and an action when done. The app must be running.
+- A speed limit for all downloads, and one for each download.
+- Auto-sorting into category folders. You can edit the categories and add your own.
 - If a file name already exists, the new file gets (1), (2) and so on.
+- A link that is already in the list: download it again, replace the old file, or resume the old download.
+- List columns (size, status, time left, speed, last try, description, folder, date added), sorting, and a details panel.
+- A description for each download, and a Properties window.
 - HLS video streams (.m3u8), also AES-128 encrypted ones. They are saved as .ts (or .mp4).
   - Some sites (like X) send the sound as a separate track. Arrow downloads it too and joins it to the video with ffmpeg, into one .mp4. This needs ffmpeg: `winget install yt-dlp.FFmpeg`.
-- "Change link" for links that have expired.
-- Open and Show in folder buttons for finished files.
-- A desktop notification when a download finishes.
+- Change the address of a download whose link expired (in Properties).
+- Open, Open with… and Show in folder for finished files.
+- A desktop notification and a Download complete window when a download finishes.
 - YouTube videos (MP4, WEBM) and audio (M4A, MP3), with real sizes (needs yt-dlp and ffmpeg).
 - Browser cookies are passed along, so downloads that need a login work.
 - Batch links with number ranges, like `img[001-120].jpg`.
 - Clipboard monitoring (off by default).
 - Start with Windows (off by default): Arrow starts next to the clock when you sign in to Windows, without opening its window.
-- Sleep or shut down the PC when all downloads finish, after a countdown you can cancel.
-- A real Windows app: `Arrow.exe` with its own windows and icon, Start menu and desktop shortcuts, and an icon next to the clock with Open, Pause all and Quit. It follows Windows' light or dark mode.
+- Sleep or shut down the PC when all downloads finish, when one download finishes, or when a queue is done, after a countdown you can cancel. Or open a file when it finishes.
+- A real Windows app: `Arrow.exe` with its own windows and icon, Start menu and desktop shortcuts, and an icon next to the clock with Open, Pause all, Speed limit and Quit. It follows Windows' light or dark mode.
 
 ## Settings
 
-| Setting | Default |
-|---|---|
-| Save to folder | Your Downloads folder |
-| Connections per download (1–32) | 8 |
-| Downloads at the same time (1–20) | 3 |
-| Speed limit in KB/s (0 = unlimited) | 0 |
-| Start scheduled downloads at (HH:MM) | empty (off) |
-| Sort into folders by type | on |
-| Offer download links I copy (clipboard monitoring) | off |
-| Start with Windows (in the tray) | off |
+Options has four pages.
+
+| Page | Setting | Default |
+|---|---|---|
+| General | Start with Windows (in the tray) | off |
+| General | Offer links I copy (clipboard monitoring) | off |
+| General | Show the Download complete window | on |
+| General | When a link is already in the list | Ask me |
+| Downloads | Save to folder | Your Downloads folder |
+| Downloads | Sort into category folders | on |
+| Downloads | Connections per download (1–32) | 8 |
+| Downloads | Downloads at the same time (1–20) | 3 |
+| Downloads | Limit all downloads to … KB/s | off |
+| Categories | The categories, their file types and folders | Video, Music, Programs, Documents, Compressed |
+| Queues | Open Scheduler (the queues and their times) | Main queue, started by hand |
 
 ## Limits
 
@@ -168,8 +272,8 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - No proxy settings.
 - `Arrow.exe` and `Arrow Engine.exe` are not signed. If Windows Smart App Control is on, it may block Arrow.
 - If Arrow stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
-- Clipboard monitoring only offers links that end in a file type from the sorting folders (Video, Music, Compressed, Documents, Programs).
-- Sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
+- Clipboard monitoring only offers links that end in a file type of a category (Video, Music, Programs, Documents, Compressed, or your own).
+- Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
 

@@ -1,6 +1,6 @@
 # 09 Docs and screenshots
 
-Status: in progress
+Status: resolved
 Blocked by: 08
 Tier: light
 
@@ -12,3 +12,7 @@ ARROW_SHOTS screenshots with a long Arabic title in the list.
 Done when: the docs match the code and `npm test` passes.
 
 ## Comments
+Done (medium worker, reviewed by the orchestrator). Where the spec and the code differed, the docs follow the code
+(top bar icon buttons, the speed limit menu's stored value, when "Link already in the list" opens, Replace's timing,
+the queue count, which Properties addresses can change, stopAt every day). The final screenshots showed the long
+Arabic title cut in the list's Name column: issue 10.
