@@ -1,6 +1,6 @@
 # 08 Screens: Options pages
 
-Status: in progress
+Status: resolved
 Blocked by: 07
 Tier: medium
 
@@ -11,3 +11,8 @@ goes.
 Done when: every setting saves and reloads, ARROW_SHOTS has a picture of each page, and `npm test` passes.
 
 ## Comments
+Done (medium worker, reviewed by the orchestrator: matches mockup m5). Review fixes: a row grows so its name, file
+types and folder wrap whole (never cut); file types in the text color, not faint; the mockup's "yours" tag on custom
+categories; the Remove question says no file is moved; the shots use the engine's default file types. Choices: Open
+Scheduler saves General and Downloads, closes Options, then opens the Scheduler (not while a field is invalid); a
+failed Save shows the Downloads page; an unticked limit keeps the stored KB/s, an empty one starts at 500.

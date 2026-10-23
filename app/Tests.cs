@@ -374,7 +374,7 @@ namespace Arrow
             // /api/state's IDM-parity fields: queues, per-download description, limit, when done, last try, the 4th segment value
             var idm = State.From(Json.Parse(IdmJson));
             var st = idm.Settings;
-            Eq(st.SpeedLimitOn + "/" + st.SpeedLimitKB + "/" + st.Duplicates + "/" + st.ShowComplete + "/" + st.ScheduleAt, "True/500/replace/False/02:00", "new settings, scheduleAt from the main queue");
+            Eq(st.SpeedLimitOn + "/" + st.SpeedLimitKB + "/" + st.Duplicates + "/" + st.ShowComplete, "True/500/replace/False", "new settings");
             Eq(L(st.Types.Keys) + "/" + L(st.Types["Ebooks"]), "Video | Music | Programs | Documents | Compressed | Ebooks/epub | mobi", "settings types in order");
             Eq(L(st.Queues.Select(q => q.Id + ":" + q.Name + ":" + q.MaxActive + ":" + q.StartAt + ":" + string.Join(",", q.Days) + ":" + q.StopAt + ":" + q.Retries + ":" + q.WhenDone)),
                 "main:Main download queue:1:02:00:::0: | n1:Night:2:23:30:1,5:06:00:3:shutdown", "settings queues");
@@ -504,6 +504,19 @@ namespace Arrow
                 Q("{'types':{'Video':['mp4','srt'],'Music':['mp3'],'Courses':['vtt'],'Ebooks':['epub'],'Subtitles':['ass']},'folders':{'Courses':'D:\\\\Courses','Music':'D:\\\\Music'}}"), "a new category goes last");
             Eq(sent(Core.CategoryBody(cs, "Music", "Music", new List<string> { "mp3", "flac" }, "")),
                 Q("{'types':{'Video':['mp4','srt'],'Music':['mp3','flac'],'Courses':['vtt'],'Ebooks':['epub']},'folders':{'Courses':'D:\\\\Courses'}}"), "a built-in's types; an emptied folder is dropped");
+            Eq(sent(Core.TypesWithout(cs, "Courses")), Q("{'types':{'Video':['mp4','srt'],'Music':['mp3'],'Ebooks':['epub']}}"), "remove a category: the others in order");
+
+            // Options: the duplicates Picker ↔ settings.duplicates, and Save sending only what changed
+            Eq(string.Join(",", new[] { "ask", "number", "replace", "resume", "odd", null }.Select(d => Core.DuplicateIndex(d))), "0,1,2,3,0,0", "duplicates → Picker, unknown = Ask me");
+            Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
+            var was = new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 8 }, { "speedLimitOn", false }, { "duplicates", "ask" } };
+            Eq(sent(Core.Changed(was, new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 16 }, { "speedLimitOn", true }, { "duplicates", "ask" } })),
+                Q("{'connections':16,'speedLimitOn':true}"), "only the changed settings");
+            Eq(Core.Changed(was, was).Count, 0, "nothing changed");
+            Eq(Core.ShortFolder(@"C:\Users\PC\Downloads\", @"C:\Users\PC\Downloads\Video"), @"Downloads\Video", "a category folder from the download folder's name");
+            Eq(Core.ShortFolder(@"C:\Users\PC\Downloads", @"c:\users\pc\downloads"), "Downloads", "the download folder itself");
+            Eq(Core.ShortFolder(@"C:\Users\PC\Downloads", @"C:\Users\PC\Downloads2\x"), @"C:\Users\PC\Downloads2\x", "another folder as it is");
+            Eq(Core.ShortFolder(@"C:\D", @"D:\Courses"), @"D:\Courses", "elsewhere as it is");
 
             // the Scheduler: day toggles (Monday first) ↔ the engine's days (Sunday = 0), its fields as engine.js takes them
             Func<string, bool[]> toggles = s => s.Select(c => c == '1').ToArray();

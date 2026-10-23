@@ -336,9 +336,12 @@ namespace Arrow
             Modal(new AddLinksDialog(api, prefill), owner);
         }
 
-        public static void Options(Api api, IWin32Window owner, State state, bool focusSchedule)
+        // page: one of OptionsDialog's pages (General, Downloads, Categories, Queues); its Open Scheduler saves, closes it, then opens the Scheduler
+        public static void Options(Api api, IWin32Window owner, State state, string page)
         {
-            Modal(new OptionsDialog(api, state.Settings, focusSchedule), owner);
+            var f = new OptionsDialog(api, state.Settings, page);
+            Modal(f, owner);
+            if (f.SchedulerWanted) Scheduler(api, owner as Form, last ?? state, null);
         }
 
         static Dialog RemoveDialog(int count, bool anyFinished, out FlatCheck files)
@@ -544,7 +547,7 @@ namespace Arrow
             Dialog.Offscreen = true;
             try
             {
-                var settings = new Settings { Dir = "C:\\Users\\PC\\Downloads", Connections = 8, MaxActive = 3, SpeedLimitKB = 500, ScheduleAt = "02:00", Categories = true, Clipboard = true };
+                var settings = new Settings { Dir = "C:\\Users\\PC\\Downloads", Connections = 8, MaxActive = 3, SpeedLimitKB = 500, Categories = true, Clipboard = true };
                 var cats = new Dictionary<string, List<string>> { { "Video", new List<string> { "mp4" } }, { "Compressed", new List<string> { "iso", "zip" } } };
                 Func<Download> http = () => new Download
                 {
@@ -626,7 +629,6 @@ namespace Arrow
                 Shot(folder, "complete", prog);
 
                 Shot(folder, "addlinks", new AddLinksDialog(null, "https://www.youtube.com/watch?v=jNQXAC9IVRw\r\nhttps://cdn.example.com/photos/img[001-120].jpg"));
-                Shot(folder, "options", new OptionsDialog(null, settings, false));
                 FlatCheck files;
                 Shot(folder, "remove", RemoveDialog(3, true, out files));
                 TextField field;
@@ -639,8 +641,11 @@ namespace Arrow
                 using (var pop = new QueuePopover(null, queues)) Shot(folder, "fileinfo-later", pop, pop.Root);
                 FlatRadio[] radios;
                 Shot(folder, "duplicate", DuplicateDialog("photos-ete.zip", "Paused · 30%", "photos-ete (1).zip", out radios, out files));
-                var types = new Dictionary<string, List<string>> { { "Video", new List<string> { "mp4" } }, { "Music", new List<string> { "mp3" } }, { "Programs", new List<string> { "exe" } },
-                    { "Documents", new List<string> { "pdf" } }, { "Compressed", new List<string> { "zip", "iso" } }, { "Courses", new List<string> { "srt", "vtt" } } };
+                // the engine's default file types (engine.js CATEGORIES) and one custom category
+                Func<string, List<string>> exts = t => t.Split(' ').ToList();
+                var types = new Dictionary<string, List<string>> { { "Video", exts("mp4 mkv avi mov wmv flv webm m4v ts 3gp") }, { "Music", exts("mp3 wav flac aac m4a ogg wma opus") },
+                    { "Programs", exts("exe msi apk dmg deb rpm appimage") }, { "Documents", exts("pdf doc docx xls xlsx ppt pptx txt epub csv") },
+                    { "Compressed", exts("zip rar 7z tar gz bz2 xz iso") }, { "Courses", exts("srt vtt") } };
                 var state = new State { Settings = settings, Categories = types, Queues = queues, Downloads = new List<Download>() };
                 var photos = new Download
                 {
@@ -656,6 +661,16 @@ namespace Arrow
                 Shot(folder, "category-new", new CategoryDialog(null, withTypes, null));
                 Shot(folder, "category-courses", new CategoryDialog(null, withTypes, "Courses"));
                 Shot(folder, "category-builtin", new CategoryDialog(null, withTypes, "Documents"));
+
+                // issue 08: Options, each page; Categories with a custom one selected
+                var opts = new Settings { Dir = settings.Dir, Connections = 8, MaxActive = 3, SpeedLimitKB = 500, SpeedLimitOn = true, Categories = true, Clipboard = true, Startup = true,
+                    ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } } };
+                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Categories, OptionsDialog.Queues })
+                {
+                    var o = new OptionsDialog(null, opts, page);
+                    if (page == OptionsDialog.Categories) o.SelectCategory("Courses");
+                    Shot(folder, "options-" + page, o);
+                }
 
                 // issue 07: the Scheduler, on a queue with every field set and three files waiting (a finished one is left out)
                 var nightQueue = new Queue { Id = "night", Name = "Night", MaxActive = 2, StartAt = "02:00", Days = new List<int> { 1, 2, 3, 4, 5 }, StopAt = "07:00", Retries = 2, WhenDone = "shutdown" };

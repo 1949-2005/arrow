@@ -662,6 +662,7 @@ namespace Arrow
 
         public readonly List<Item> Items = new List<Item>();
         public bool Counts = true; // the Scheduler's queues have none
+        public int ItemH = 30; // Options' pages: 32
         readonly Dictionary<int, string> headings = new Dictionary<int, string>(); // before item index
         string selected;
         int hover = -1, scroll;
@@ -705,8 +706,8 @@ namespace Arrow
             for (var i = 0; i <= index; i++)
             {
                 if (headings.ContainsKey(i)) y += (i > 0 ? Theme.Px(12) : 0) + Theme.Px(28);
-                if (i == index) return new Rectangle(pad, y, Width - 2 * pad - 1, Theme.Px(30));
-                y += Theme.Px(30);
+                if (i == index) return new Rectangle(pad, y, Width - 2 * pad - 1, Theme.Px(ItemH));
+                y += Theme.Px(ItemH);
             }
             return Rectangle.Empty;
         }
@@ -780,7 +781,8 @@ namespace Arrow
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
                 // Types: the user's SVG icon at 28 px; Library: its glyph at 18 px, centered in the same 28 px slot
                 var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(28), r.Height);
-                if (it.Type == null || !FileIcons.DrawType(g, it.Type, slot, 28))
+                var textOnly = it.Icon == '\0' && it.Type == null; // Options' pages
+                if (!textOnly && (it.Type == null || !FileIcons.DrawType(g, it.Type, slot, 28)))
                     Theme.DrawGlyph(g, it.Icon, slot, it.Type != null ? Theme.Category(it.Type) : sel ? Theme.Text : Theme.Muted, it.Type != null ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Counts ? Theme.Measure(count, Theme.Body).Width : -Theme.Px(10); // no count: the dot moves to the right edge
@@ -790,7 +792,7 @@ namespace Arrow
                     cw += Theme.Px(10 + 8);
                     Theme.Fill(g, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y + (r.Height - Theme.Px(8)) / 2, Theme.Px(8), Theme.Px(8)), Theme.Px(4), Theme.Done);
                 }
-                var x = r.X + Theme.Px(8 + 28 + 10);
+                var x = r.X + Theme.Px(textOnly ? 10 : 8 + 28 + 10);
                 Theme.DrawText(g, it.Label, sel ? Theme.Bold : Theme.Body, new Rectangle(x, r.Y, r.Right - Theme.Px(16) - cw - x, r.Height), Theme.Text);
                 if (sel && Focused && ShowFocusCues) Theme.FocusRing(g, r, Theme.Px(6));
             }

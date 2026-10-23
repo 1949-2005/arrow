@@ -111,7 +111,7 @@ namespace Arrow
             paste.Box.TextChanged += (s, e) => { if (paste.Invalid) { paste.Invalid = false; tips.Hide(paste); } };
             download.Click += (s, e) => Submit(paste.Text);
             addLinks.Click += (s, e) => Dialogs.AddLinks(api, this, "");
-            options.Click += (s, e) => OpenOptions(false);
+            options.Click += (s, e) => OpenOptions(OptionsDialog.General);
             more.Click += (s, e) => MoreMenu().Show(more, new Point(0, more.Height + Theme.Px(2)));
 
             resume = Command("Resume", Glyph.Play, () => Resume(list.Selected));
@@ -614,9 +614,9 @@ namespace Arrow
             var s = state.Settings;
             var m = Menu();
             if (s.SpeedLimitKB > 0) Item(m, "Turn on (" + s.SpeedLimitKB + " KB/s)", () => SetLimit(true), !s.SpeedLimitOn);
-            else Item(m, "Set a limit…", () => OpenOptions(false), true);
+            else Item(m, "Set a limit…", () => OpenOptions(OptionsDialog.Downloads), true);
             Item(m, "Turn off", () => SetLimit(false), s.SpeedLimitOn);
-            Item(m, "Settings…", () => OpenOptions(false), true);
+            Item(m, "Settings…", () => OpenOptions(OptionsDialog.Downloads), true);
             m.Show(speedLimit, new Point(0, speedLimit.Height + Theme.Px(2)));
         }
 
@@ -628,7 +628,7 @@ namespace Arrow
             if (state == null) return;
             if (Core.LimitOn(state.Settings)) SetLimit(false);
             else if (state.Settings.SpeedLimitKB > 0) SetLimit(true);
-            else OpenOptions(false);
+            else OpenOptions(OptionsDialog.Downloads);
         }
 
         void SetSort(string column, bool descending)
@@ -747,7 +747,7 @@ namespace Arrow
 
         void SetWhenDone(string value) { Run(() => api.Post("/api/settings", new Dictionary<string, object> { { "whenDone", value } })); }
 
-        void OpenOptions(bool schedule) { if (state != null) Dialogs.Options(api, this, state, schedule); }
+        void OpenOptions(string page) { if (state != null) Dialogs.Options(api, this, state, page); }
 
         void OpenScheduler(string queueId) { if (state != null) Dialogs.Scheduler(api, this, state, queueId); }
 
@@ -915,7 +915,7 @@ namespace Arrow
                     return true;
                 case Keys.Control | Keys.N: Dialogs.AddLinks(api, this, ""); return true;
                 case Keys.Control | Keys.F: search.Box.Focus(); search.Box.SelectAll(); return true;
-                case Keys.Control | Keys.Oemcomma: OpenOptions(false); return true;
+                case Keys.Control | Keys.Oemcomma: OpenOptions(OptionsDialog.General); return true;
                 case Keys.Delete: if (inText) break; Remove(list.Selected); return true;
                 case Keys.Control | Keys.A: if (inText) break; list.SelectAll(); return true;
                 case Keys.Control | Keys.C: if (inText) break; CopyLinks(); return true;

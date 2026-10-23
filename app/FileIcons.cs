@@ -29,8 +29,8 @@ namespace Arrow
             }
         }
 
-        // assets/types/<category>.svg in a px square centered in r; false when it is missing or unreadable (Other has none)
-        public static bool DrawType(Graphics g, string category, Rectangle r, int px)
+        // assets/types/<category>.svg in a px square centered in r, in color (default the text color); false when it is missing or unreadable (Other has none)
+        public static bool DrawType(Graphics g, string category, Rectangle r, int px, Color? color = null)
         {
             try
             {
@@ -47,7 +47,7 @@ namespace Arrow
                     g.TranslateTransform(r.X + (r.Width - size) / 2f, r.Y + (r.Height - size) / 2f);
                     g.ScaleTransform(size, size);
                     // the text color at paint time: the theme switches live
-                    using (var brush = new SolidBrush(Theme.Text)) g.FillPath(brush, path);
+                    using (var brush = new SolidBrush(color ?? Theme.Text)) g.FillPath(brush, path);
                 }
                 finally { g.Restore(state); }
                 return true;

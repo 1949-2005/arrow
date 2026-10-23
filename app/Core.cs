@@ -97,7 +97,7 @@ namespace Arrow
 
     public class Settings
     {
-        public string Dir, ScheduleAt, Duplicates;
+        public string Dir, Duplicates;
         public int Connections, MaxActive, SpeedLimitKB;
         public bool Categories, Clipboard, Startup, SpeedLimitOn, ShowComplete;
         public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
@@ -109,7 +109,6 @@ namespace Arrow
             var f = o.Obj("folders");
             var t = o.Obj("types");
             var queues = Queue.ListFrom(o.List("queues"));
-            var main = queues.FirstOrDefault(q => q.Id == Queue.Main);
             return new Settings
             {
                 Dir = o.Str("dir") ?? "",
@@ -117,8 +116,6 @@ namespace Arrow
                 MaxActive = o.Int("maxActive") ?? 0,
                 SpeedLimitKB = o.Int("speedLimitKB") ?? 0,
                 SpeedLimitOn = o.Bool("speedLimitOn") ?? false,
-                // the engine moved it into the main queue's start time; Options shows it there until it has a Scheduler page
-                ScheduleAt = o.Str("scheduleAt") ?? (main != null ? main.StartAt : ""),
                 Duplicates = o.Str("duplicates") ?? "ask",
                 ShowComplete = o.Bool("showComplete") ?? true,
                 Categories = o.Bool("categories") ?? false,
@@ -761,6 +758,32 @@ namespace Arrow
             var folders = s.Folders.Where(f => f.Key != original && f.Key != name).ToDictionary(f => f.Key, f => f.Value);
             if (!string.IsNullOrEmpty(folder)) folders[name] = folder;
             return new Dictionary<string, object> { { "types", types }, { "folders", folders } };
+        }
+
+        // POST /api/settings {types} without one category (Options › Categories › Remove): its downloads become Other,
+        // the engine drops its remembered folder
+        public static Dictionary<string, object> TypesWithout(Settings s, string name)
+        {
+            return new Dictionary<string, object> { { "types", s.Types.Where(t => t.Key != name).ToDictionary(t => t.Key, t => t.Value) } };
+        }
+
+        // Options › General's "When a link is already in the list" Picker, in its order ↔ settings.duplicates
+        public static readonly string[] DuplicateSettings = { "ask", "number", "replace", "resume" };
+        public static int DuplicateIndex(string duplicates) { return Math.Max(0, Array.IndexOf(DuplicateSettings, duplicates)); } // unknown = Ask me, as the engine
+
+        // A folder inside the download folder from that folder's own name on (Options › Categories: "Downloads\Video"); others as they are
+        public static string ShortFolder(string dir, string folder)
+        {
+            var d = (dir ?? "").TrimEnd('\\', '/');
+            if (d == "" || !(folder ?? "").StartsWith(d, StringComparison.OrdinalIgnoreCase) || folder.Length > d.Length && folder[d.Length] != '\\') return folder;
+            var i = d.LastIndexOfAny(new[] { '\\', '/' });
+            return d.Substring(i + 1) + folder.Substring(d.Length);
+        }
+
+        // The settings whose value differs from before (Options' Save sends only these)
+        public static Dictionary<string, object> Changed(IDictionary<string, object> before, IDictionary<string, object> after)
+        {
+            return after.Where(a => { object b; return !before.TryGetValue(a.Key, out b) || !Equals(a.Value, b); }).ToDictionary(a => a.Key, a => a.Value);
         }
 
         // A typical extension per Category name, for its Windows icon ("" = the generic file)

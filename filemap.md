@@ -25,7 +25,7 @@
   - `SchedulerDialog.cs` — the Scheduler (command bar, a sidebar queue's menu; one window at a time): the queues (New queue, Delete), the selected queue's fields validated inline and sent at once in order (POST /api/queues update), its unfinished files (Move up, Move down, Remove from queue), Start now / Stop; refreshed by polls without overwriting a field being edited; `DayChip`, `QueueFiles`
   - `ProgressDialog.cs` — the progress window (progress.html's behavior, the inspector's look): running, done, removed
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
-  - `OptionsDialog.cs` — Options: Downloads, Schedule, Behavior, validated inline, POST /api/settings
+  - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Categories, Queues); General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), the SVG icon parser (`ParseSvg`), plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles

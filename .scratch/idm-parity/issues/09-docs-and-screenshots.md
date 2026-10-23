@@ -1,6 +1,6 @@
 # 09 Docs and screenshots
 
-Status: open
+Status: in progress
 Blocked by: 08
 Tier: light
 
