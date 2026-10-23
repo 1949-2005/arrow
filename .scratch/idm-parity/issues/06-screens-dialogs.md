@@ -1,6 +1,6 @@
 # 06 Screens: Download File Info, duplicate link, Properties, category editor
 
-Status: open
+Status: in progress
 Blocked by: 05
 Tier: medium
 

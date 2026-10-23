@@ -201,7 +201,7 @@ namespace Arrow
             Controls.Add(root);
             HookDrop(root);
 
-            if (shots == null) LoadUi();
+            if (shots == null) { LoadUi(); Dialogs.UiChanged = SaveUi; }
             wantSection = section;
             sidebar.Selected = sidebar.Items.Any(i => i.Key == section) ? section : "all";
             section = sidebar.Selected;
@@ -418,7 +418,7 @@ namespace Arrow
             foreach (var d in s.Downloads.Where(d => d.Status == "pending"))
                 if (pendingSeen.Add(d.Id) && shots == null) Dialogs.FileInfo(api, this, d.Id);
             pendingSeen.IntersectWith(s.Downloads.Select(d => d.Id));
-            if (shots == null) Dialogs.Update(s);
+            if (shots == null) Dialogs.Update(api, this, s);
 
             all = Core.DefaultOrder(s.Downloads.Where(d => d.Status != "pending"));
             var next = new Dictionary<string, string>();
@@ -1050,6 +1050,8 @@ namespace Arrow
             sortDesc = sortColumn != null && o.Bool("desc") == true;
             if (o.List("columns") != null) list.SetColumns(o.Strings("columns"));
             details = o.Bool("details") ?? false;
+            Dialogs.ConnectionsOpen = o.Bool("connections") ?? true;
+            Dialogs.OptionsOpen = o.Bool("progressOptions") ?? true;
             int? x = o.Int("x"), y = o.Int("y"), w = o.Int("w"), h = o.Int("h");
             if (x != null && y != null && w != null && h != null)
             {
@@ -1072,6 +1074,7 @@ namespace Arrow
                 { "max", WindowState == FormWindowState.Maximized || WindowState == FormWindowState.Minimized && shownState == FormWindowState.Maximized },
                 { "section", section }, { "trayHint", trayHint },
                 { "sort", sortColumn }, { "desc", sortDesc }, { "columns", list.Chosen }, { "details", details },
+                { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
             };
             try
             {

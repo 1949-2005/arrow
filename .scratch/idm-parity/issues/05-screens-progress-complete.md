@@ -1,6 +1,6 @@
 # 05 Screens: download progress and download complete
 
-Status: in progress
+Status: resolved
 Blocked by: 04
 Tier: medium
 
@@ -12,3 +12,7 @@ Done when: both work as specified, ARROW_SHOTS has pictures of the progress wind
 complete window, and `npm test` passes.
 
 ## Comments
+Done (medium worker, reviewed by the orchestrator: pictures match mockup m2). Choices: with no limit the field shows
+500 (like the main window's "Turn on (500 KB/s)"); typing a valid number ticks the box and sends after 0.6 s (Enter at
+once); polls don't overwrite a change on its way; the complete view hides the segment bar; the Connections table
+scrolls on small screens. The complete window opens once for a download the app saw unfinished and then done.

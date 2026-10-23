@@ -212,6 +212,22 @@ namespace Arrow
             var one = http(); one.Connections = 1;
             Eq(Core.StatusText(one), "Receiving data… (1 connection)", "status one connection");
             Eq(P(Core.Pieces(http())), "0,0.3 0.5,0.152", "pieces http");
+            var conns = http();
+            conns.Segments = new List<long[]> { new long[] { 0, 1048576, 524288, 1 }, new long[] { 1048576, 2097152, 2097152, 0 }, new long[] { 2097152, 3145728, 2097152, 0 }, new long[] { 0, 0, 2048 } };
+            Eq(string.Join(" | ", Core.ConnectionRows(conns).Select(r => r[0] + " · " + r[1])),
+                "512.0 KB of 1.0 MB · Receiving data… | 1.0 MB of 1.0 MB · Done | 0 B of 1.0 MB · Waiting | 2.0 KB of ? · Waiting", "connection rows");
+            conns.Kind = "hls";
+            Eq(Core.ConnectionRows(conns).Count, 0, "no connection rows for hls");
+            conns.Kind = "http"; conns.Segments = null;
+            Eq(Core.ConnectionRows(conns).Count, 0, "no connection rows without pieces");
+            var finished = new Download { Status = "done", Notify = true };
+            var showing = new Settings { ShowComplete = true };
+            Ok(Core.OpensComplete(finished, "downloading", showing) && Core.OpensComplete(finished, "pending", showing), "complete opens when it finishes");
+            Ok(!Core.OpensComplete(finished, null, showing), "complete stays shut for a download done before the app started");
+            Ok(!Core.OpensComplete(finished, "done", showing), "complete opens once");
+            Ok(!Core.OpensComplete(finished, "downloading", new Settings { ShowComplete = false }), "complete stays shut when turned off");
+            Ok(!Core.OpensComplete(new Download { Status = "done" }, "downloading", showing), "complete stays shut without notify");
+            Ok(!Core.OpensComplete(new Download { Status = "error", Notify = true }, "downloading", showing), "complete stays shut when it failed");
             Eq(Core.Heading(with("paused")), "Paused · 45%", "heading paused");
             Eq(Core.StatusText(with("paused")), "Paused", "status paused");
             Eq(Core.StatusText(with("queued")), "Queued", "status queued");

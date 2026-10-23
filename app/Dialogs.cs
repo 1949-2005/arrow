@@ -175,7 +175,13 @@ namespace Arrow
         static readonly Dictionary<string, ProgressDialog> progress = new Dictionary<string, ProgressDialog>();
         static readonly Dictionary<string, List<double>> samples = new Dictionary<string, List<double>>();
         static State last;
+        static readonly Dictionary<string, string> seen = new Dictionary<string, string>(); // each download's status at the last poll
+        static readonly HashSet<string> completeShown = new HashSet<string>(); // Download complete opened by itself once per download
         const int Samples = 86; // 60 s of 700 ms polls
+
+        // The progress window's disclosures, open by default; MainForm keeps them in ui.json and saves on UiChanged
+        public static bool ConnectionsOpen = true, OptionsOpen = true;
+        public static Action UiChanged;
 
         // Modeless, one per pending download; comes to the front even when the main window is hidden
         public static void FileInfo(Api api, Form owner, string id)
@@ -221,10 +227,19 @@ namespace Arrow
             Front(f);
         }
 
-        // Called on every poll: open Download File Info and progress windows show the new state
-        public static void Update(State s)
+        // Called on every poll: open Download File Info and progress windows show the new state, and a download that just
+        // finished opens its Download complete window (an open progress window turns into it by itself)
+        public static void Update(Api api, Form owner, State s)
         {
             last = s;
+            foreach (var d in s.Downloads)
+            {
+                string before;
+                seen.TryGetValue(d.Id, out before);
+                if (Core.OpensComplete(d, before, s.Settings) && completeShown.Add(d.Id) && !progress.ContainsKey(d.Id)) Progress(api, owner, d.Id);
+            }
+            seen.Clear();
+            foreach (var d in s.Downloads) seen[d.Id] = d.Status;
             foreach (var f in progress.Values.ToList())
             {
                 var d = Find(s, f.Id);
@@ -500,8 +515,10 @@ namespace Arrow
                 var running = new Download
                 {
                     Id = "shot-run", Kind = "http", Status = "downloading", Url = "https://cdn.example.com/games/Last War Winter Storm.mp4", Name = "(1) MT NEWS on X 🚨🚨 الخريطة الجديدة.mp4",
-                    Size = 2265595904, Got = 1021313024, Speed = 12976128, Connections = 8, Resumable = true,
-                    Segments = Enumerable.Range(0, 8).Select(i => new[] { i * 283199488L, (i + 1) * 283199488L, i * 283199488L + new[] { 270000000L, 180000000, 90000000, 150000000, 60000000, 120000000, 40000000, 111313024 }[i] }).ToList(),
+                    Size = 734003200, Got = 330301440, Speed = 2516582, Connections = 3, Resumable = true, LimitKB = 500, WhenDone = "open",
+                    // [start, end, pos, working] in MB: receiving, done, receiving, receiving, waiting
+                    Segments = new[] { new[] { 0, 140, 126, 1 }, new[] { 140, 210, 210, 0 }, new[] { 210, 385, 294, 1 }, new[] { 385, 560, 420, 1 }, new[] { 560, 700, 560, 0 } }
+                        .Select(m => new[] { m[0] * 1048576L, m[1] * 1048576L, m[2] * 1048576L, m[3] }).ToList(),
                 };
                 var speeds = Enumerable.Range(0, 60).Select(i => 9e6 + 4e6 * Math.Sin(i / 5.0) + (i % 7) * 3e5).ToList();
                 var prog = new ProgressDialog(null, running.Id);
@@ -516,6 +533,15 @@ namespace Arrow
                 prog = new ProgressDialog(null, done.Id);
                 prog.Fill(done, cats, new List<double>());
                 Shot(folder, "progress-done", prog);
+
+                var report = new Download
+                {
+                    Id = "shot-complete", Kind = "http", Status = "done", Notify = true, Url = "https://downloads.example.com/rapport-annuel-2025.pdf", Name = "Rapport annuel 2025.pdf",
+                    Size = 2516582, Got = 2516582, File = "C:\\Users\\PC\\Downloads\\Documents\\Rapport annuel 2025.pdf",
+                };
+                prog = new ProgressDialog(null, report.Id);
+                prog.Fill(report, cats, new List<double>());
+                Shot(folder, "complete", prog);
 
                 Shot(folder, "addlinks", new AddLinksDialog(null, "https://www.youtube.com/watch?v=jNQXAC9IVRw\r\nhttps://cdn.example.com/photos/img[001-120].jpg"));
                 Shot(folder, "options", new OptionsDialog(null, settings, false));

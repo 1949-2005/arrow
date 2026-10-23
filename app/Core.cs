@@ -350,6 +350,28 @@ namespace Arrow
             return new List<double[]> { new[] { 0, Fraction(d, true) } };
         }
 
+        public const string Receiving = "Receiving data…";
+
+        // The progress window's Connections table: [downloaded, info] per piece of an http download, none otherwise.
+        // A piece's end is 0 (null) while the size is unknown.
+        public static List<string[]> ConnectionRows(Download d)
+        {
+            if (d.Kind != "http" || d.Segments == null) return new List<string[]>();
+            return d.Segments.Select(s =>
+            {
+                var known = s[1] > s[0];
+                var info = known && s[2] >= s[1] ? "Done" : s.Length > 3 && s[3] == 1 ? Receiving : "Waiting";
+                return new[] { Size(s[2] - s[0]) + " of " + (known ? Size(s[1] - s[0]) : "?"), info };
+            }).ToList();
+        }
+
+        // Download complete opens by itself for a download started from Download File Info (notify) that this app saw
+        // unfinished (before: its last status seen, null when not seen: already done when the app started) and that is done now
+        public static bool OpensComplete(Download d, string before, Settings s)
+        {
+            return s.ShowComplete && d.Notify && d.Status == "done" && before != null && before != "done";
+        }
+
         public static string ShortName(Download d)
         {
             if (!string.IsNullOrEmpty(d.Name)) return d.Name;
