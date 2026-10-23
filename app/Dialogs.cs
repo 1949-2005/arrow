@@ -1,5 +1,5 @@
 // The dialogs (docs/NATIVE_UI.md "Dialogs"): the static API the main window calls, the themed Dialog base, the small
-// modal dialogs (Confirm, Remove, Change link, Error, About), and ARROW_SHOTS pictures of every dialog.
+// modal dialogs (Confirm, Remove, a text prompt, Link already in the list, Error, About), and ARROW_SHOTS pictures of every dialog.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -251,7 +251,7 @@ namespace Arrow
                 }
                 f.Fill(d, s.Categories, l);
             }
-            foreach (var f in infos.Values.ToList()) f.Fill(Find(s, f.Id), s.Settings);
+            foreach (var f in infos.Values.ToList()) f.Fill(Find(s, f.Id), s.Settings, s);
         }
 
         static Download Find(State s, string id) { return s.Downloads.FirstOrDefault(d => d.Id == id); }
@@ -365,37 +365,102 @@ namespace Arrow
             return Modal(f, owner) == DialogResult.OK;
         }
 
-        static Dialog ChangeLinkDialog(string current, out TextField field)
+        // One line of text: a new queue's name (Download Later's "+")
+        static Dialog TextDialog(string title, string prompt, string value, int max, string okText, out TextField field)
         {
-            var f = new Dialog("Change link", 460);
-            var y = f.Paragraph(new Caption(Theme.Body, () => Theme.Text) { Text = "New link for the same file" }, Dialog.Pad);
-            var box = field = new TextField(Glyph.Link, "https://");
-            field.Box.AccessibleName = "New link";
-            field.Box.Text = current ?? "";
+            var f = new Dialog(title, 420);
+            var y = f.Paragraph(new Caption(Theme.Body, () => Theme.Text) { Text = prompt }, Dialog.Pad);
+            var box = field = new TextField('\0', "");
+            field.Box.AccessibleName = prompt;
+            field.Box.MaxLength = max;
+            field.Box.Text = value ?? "";
             field.Bounds = new Rectangle(Dialog.Pad, y + Theme.Px(8), f.ClientSize.Width - 2 * Dialog.Pad, Theme.Px(32));
             f.Add(field);
             f.BodyHeight(field.Bottom + Dialog.Pad);
-            var save = Dialog.Button("Save", ButtonKind.Primary, DialogResult.None);
+            var ok = Dialog.Button(okText, ButtonKind.Primary, DialogResult.None);
             var cancel = Dialog.Button("Cancel", ButtonKind.Secondary, DialogResult.Cancel);
-            save.Click += (s, e) =>
+            ok.Click += (s, e) =>
             {
                 if (box.Text.Trim() == "") { box.Invalid = true; box.Box.Focus(); return; }
                 f.DialogResult = DialogResult.OK;
             };
             box.Box.TextChanged += (s, e) => box.Invalid = false;
-            f.Buttons(new FlatButton[0], new[] { cancel, save });
-            f.AcceptButton = save;
+            f.Buttons(new FlatButton[0], new[] { cancel, ok });
+            f.AcceptButton = ok;
             f.CancelButton = cancel;
             f.ActiveControl = field.Box;
             return f;
         }
 
-        // null = cancelled
-        public static string ChangeLink(IWin32Window owner, string current)
+        // The trimmed text, null = cancelled
+        public static string AskText(IWin32Window owner, string title, string prompt, string value, int max, string okText)
         {
             TextField field;
-            var f = ChangeLinkDialog(current, out field);
+            var f = TextDialog(title, prompt, value, max, okText, out field);
             return Modal(f, owner) == DialogResult.OK ? field.Text.Trim() : null;
+        }
+
+        // Link already in the list (spec "6"): the existing download, three choices with their sub-lines, remember
+        static readonly string[] DuplicateKeys = { "number", "replace", "resume" };
+
+        static Dialog DuplicateDialog(string existing, string status, string numbered, out FlatRadio[] choices, out FlatCheck remember)
+        {
+            var f = new Dialog("Link already in the list", 460);
+            int p = Dialog.Pad, w = f.ClientSize.Width - 2 * p, indent = Theme.Px(26);
+            var title = f.Add(new Caption(Theme.Bold, () => Theme.Text) { Text = "This link is already in your list" });
+            title.Bounds = new Rectangle(p, p, w, title.Height);
+            var sub = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = string.Join(" · ", new[] { existing, status }.Where(t => !string.IsNullOrEmpty(t))) });
+            sub.Bounds = new Rectangle(p, title.Bottom + Theme.Px(2), w, sub.Height);
+            var y = sub.Bottom + Theme.Px(20);
+            var texts = new[] { "Download it again with a new name", "Replace the existing file", "Resume the existing download" };
+            var lines = new[] { numbered, null, "If it's finished, show it instead" };
+            choices = new FlatRadio[3];
+            for (var i = 0; i < 3; i++)
+            {
+                var r = choices[i] = f.Add(new FlatRadio(texts[i]) { Checked = i == 0, AccessibleDescription = lines[i] });
+                r.Bounds = new Rectangle(p, y, w, r.Height);
+                y = r.Bottom;
+                if (lines[i] != null)
+                {
+                    var line = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = lines[i] });
+                    line.Bounds = new Rectangle(p + indent, y - Theme.Px(2), w - indent, line.Height);
+                    y = line.Bottom;
+                }
+                y += Theme.Px(8);
+            }
+            remember = f.Add(new FlatCheck("Remember my choice (change it in Options)"));
+            remember.Location = new Point(p, y);
+            f.BodyHeight(remember.Bottom + p);
+            var ok = Dialog.Button("OK", ButtonKind.Primary, DialogResult.OK);
+            var cancel = Dialog.Button("Cancel", ButtonKind.Secondary, DialogResult.Cancel);
+            f.Buttons(new FlatButton[0], new[] { cancel, ok });
+            f.AcceptButton = ok;
+            f.CancelButton = cancel;
+            f.ActiveControl = choices[0];
+            return f;
+        }
+
+        // "number", "replace" or "resume"; null = Cancel
+        public static string AskDuplicate(IWin32Window owner, string existing, string status, string numbered, out bool remember)
+        {
+            FlatRadio[] choices;
+            FlatCheck check;
+            var f = DuplicateDialog(existing, status, numbered, out choices, out check);
+            var ok = Modal(f, owner) == DialogResult.OK;
+            remember = ok && check.Checked;
+            return ok ? DuplicateKeys[Array.FindIndex(choices, c => c.Checked)] : null;
+        }
+
+        public static void Properties(Api api, IWin32Window owner, Download d, State s) { Modal(new PropertiesDialog(api, d, s), owner); }
+
+        // The category editor, for Download File Info's "+" and Options › Categories: name null = a new category.
+        // Saves at once (POST /api/settings {types, folders}); returns the engine's settings, or null when cancelled.
+        public static Settings EditCategory(Api api, IWin32Window owner, Settings s, string name, out string saved)
+        {
+            var f = new CategoryDialog(api, s, name);
+            var ok = Modal(f, owner) == DialogResult.OK;
+            saved = ok ? f.SavedName : null;
+            return ok ? f.Saved : null;
         }
 
         public static void Error(IWin32Window owner, string text) { Modal(ErrorDialog(text), owner); }
@@ -548,26 +613,49 @@ namespace Arrow
                 FlatCheck files;
                 Shot(folder, "remove", RemoveDialog(3, true, out files));
                 TextField field;
-                Shot(folder, "changelink", ChangeLinkDialog("https://cdn.example.com/games/Last War Winter Storm.mp4?token=expired", out field));
+                Shot(folder, "newqueue", TextDialog("New queue", "Name of the new queue", "Weekend", 40, "Add", out field));
                 Shot(folder, "about", AboutDialog());
                 Shot(folder, "error", ErrorDialog("Couldn't reach the server: the connection was reset. Check the link, then try again."));
+
+                // issue 06: Download Later's popover, Link already in the list, Properties, the category editor
+                var queues = new List<Queue> { new Queue { Id = Queue.Main, Name = "Main download queue" }, new Queue { Id = "night", Name = "Night" } };
+                using (var pop = new QueuePopover(null, queues)) Shot(folder, "fileinfo-later", pop, pop.Root);
+                FlatRadio[] radios;
+                Shot(folder, "duplicate", DuplicateDialog("photos-ete.zip", "Paused · 30%", "photos-ete (1).zip", out radios, out files));
+                var types = new Dictionary<string, List<string>> { { "Video", new List<string> { "mp4" } }, { "Music", new List<string> { "mp3" } }, { "Programs", new List<string> { "exe" } },
+                    { "Documents", new List<string> { "pdf" } }, { "Compressed", new List<string> { "zip", "iso" } }, { "Courses", new List<string> { "srt", "vtt" } } };
+                var state = new State { Settings = settings, Categories = types, Queues = queues, Downloads = new List<Download>() };
+                var photos = new Download
+                {
+                    Id = "shot-props", Kind = "http", Status = "paused", Url = "https://downloads.example.com/2026/photos-ete.zip", Name = "photos-ete.zip", Size = 524288000, Got = 157286400,
+                    File = "C:\\Users\\PC\\Downloads\\Compressed\\photos-ete.zip", Description = "Summer photos, part 1", Referer = "https://example.com/gallery",
+                    Added = DateTimeOffset.Now.AddDays(-1).ToUnixTimeMilliseconds(), LastTry = DateTimeOffset.Now.AddHours(-2).ToUnixTimeMilliseconds(),
+                };
+                Shot(folder, "properties", new PropertiesDialog(null, photos, state));
+                photos.Status = "downloading";
+                photos.Queue = "night";
+                Shot(folder, "properties-running", new PropertiesDialog(null, photos, state));
+                var withTypes = new Settings { Dir = settings.Dir, Categories = true, Types = types, Folders = new Dictionary<string, string> { { "Courses", "D:\\Courses" } } };
+                Shot(folder, "category-new", new CategoryDialog(null, withTypes, null));
+                Shot(folder, "category-courses", new CategoryDialog(null, withTypes, "Courses"));
+                Shot(folder, "category-builtin", new CategoryDialog(null, withTypes, "Documents"));
             }
             finally { Dialog.Offscreen = false; }
         }
 
-        static void Shot(string folder, string name, Dialog f)
+        static void Shot(string folder, string name, Dialog f) { using (f) Shot(folder, name, f, f.Root); }
+
+        // root: the part to draw (a dialog's Root has no title bar)
+        static void Shot(string folder, string name, Form f, Control root)
         {
-            using (f)
+            f.ShowInTaskbar = false;
+            f.Location = new Point(SystemInformation.VirtualScreen.Right + 400, SystemInformation.VirtualScreen.Top);
+            f.Show();
+            root.PerformLayout();
+            using (var bmp = new Bitmap(root.Width, root.Height))
             {
-                f.ShowInTaskbar = false;
-                f.Location = new Point(SystemInformation.VirtualScreen.Right + 400, SystemInformation.VirtualScreen.Top);
-                f.Show();
-                f.Root.PerformLayout();
-                using (var bmp = new Bitmap(f.Root.Width, f.Root.Height))
-                {
-                    f.Root.DrawToBitmap(bmp, new Rectangle(Point.Empty, f.Root.Size));
-                    bmp.Save(Path.Combine(folder, name + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
-                }
+                root.DrawToBitmap(bmp, new Rectangle(Point.Empty, root.Size));
+                bmp.Save(Path.Combine(folder, name + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
             }
         }
     }

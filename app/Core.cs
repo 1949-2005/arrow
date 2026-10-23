@@ -166,7 +166,7 @@ namespace Arrow
     public class Download
     {
         public string Id, Url, Name, File, Status, Error, Kind, Title, Phase, Quality, Format;
-        public string Description, Queue; // Queue: the id of its queue, null when in none
+        public string Description, Queue, Referer; // Queue: the id of its queue, null when in none
         public string WhenDone = ""; // '' | 'open' | 'sleep' | 'shutdown'
         public long? Size;
         public bool? Resumable;
@@ -185,7 +185,7 @@ namespace Arrow
             {
                 Id = o.Str("id"), Url = o.Str("url"), Name = o.Str("name"), File = o.Str("file"), Status = o.Str("status"), Error = o.Str("error"),
                 Kind = o.Str("kind"), Title = o.Str("title"), Phase = o.Str("phase"), Quality = o.Str("quality"), Format = o.Str("format"),
-                Description = o.Str("description"), Queue = o.Str("queue"), WhenDone = o.Str("whenDone") ?? "", Notify = o.Bool("notify") ?? false,
+                Description = o.Str("description"), Queue = o.Str("queue"), Referer = o.Str("referer"), WhenDone = o.Str("whenDone") ?? "", Notify = o.Bool("notify") ?? false,
                 LastTry = o.Long("lastTry") ?? 0, LimitKB = o.Int("limitKB") ?? 0,
                 Size = o.Long("size"), Resumable = o.Bool("resumable"),
                 Hls = h == null ? null : new HlsInfo { Done = h.Long("done") ?? 0, Bytes = h.Long("bytes") ?? 0, Total = h.Long("total") ?? 0 },
@@ -202,6 +202,7 @@ namespace Arrow
         public long? Size;
         public bool Listing;
         public List<FormatOption> Options;
+        public Download Duplicate; // probe.duplicate: the download already in the list with this link (Id, Name, Status only), else null
 
         public static Probe From(IDictionary<string, object> o)
         {
@@ -211,6 +212,7 @@ namespace Arrow
                 Name = o.Str("name"), Category = o.Str("category"), Type = o.Str("type"), Error = o.Str("error"), Format = o.Str("format"),
                 Size = o.Long("size"), Listing = o.Bool("listing") ?? false,
                 Options = (o.List("options") ?? new List<object>()).Select(x => FormatOption.From(x as IDictionary<string, object>)).ToList(),
+                Duplicate = o.Obj("duplicate") == null ? null : new Download { Id = o.Obj("duplicate").Str("id"), Name = o.Obj("duplicate").Str("name"), Status = o.Obj("duplicate").Str("status") },
             };
         }
     }
@@ -644,6 +646,96 @@ namespace Arrow
 
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
         public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
+
+        // ---- duplicates (spec "Duplicates"): what a pending download with probe.duplicate does
+
+        static readonly string[] DuplicateChoices = { "number", "replace", "resume" };
+
+        // null: no duplicate; "ask": the Link already in the list window; else the saved choice
+        public static string DuplicateChoice(Probe p, Settings s)
+        {
+            if (p == null || p.Duplicate == null) return null;
+            return s != null && DuplicateChoices.Contains(s.Duplicates) ? s.Duplicates : "ask";
+        }
+
+        // "Resume the existing download": a finished one is shown (its Download complete window), a stopped one resumes,
+        // one that already runs or waits shows its progress window
+        public static string DuplicateResume(string status)
+        {
+            if (status == "done") return "show";
+            return status == "paused" || status == "error" || status == "scheduled" ? "resume" : "progress";
+        }
+
+        // The sub-line of "Download it again with a new name", as engine.js uniqueFile() names the first free one
+        public static string Numbered(string name)
+        {
+            var m = LastExt.Match(name ?? "");
+            var ext = m.Success ? m.Value : "";
+            return (name ?? "").Substring(0, (name ?? "").Length - ext.Length) + " (1)" + ext;
+        }
+
+        // ---- Properties
+
+        // The address can change while nothing works on it (engine.js act 'url'); YouTube downloads keep their link
+        public static bool CanChangeUrl(Download d)
+        {
+            return d.Kind != "video" && (d.Status == "paused" || d.Status == "error" || d.Status == "scheduled");
+        }
+
+        // Header line: "Paused · 30% of 500 MB", "Complete · 500 MB", "In Night"
+        public static string PropertiesStatus(Download d, IList<Queue> queues)
+        {
+            var s = ListStatus(d, queues);
+            var t = Total(d);
+            if (t == null || d.Kind == "hls") return s;
+            return s + (s.EndsWith("%") ? " of " : " · ") + Size(t);
+        }
+
+        // ---- categories (engine.js cleanTypes)
+
+        public static readonly string[] BuiltInCategories = { "Video", "Music", "Programs", "Documents", "Compressed" }; // their icons are keyed by name
+        static readonly Regex CategoryRx = new Regex(@"^[\p{L}\p{N} _-]{1,30}$"), TypeRx = new Regex("^[a-z0-9]{1,10}$");
+
+        // A custom category's name, trimmed; others: the other categories' names. null when it is fine.
+        public static string CategoryNameError(string name, IEnumerable<string> others)
+        {
+            if (name == "") return "Give the category a name.";
+            if (!CategoryRx.IsMatch(name)) return "A category name has up to 30 letters, digits, spaces, - or _.";
+            var taken = BuiltInCategories.Concat(new[] { "Other", "All" }).Concat(others).FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            return taken == null ? null : "There is already a category named " + taken + ".";
+        }
+
+        // "srt vtt": file types, lower-cased, without repeats; null with error when one is not 1–10 letters or digits
+        public static List<string> ParseTypes(string text, out string error)
+        {
+            error = null;
+            var l = new List<string>();
+            foreach (var t in Regex.Split((text ?? "").Trim(), @"\s+").Where(x => x != "").Select(x => x.ToLowerInvariant()))
+            {
+                if (!TypeRx.IsMatch(t))
+                {
+                    error = t.StartsWith(".") ? "Leave out the dot: " + t.TrimStart('.') + ", not " + t + "." : "\"" + t + "\" isn't a file type: use 1–10 letters or digits.";
+                    return null;
+                }
+                if (!l.Contains(t)) l.Add(t);
+            }
+            return l;
+        }
+
+        // POST /api/settings {types, folders} after the category editor: types in order (a rename keeps its place, a new one
+        // goes last), the edited category's types taken from the others (the engine gives a type to the later one), and
+        // every remembered folder, the edited one set or dropped. original: null for a new category.
+        public static Dictionary<string, object> CategoryBody(Settings s, string original, string name, List<string> exts, string folder)
+        {
+            var types = new Dictionary<string, List<string>>();
+            foreach (var k in s.Types.Keys)
+                if (k == original) types[name] = exts;
+                else types[k] = s.Types[k].Where(e => !exts.Contains(e)).ToList();
+            if (original == null) types[name] = exts;
+            var folders = s.Folders.Where(f => f.Key != original && f.Key != name).ToDictionary(f => f.Key, f => f.Value);
+            if (!string.IsNullOrEmpty(folder)) folders[name] = folder;
+            return new Dictionary<string, object> { { "types", types }, { "folders", folders } };
+        }
 
         // A typical extension per Category name, for its Windows icon ("" = the generic file)
         public static string TypicalExt(string category)

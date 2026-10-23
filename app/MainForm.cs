@@ -722,11 +722,7 @@ namespace Arrow
             catch (ExternalException) { Dialogs.Error(this, "The clipboard is busy. Try again."); }
         }
 
-        void ChangeLink(Download d)
-        {
-            var url = Dialogs.ChangeLink(this, d.Url);
-            if (url != null) Ops(new[] { new[] { d.Id, "url", url } });
-        }
+        void Properties(Download d) { if (d != null && state != null) Dialogs.Properties(api, this, d, state); }
 
         void Remove(List<Download> sel)
         {
@@ -788,7 +784,7 @@ namespace Arrow
                 case "open": Open(sel[0]); break;
                 case "folder": Ops(sel.Where(d => !string.IsNullOrEmpty(d.File)).Take(1).Select(d => new[] { d.Id, "folder" })); break;
                 case "copy": CopyLinks(); break;
-                case "link": ChangeLink(sel[0]); break;
+                case "properties": Properties(sel[0]); break;
                 case "progress": Dialogs.Progress(api, this, sel[0].Id); break;
                 case "remove": Remove(sel); break;
             }
@@ -999,8 +995,7 @@ namespace Arrow
             }
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Progress window", () => Dialogs.Progress(api, this, one.Id), one != null && one.Status != "done");
-            Item(m, "Properties…", () => { }, false); // issue 06 builds the window
-            Item(m, "Change link…", () => ChangeLink(one), one != null && (one.Status == "paused" || one.Status == "error") && one.Kind != "video"); // until Properties has it
+            Item(m, "Properties…", () => Properties(one), one != null);
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Remove…", () => Remove(sel), true);
             m.Show(list, p);

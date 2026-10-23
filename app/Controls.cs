@@ -339,6 +339,44 @@ namespace Arrow
         }
     }
 
+    // Radio button in FlatCheck's look: a 16 px circle (field fill, line border; checked = accent fill with an onAccent
+    // dot). The native RadioButton keeps the grouping, arrow keys and accessibility.
+    public class FlatRadio : RadioButton
+    {
+        public FlatRadio(string text)
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Text = text;
+            Font = Theme.Body;
+            AutoSize = false;
+            Size = new Size(PreferredWidth, Theme.Px(24));
+        }
+
+        public int PreferredWidth { get { return Theme.Px(16 + 8 + 4) + Theme.Measure(Text, Font).Width; } }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            using (var b = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Inspector)) g.FillRectangle(b, ClientRectangle);
+            var s = Theme.Px(16);
+            var box = new Rectangle(Theme.Px(2), (Height - s) / 2, s, s);
+            if (Checked)
+            {
+                Theme.Fill(g, box, s / 2f, Enabled ? Theme.Accent : Theme.Soft);
+                var dot = Theme.Px(6);
+                Theme.Fill(g, new RectangleF(box.X + (s - dot) / 2f, box.Y + (s - dot) / 2f, dot, dot), dot / 2f, Enabled ? Theme.OnAccent : Theme.Faint);
+            }
+            else
+            {
+                Theme.Fill(g, box, s / 2f, Theme.Field);
+                Theme.Border(g, box, s / 2f, Theme.Line, 1);
+            }
+            var x = box.Right + Theme.Px(8);
+            Theme.DrawText(g, Text, Font, new Rectangle(x, 0, Width - x, Height), Enabled ? Theme.Text : Theme.Faint);
+            if (Focused && ShowFocusCues) Theme.FocusRing(g, ClientRectangle, Theme.Px(4));
+        }
+    }
+
     public enum BarKind { Normal, Paused, Done, Err }
 
     // Progress bar made of pieces [left, width] (fractions, Core.Pieces). Rounded track; Done fills it green.

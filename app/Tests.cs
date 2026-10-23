@@ -462,6 +462,49 @@ namespace Arrow
             Eq(Core.NextStart(new[] { queue("main", "", new int[0], false), queue("Night", "bad", new int[0], false) }, mon), null, "no start time");
             Eq(Core.NextStart(new[] { queue("main", "10:00", new[] { 1 }, false) }, mon), "Main queue at 10:00", "a start at this minute is next week's");
 
+            // duplicates: probe.duplicate, the saved choice, "resume the existing one", the numbered name
+            var dupProbe = State.From(Json.Parse(Q("{'downloads': [{'id': 'n', 'status': 'pending', 'probe': {'name': 'a.zip', 'duplicate': {'id': 'q2', 'name': 'a.zip', 'status': 'paused'}}}]}"))).Downloads[0].Probe;
+            Eq(dupProbe.Duplicate.Id + "/" + dupProbe.Duplicate.Name + "/" + dupProbe.Duplicate.Status + "/" + (state.Downloads[1].Probe.Duplicate == null), "q2/a.zip/paused/True", "probe.duplicate");
+            Eq(L(new[] { "ask", "number", "replace", "resume", "bad", null }.Select(c => Core.DuplicateChoice(dupProbe, new Settings { Duplicates = c }))), "ask | number | replace | resume | ask | ask", "duplicate choice: saved or ask");
+            Eq(Core.DuplicateChoice(state.Downloads[1].Probe, st) + "/" + Core.DuplicateChoice(null, st), "/", "no duplicate, no question");
+            Eq(L(new[] { "done", "paused", "error", "scheduled", "downloading", "queued" }.Select(Core.DuplicateResume)), "show | resume | resume | resume | progress | progress", "resume the existing one");
+            Eq(L(new[] { "photos-ete.zip", "archive.tar.gz", "README", "" }.Select(Core.Numbered)), "photos-ete (1).zip | archive.tar (1).gz | README (1) |  (1)", "numbered names");
+
+            // Properties: which address can change, the header's status line
+            Func<string, string, Download> pd = (kind, status) => new Download { Kind = kind, Status = status, Size = 524288000, Got = 157286400 };
+            Eq(L(new[] { "paused", "error", "scheduled", "downloading", "queued", "done" }.Select(x => Core.CanChangeUrl(pd("http", x)).ToString())), "True | True | True | False | False | False", "address editable while stopped");
+            Eq(Core.CanChangeUrl(pd("video", "paused")) + "/" + Core.CanChangeUrl(pd("hls", "error")), "False/True", "YouTube keeps its link");
+            var inNight = pd("http", "scheduled"); inNight.Queue = "n1";
+            var noSize = pd("http", "error"); noSize.Size = null;
+            Eq(Core.PropertiesStatus(pd("http", "paused"), queues) + " | " + Core.PropertiesStatus(pd("http", "done"), queues) + " | " + Core.PropertiesStatus(inNight, queues) + " | " + Core.PropertiesStatus(noSize, queues),
+                "Paused · 30% of 500.0 MB | Complete · 500.0 MB | In Night · 500.0 MB | Failed", "properties status line");
+
+            // the category editor: names and file types as engine.js checks them, and what it sends
+            var names = new[] { "Video", "Music", "Programs", "Documents", "Compressed", "Courses" };
+            foreach (var good in new[] { "Ebooks", "Cours de français", "a-b_c 2", "كتب", new string('x', 30) }) Eq(Core.CategoryNameError(good, names), null, "category name " + good);
+            Eq(Core.CategoryNameError("", names), "Give the category a name.", "empty name");
+            foreach (var bad in new[] { "a/b", "C++", "a.b", new string('x', 31) }) Eq(Core.CategoryNameError(bad, names), "A category name has up to 30 letters, digits, spaces, - or _.", "category name " + bad);
+            Eq(L(new[] { "video", "OTHER", "all", "courses" }.Select(n => Core.CategoryNameError(n, names))),
+                "There is already a category named Video. | There is already a category named Other. | There is already a category named All. | There is already a category named Courses.", "taken names, any case");
+            string typeError;
+            Eq(L(Core.ParseTypes("  srt VTT\tsrt  ass ", out typeError)) + "/" + typeError, "srt | vtt | ass/", "file types lower-cased, without repeats");
+            Eq(Core.ParseTypes("", out typeError).Count + "/" + typeError, "0/", "no file types");
+            Ok(Core.ParseTypes("srt .vtt", out typeError) == null && typeError == "Leave out the dot: vtt, not .vtt.", "a dot (" + typeError + ")");
+            Ok(Core.ParseTypes("srt sub-title", out typeError) == null && typeError == "\"sub-title\" isn't a file type: use 1–10 letters or digits.", "a bad type (" + typeError + ")");
+            Ok(Core.ParseTypes("abcdefghijk", out typeError) == null && Core.ParseTypes("abcdefghij", out typeError).Count == 1, "at most 10 characters");
+            var cs = new Settings
+            {
+                Types = new Dictionary<string, List<string>> { { "Video", new List<string> { "mp4", "srt" } }, { "Music", new List<string> { "mp3" } }, { "Courses", new List<string> { "vtt" } }, { "Ebooks", new List<string> { "epub" } } },
+                Folders = new Dictionary<string, string> { { "Courses", "D:\\Courses" }, { "Music", "D:\\Music" } },
+            };
+            Func<Dictionary<string, object>, string> sent = b => Json.Serialize(b);
+            Eq(sent(Core.CategoryBody(cs, "Courses", "Lessons", new List<string> { "vtt", "srt" }, "D:\\Lessons")),
+                Q("{'types':{'Video':['mp4'],'Music':['mp3'],'Lessons':['vtt','srt'],'Ebooks':['epub']},'folders':{'Music':'D:\\\\Music','Lessons':'D:\\\\Lessons'}}"), "rename: same place, its types taken from the others, its folder follows");
+            Eq(sent(Core.CategoryBody(cs, null, "Subtitles", new List<string> { "ass" }, "")),
+                Q("{'types':{'Video':['mp4','srt'],'Music':['mp3'],'Courses':['vtt'],'Ebooks':['epub'],'Subtitles':['ass']},'folders':{'Courses':'D:\\\\Courses','Music':'D:\\\\Music'}}"), "a new category goes last");
+            Eq(sent(Core.CategoryBody(cs, "Music", "Music", new List<string> { "mp3", "flac" }, "")),
+                Q("{'types':{'Video':['mp4','srt'],'Music':['mp3','flac'],'Courses':['vtt'],'Ebooks':['epub']},'folders':{'Courses':'D:\\\\Courses'}}"), "a built-in's types; an emptied folder is dropped");
+
             Console.WriteLine(failures == 0 ? "all passed" : failures + " failed");
             return failures == 0 ? 0 : 1;
         }

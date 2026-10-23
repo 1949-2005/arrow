@@ -158,6 +158,8 @@ test('finished files get the Mark-of-the-Web', { skip: process.platform !== 'win
   assert.match(zone, /ZoneId=3\r\n/);
   assert.match(zone, /ReferrerUrl=https:\/\/example\.com\/page\r\n/);
   assert.ok(zone.includes(`HostUrl=${base}/file.bin`), zone);
+  const v = mgr.view().downloads.find(x => x.id === d.id);
+  assert.deepEqual([v.referer, 'headers' in v], ['https://example.com/page', false], 'view() shows the referer for Properties, never the headers');
 });
 
 test('pause, restart the app, resume: continues where it stopped', async () => {

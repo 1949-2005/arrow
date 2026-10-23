@@ -1,6 +1,6 @@
 # 07 Screens: Scheduler
 
-Status: open
+Status: in progress
 Blocked by: 06
 Tier: careful
 

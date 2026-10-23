@@ -183,8 +183,8 @@ namespace Arrow
             if (primary != null) spec.Add(new object[] { primary[0], primary[1], ButtonKind.Primary, true, false });
             if (!string.IsNullOrEmpty(file)) spec.Add(new object[] { "Show in folder", "folder", ButtonKind.Secondary, true, false });
             spec.Add(new object[] { "Copy link", "copy", ButtonKind.Secondary, true, false });
-            if ((d.Status == "paused" || failed) && !youtube) spec.Add(new object[] { "Change link…", "link", ButtonKind.Secondary, true, false });
             if (d.Status != "done") spec.Add(new object[] { "Progress window", "progress", ButtonKind.Secondary, true, false });
+            spec.Add(new object[] { "Properties…", "properties", ButtonKind.Secondary, true, false }); // the address can change there
             spec.Add(new object[] { "Remove", "remove", ButtonKind.Secondary, true, true });
             Buttons(spec.ToArray());
             Relayout();

@@ -826,6 +826,7 @@ export class Manager {
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
           resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, format: d.format, added: d.added, probe: d.probe,
+          referer: d.headers?.referer ?? null, // for Properties; cookies never leave the engine
           description: d.description ?? null, limitKB: d.limitKB ?? 0, whenDone: d.whenDone ?? '', lastTry: d.lastTry ?? null, notify: !!d.notify, queue: d.queue ?? null,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,
