@@ -31,14 +31,34 @@ const queueFields = (q, s = {}) => {
   };
 };
 
+// The default settings.types, in sidebar order. The built-ins are always there (the app keys their icons by name).
 export const CATEGORIES = {
   Video: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', '3gp'],
   Music: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma', 'opus'],
-  Compressed: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso'],
-  Documents: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'epub', 'csv'],
   Programs: ['exe', 'msi', 'apk', 'dmg', 'deb', 'rpm', 'appimage'],
+  Documents: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'epub', 'csv'],
+  Compressed: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso'],
 };
-const isCategory = c => typeof c === 'string' && (c === 'Other' || Object.hasOwn(CATEGORIES, c));
+const BUILT_IN = Object.keys(CATEGORIES);
+const CAT_NAME = /^[\p{L}\p{N} _-]{1,30}$/u, EXT = /^[a-z0-9]{1,10}$/;
+// settings.types checked: the built-ins first, in their order (missing: kept as they were), then valid custom names
+// that are unique regardless of case; each file type goes to the last category in x that claims it.
+const isObject = x => !!x && typeof x === 'object' && !Array.isArray(x);
+const cleanTypes = (x, old) => {
+  const given = Object.entries(isObject(x) ? x : old);
+  const list = (k, v) => Array.isArray(v) ? v : Array.isArray(old[k]) ? old[k] : CATEGORIES[k] ?? [];
+  const names = new Set(BUILT_IN.map(n => n.toLowerCase()).concat('other', 'all'));
+  const cats = BUILT_IN.filter(n => !given.some(([k]) => k === n)).map(n => [n, list(n)]);
+  for (const [k, v] of given) {
+    if (BUILT_IN.includes(k) || (k.trim() === k && CAT_NAME.test(k) && !names.has(k.toLowerCase()))) cats.push([k, list(k, v)]);
+    if (!BUILT_IN.includes(k)) names.add(k.toLowerCase());
+  }
+  const owner = new Map();
+  for (const [k, v] of cats) for (const e of v) if (typeof e === 'string' && EXT.test(e)) owner.set(e, k);
+  const own = Object.fromEntries(cats.map(([k, v]) => [k, [...new Set(v)].filter(e => owner.get(e) === k)]));
+  return Object.fromEntries([...BUILT_IN, ...cats.map(([k]) => k).filter(k => !BUILT_IN.includes(k))].map(k => [k, own[k]]));
+};
+const typeOf = (types, name) => Object.keys(types).find(c => types[c].includes(path.extname(name).slice(1).toLowerCase())) ?? 'Other';
 
 // Windows-safe file name: no path separators, reserved characters or device names
 export function sanitize(name) {
@@ -85,7 +105,7 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, folders: {}, duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, folders: {}, types: structuredClone(CATEGORIES), duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
   list = [];
   running = new Map();
   // Running queues, never saved: id → {tries: download id → retries used this run, waiting: download id → retry time, worked}
@@ -144,9 +164,16 @@ export class Manager {
     t.duplicates = DUPLICATES.includes(dup) ? dup : 'ask';
     if (s.categories != null) t.categories = !!s.categories;
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
+    // A rename is a custom name replaced by a new one at the same place in the order: its remembered folder follows.
+    const before = isObject(t.types) ? t.types : {}, was = Object.keys(before);
+    t.types = cleanTypes(s.types, before);
+    const now = Object.keys(t.types), renamed = was.map((k, i) => [k, now[i]]).filter(([a, b]) => b && !Object.hasOwn(t.types, a) && !Object.hasOwn(before, b));
+    const f = { ...(isObject(s.folders ?? t.folders) && (s.folders ?? t.folders)) };
+    for (const [a, b] of renamed) if (s.folders == null && Object.hasOwn(f, a)) { f[b] = f[a]; delete f[a]; }
+    // Categories come from file names, so only an open Download File Info window holds one: it follows the new types
+    for (const d of this.list) if (d.probe) d.probe.category = typeOf(t.types, d.probe.name);
     // "Remember this folder for <Category>": category → absolute folder; anything else is dropped (also from a loaded state.json)
-    const f = s.folders ?? t.folders;
-    t.folders = Object.fromEntries(Object.entries(f && typeof f === 'object' ? f : {}).filter(([k, v]) => isCategory(k) && typeof v === 'string' && path.isAbsolute(v)));
+    t.folders = Object.fromEntries(Object.entries(f).filter(([k, v]) => this.isCategory(k) && typeof v === 'string' && path.isAbsolute(v)));
     // Queues change through queues(), never here; this checks a loaded state.json: the main queue first and always there,
     // the others with a unique id and name. The old single start time (also from an older app) is the main queue's.
     const old = Array.isArray(t.queues) ? t.queues : [];
@@ -224,7 +251,7 @@ export class Manager {
   async probe(d) {
     let name, size = null, type = null, error = null, list = null;
     const dup = () => { const x = this.duplicate(d); return x && { duplicate: { id: x.id, name: x.name ?? x.title, status: x.status } }; };
-    const catOf = n => Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(path.extname(n).slice(1).toLowerCase())) ?? 'Other';
+    const catOf = n => typeOf(this.settings.types, n);
     if (d.kind === 'video') {
       // Until yt-dlp's list is in, the window shows "Getting formats…" with the tab title ("(3) Title - YouTube") as the name.
       const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '') || 'video';
@@ -316,7 +343,7 @@ export class Manager {
     // the existing file is allowed: the finished download replaces it
     this.setFile(d, old && path.join(dir, name) === old.file ? old.file : this.uniqueFile(dir, name));
     if (description !== undefined) d.description = describe(description);
-    if (isCategory(remember)) this.settings.folders[remember] = path.dirname(d.file);
+    if (this.isCategory(remember)) this.settings.folders[remember] = path.dirname(d.file);
     delete d.probe;
     d.status = action === 'start' ? 'queued' : 'scheduled';
     d.queue = q && (this.queue(q) ? q : MAIN); // removed while we waited: the main queue takes it, as remove does
@@ -549,11 +576,15 @@ export class Manager {
     return sanitize(name);
   }
 
+  isCategory(c) {
+    return typeof c === 'string' && (c === 'Other' || Object.hasOwn(this.settings.types, c));
+  }
+
   // A file already chosen in the Download File Info window (confirm()) is kept.
   assignName(d, suggested) {
     if (d.file) return;
-    const name = this.baseName(d, suggested), ext = path.extname(name);
-    const cat = Object.keys(CATEGORIES).find(c => CATEGORIES[c].includes(ext.slice(1).toLowerCase())) ?? 'Other';
+    const name = this.baseName(d, suggested);
+    const cat = typeOf(this.settings.types, name);
     const dir = this.settings.folders[cat] ?? (this.settings.categories && cat !== 'Other' ? path.join(this.settings.dir, cat) : this.settings.dir);
     mkdirSync(dir, { recursive: true });
     this.setFile(d, this.uniqueFile(dir, name));
@@ -808,8 +839,8 @@ export class Manager {
       whenDone: this.whenDone, // the status bar's "When done" choice
       powerOp: this.powerAt ? this.powerOp : null, // what the running countdown does: its strip names it
       powerIn: this.powerAt ? Math.max(0, Math.ceil((this.powerAt - Date.now()) / 1000)) : null, // seconds left
-      exts: Object.values(CATEGORIES).flat(), // file types the UI offers from the clipboard
-      categories: CATEGORIES, // the UI's sidebar sorts by these
+      exts: Object.values(this.settings.types).flat(), // file types the UI offers from the clipboard
+      categories: this.settings.types, // the UI's sidebar sorts by these
     };
   }
 }

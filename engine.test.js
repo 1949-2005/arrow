@@ -7,7 +7,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { Manager, sanitize } from './engine.js';
+import { Manager, sanitize, CATEGORIES } from './engine.js';
 import { parsePlaylist, soundTemps } from './hls.js';
 import { ffmpegExe } from './ytdlp.js';
 
@@ -673,6 +673,107 @@ test('confirm later waits in the main queue, cancel removes, and only a pending 
   await mgr.act(d.id, 'remove');
 });
 
+
+test('types: the five built-ins by default, in sidebar order, and view() follows the settings', () => {
+  const m = new Manager(path.join(dir, 'types-default.json')); // never loaded: no timer
+  assert.deepEqual(Object.keys(m.settings.types), ['Video', 'Music', 'Programs', 'Documents', 'Compressed']);
+  assert.deepEqual(m.settings.types, CATEGORIES);
+  m.update({ types: { Video: ['mp4'], Books: ['epub', 'mobi'] } });
+  const v = m.view();
+  assert.deepEqual(v.categories, m.settings.types);
+  assert.deepEqual(Object.keys(v.categories), ['Video', 'Music', 'Programs', 'Documents', 'Compressed', 'Books']);
+  assert.deepEqual(v.exts, Object.values(m.settings.types).flat());
+  assert.ok(v.exts.includes('mobi') && !v.exts.includes('mkv'));
+});
+
+test('types: built-ins keep their place and names, types can change, a type moves to the later category', () => {
+  const m = new Manager(path.join(dir, 'types-edit.json'));
+  m.update({ types: { Compressed: ['zip', 'cbz'], Video: ['mp4', 'mkv', 'mp4'], Docs: ['pdf'], Music: 'not a list' } });
+  const t = m.settings.types;
+  assert.deepEqual(Object.keys(t), ['Video', 'Music', 'Programs', 'Documents', 'Compressed', 'Docs']);
+  assert.deepEqual(t.Video, ['mp4', 'mkv']); // doubled type kept once
+  assert.deepEqual(t.Compressed, ['zip', 'cbz']);
+  assert.deepEqual(t.Music, CATEGORIES.Music); // a wrong list keeps the old one; a missing built-in too (Programs)
+  assert.deepEqual(t.Programs, CATEGORIES.Programs);
+  assert.deepEqual(t.Docs, ['pdf']);
+  assert.ok(!t.Documents.includes('pdf'), 'Docs came later in the POST: it took pdf');
+  m.update({ types: { ...t, Video: [...t.Video, 'pdf'] } }); // Video is earlier than Docs: Docs keeps it
+  assert.deepEqual(m.settings.types.Docs, ['pdf']);
+  assert.ok(!m.settings.types.Video.includes('pdf'));
+  m.update({ types: { Docs: ['pdf'], Documents: ['pdf', 'txt'] } }); // now Documents is the later one
+  assert.deepEqual(m.settings.types.Documents, ['pdf', 'txt']);
+  assert.deepEqual(m.settings.types.Docs, []);
+  const z = { id: 'z' };
+  m.update({ dir: path.join(dir, 'types-out'), categories: true });
+  m.assignName(z, 'comic.cbz'); // assignName uses the new types
+  assert.equal(z.file, path.join(dir, 'types-out', 'Compressed', 'comic.cbz'));
+});
+
+test('types: invalid category names and file types are rejected', () => {
+  const m = new Manager(path.join(dir, 'types-bad.json'));
+  const before = structuredClone(m.settings.types);
+  for (const bad of [null, 'Video', ['Video'], 5]) {
+    m.update({ types: bad });
+    assert.deepEqual(m.settings.types, before, `types: ${JSON.stringify(bad)}`);
+  }
+  m.update({ types: {
+    Other: ['a'], all: ['b'], video: ['c'], '': ['d'], ' Pad': ['e'], ['x'.repeat(31)]: ['f'], 'Bad/name': ['g'], 'Ok name_1-2': ['h'],
+    'OK NAME_1-2': ['i'], Fine: ['.mp3', 'MP3', 'toolongtype1', 'ok1', 'a b', 7, 'é'],
+  } });
+  assert.deepEqual(Object.keys(m.settings.types).slice(5), ['Ok name_1-2', 'Fine']);
+  assert.deepEqual(m.settings.types['Ok name_1-2'], ['h']);
+  assert.deepEqual(m.settings.types.Fine, ['ok1']);
+  assert.deepEqual(m.settings.types.Music, CATEGORIES.Music);
+});
+
+test('types: custom categories are added, renamed and removed with their folder; their downloads become Other', async () => {
+  const file = path.join(dir, 'types-custom.json');
+  const m = new Manager(file);
+  m.update({ dir: path.join(dir, 'types-c'), categories: true, types: { ...CATEGORIES, Books: ['epub', 'mobi'], Fonts: ['ttf'] } });
+  assert.deepEqual(m.settings.types.Documents, CATEGORIES.Documents.filter(e => e !== 'epub'));
+  const b = { id: 'b' };
+  m.assignName(b, 'novel.mobi');
+  assert.equal(b.file, path.join(dir, 'types-c', 'Books', 'novel.mobi'));
+  const pending = { id: 'p', status: 'pending', probe: { name: 'novel.mobi', category: 'Books' } };
+  m.list.push(pending);
+  m.update({ folders: { Books: path.join(dir, 'shelf'), Fonts: path.join(dir, 'fonts') } });
+  assert.deepEqual(Object.keys(m.settings.folders), ['Books', 'Fonts']);
+
+  // rename: the new name at the old one's place
+  m.update({ types: { ...CATEGORIES, Novels: ['epub', 'mobi'], Fonts: ['ttf'] } });
+  assert.deepEqual(Object.keys(m.settings.types).slice(5), ['Novels', 'Fonts']);
+  assert.deepEqual(m.settings.folders, { Novels: path.join(dir, 'shelf'), Fonts: path.join(dir, 'fonts') });
+  assert.equal(pending.probe.category, 'Novels');
+  const n = { id: 'n' };
+  m.assignName(n, 'next.mobi');
+  assert.equal(n.file, path.join(dir, 'shelf', 'next.mobi'));
+
+  // remove: its folder goes, its file types and downloads are Other
+  m.update({ types: { ...CATEGORIES, Fonts: ['ttf'] } });
+  assert.deepEqual(Object.keys(m.settings.types).slice(5), ['Fonts']);
+  assert.deepEqual(m.settings.folders, { Fonts: path.join(dir, 'fonts') });
+  assert.equal(pending.probe.category, 'Other');
+  assert.ok(!m.view().exts.includes('mobi'));
+  const o = { id: 'o' };
+  m.assignName(o, 'last.mobi');
+  assert.equal(o.file, path.join(dir, 'types-c', 'last.mobi'));
+  m.list = [];
+
+  // a loaded state.json goes through the same checks
+  await m.save();
+  const saved = JSON.parse(await fs.readFile(file, 'utf8'));
+  saved.settings.types = { Fonts: ['ttf', 'Bad'], Video: ['mp4'], Other: ['x'], fonts: ['otf'] };
+  saved.settings.folders = { ...saved.settings.folders, Gone: path.join(dir, 'gone') };
+  await fs.writeFile(file, JSON.stringify(saved));
+  const m2 = new Manager(file);
+  await m2.load();
+  assert.deepEqual(m2.settings.types, { ...CATEGORIES, Video: ['mp4'], Fonts: ['ttf'] });
+  assert.deepEqual(m2.settings.folders, { Fonts: path.join(dir, 'fonts') });
+  await fs.writeFile(file, JSON.stringify({ ...saved, settings: { ...saved.settings, types: 'broken' } }));
+  const m3 = new Manager(file);
+  await m3.load();
+  assert.deepEqual(m3.settings.types, CATEGORIES);
+});
 
 test('confirm remember: the folder is kept for its category and used for that category\'s next downloads', async () => {
   const file = path.join(dir, 'remember.json');

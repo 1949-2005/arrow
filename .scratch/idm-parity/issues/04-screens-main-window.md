@@ -1,6 +1,6 @@
 # 04 Screens: main window
 
-Status: open
+Status: in progress
 Blocked by: 03
 Tier: careful
 

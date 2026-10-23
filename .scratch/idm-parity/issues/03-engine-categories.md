@@ -1,6 +1,6 @@
 # 03 Engine: editable categories
 
-Status: in progress
+Status: resolved
 Blocked by: 02
 Tier: medium
 
@@ -12,3 +12,10 @@ a type moving between categories, invalid names and types rejected, downloads of
 view's exts and categories follow the settings); `npm test` passes.
 
 ## Comments
+Done (medium worker, reviewed by the orchestrator). Choices made where the spec was open:
+- A rename is a custom name that disappears while a new name takes its place in the order; its folder entry follows
+  (unless the same POST sends `folders`). The app's Options page sends the whole `types` in order, so this fits.
+- A built-in left out of a POST keeps its types; a bad file type is dropped on its own (no fixing); names may use any
+  Unicode letters; leading or trailing spaces are rejected.
+- Only an open Download File Info window stores a category (`probe.category`); it follows new types at once.
+127 tests pass.

@@ -190,6 +190,20 @@ test('wrong Host header is refused (DNS rebinding)', async () => {
   assert.equal(status, 403);
 });
 
+test('settings types: POST /api/settings checks them, and the state\'s exts and categories follow', async () => {
+  const set = async types => (await (await call('/api/settings', { body: { types } })).json()).types;
+  const t = await set({ Video: ['mp4', 'MKV'], Books: ['epub', 'mobi'], Other: ['x'] });
+  assert.deepEqual(Object.keys(t), ['Video', 'Music', 'Programs', 'Documents', 'Compressed', 'Books']);
+  assert.deepEqual(t.Video, ['mp4']);
+  assert.ok(!t.Documents.includes('epub'));
+  const s = await (await call('/api/state')).json();
+  assert.deepEqual(s.categories, t);
+  assert.ok(s.exts.includes('mobi') && !s.exts.includes('mkv'));
+  assert.deepEqual(await set('nope'), t, 'a wrong value keeps the old types');
+  const back = await set({ Video: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', '3gp'], Documents: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'epub', 'csv'] });
+  assert.deepEqual(Object.keys(back), ['Video', 'Music', 'Programs', 'Documents', 'Compressed'], 'Books removed');
+});
+
 test('the app itself (no Origin) has full access', async () => {
   assert.equal((await call('/api/settings', { body: { dir } })).status, 200);
   assert.equal((await call('/api/state')).status, 200);
