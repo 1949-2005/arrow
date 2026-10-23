@@ -414,6 +414,22 @@ namespace Arrow
             return fit;
         }
 
+        // Rows of these heights, one under the other: tops[i] is row i's top, tops[count] the total height
+        public static int[] RowTops(IList<int> heights)
+        {
+            var tops = new int[heights.Count + 1];
+            for (var i = 0; i < heights.Count; i++) tops[i + 1] = tops[i] + heights[i];
+            return tops;
+        }
+
+        // The row at y (from RowTops; rows taller than 0), or -1 above or below the rows
+        public static int RowAt(int[] tops, int y)
+        {
+            if (y < 0 || y >= tops[tops.Length - 1]) return -1;
+            var i = Array.BinarySearch(tops, y);
+            return i >= 0 ? i : ~i - 1;
+        }
+
         public static string QueueName(Queue q) { return q.Id == Queue.Main ? "Main queue" : q.Name; }
 
         // The Status column: "45%", the video phases, "Queued", "In <queue>", "Paused · 30%", "Failed", "Complete"

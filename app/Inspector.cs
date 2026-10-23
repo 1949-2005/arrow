@@ -47,7 +47,7 @@ namespace Arrow
 
         readonly ToolTip tips;
         readonly Tile tile = new Tile();
-        readonly Caption name = new Caption(Theme.Bold, () => Theme.Text) { MaxLines = 2 };
+        readonly Caption name = new Caption(Theme.Bold, () => Theme.Text) { MaxLines = Caption.Unlimited };
         readonly Caption host = new Caption(Theme.Body, () => Theme.Muted);
         readonly FlatButton copy = new FlatButton("", Glyph.Copy, ButtonKind.Ghost) { AccessibleName = "Copy link", Radius = Theme.Px(6) };
         readonly Caption heading = new Caption(Theme.Bold, () => Theme.Text) { Text = "Overview" };
@@ -57,7 +57,7 @@ namespace Arrow
         readonly ErrorBox error = new ErrorBox();
         readonly Sparkline graph = new Sparkline();
         readonly List<FactRow> facts = new List<FactRow>();
-        readonly Caption names = new Caption(Theme.Body, () => Theme.Text) { MaxLines = 5 };
+        readonly Caption names = new Caption(Theme.Body, () => Theme.Text) { MaxLines = Caption.Unlimited }; // up to 5 names, each whole
         readonly Caption free = new Caption(Theme.Body, () => Theme.Muted);
         readonly List<FlatButton> buttons = new List<FlatButton>();
         string buttonsKey, mode;

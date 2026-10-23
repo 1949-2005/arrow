@@ -20,7 +20,7 @@ namespace Arrow
 
         readonly Tile tile = new Tile();
         readonly Caption title = new Caption(Theme.Bold, () => Theme.Text) { Text = "Download File Info" };
-        readonly Caption sub = new Caption(Theme.Body, () => Theme.Muted) { Text = "Getting file info…" };
+        readonly Caption sub = new Caption(Theme.Body, () => Theme.Muted) { Text = "Getting file info…", MaxLines = Caption.Unlimited }; // the name, whole
         readonly Caption urlLabel = Label("URL"), formatLabel = Label("Format"), catLabel = Label("Category"), fileLabel = Label("Save As"), sizeLabel = Label("Size");
         readonly TextBox url = new TextBox { ReadOnly = true, BorderStyle = BorderStyle.None, AccessibleName = "URL" };
         readonly Caption note = new Caption(Theme.Body, () => Theme.Warn) { MaxLines = 3, Visible = false };
@@ -397,10 +397,11 @@ namespace Arrow
             Action<Caption, int, int> label = (c, y0, h) => c.Bounds = new Rectangle(p, y0, lw, h);
             tile.Location = new Point(p, p);
             var tx = p + tile.Width + Theme.Px(12);
-            var th = title.Height + Theme.Px(2) + sub.Height;
-            title.Bounds = new Rectangle(tx, p + (tile.Height - th) / 2, w - tx + p, title.Height);
-            sub.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), w - tx + p, sub.Height);
-            var y = p + tile.Height + Theme.Px(20);
+            var sh = sub.HeightFor(w - tx + p);
+            var th = title.Height + Theme.Px(2) + sh;
+            title.Bounds = new Rectangle(tx, p + Math.Max(0, (tile.Height - th) / 2), w - tx + p, title.Height);
+            sub.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), w - tx + p, sh);
+            var y = Math.Max(p + tile.Height, sub.Bottom) + Theme.Px(20);
 
             var line = Theme.Px(20);
             label(urlLabel, y, line);

@@ -200,6 +200,21 @@ namespace Arrow
             var size = Core.HasEmoji(s) ? ColorText.Measure(s, f, width, Wrap) : null;
             return (size ?? GdiMeasure(s, f, new Size(width, int.MaxValue), Wrap)).Height;
         }
+        // A name shown whole in a row: the height of its block, line (a one-line name) or its wrapped lines with the same
+        // space above and below as a line has
+        public static int NameHeight(string s, Font f, int width, int line)
+        {
+            var h = MeasureHeight(s, f, Math.Max(1, width));
+            return h < f.Height * 3 / 2 ? line : h + Math.Max(0, line - f.Height);
+        }
+        // Draws it: block from NameHeight, line = the first line's rectangle (the row's other cells share it)
+        public static void DrawName(Graphics g, string s, Font f, Rectangle line, int block, Color c)
+        {
+            if (block <= line.Height) { DrawText(g, s, f, line, c); return; }
+            var above = Math.Max(0, line.Height - f.Height) / 2;
+            DrawText(g, s, f, new Rectangle(line.X, line.Y + above, line.Width, block - 2 * above), c, Wrap);
+        }
+
         // With a device context: TextRenderer's overload without one ignores NoPadding and adds about 9 px, which pushed
         // centered button labels 4 px to the left
         static Size GdiMeasure(string s, Font f, Size proposed, TextFormatFlags flags)

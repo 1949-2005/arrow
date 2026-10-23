@@ -429,8 +429,8 @@ namespace Arrow
             int p = Dialog.Pad, w = f.ClientSize.Width - 2 * p, indent = Theme.Px(26);
             var title = f.Add(new Caption(Theme.Bold, () => Theme.Text) { Text = "This link is already in your list" });
             title.Bounds = new Rectangle(p, p, w, title.Height);
-            var sub = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = string.Join(" · ", new[] { existing, status }.Where(t => !string.IsNullOrEmpty(t))) });
-            sub.Bounds = new Rectangle(p, title.Bottom + Theme.Px(2), w, sub.Height);
+            var sub = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = string.Join(" · ", new[] { existing, status }.Where(t => !string.IsNullOrEmpty(t))), MaxLines = Caption.Unlimited });
+            sub.Bounds = new Rectangle(p, title.Bottom + Theme.Px(2), w, sub.HeightFor(w));
             var y = sub.Bottom + Theme.Px(20);
             var texts = new[] { "Download it again with a new name", "Replace the existing file", "Resume the existing download" };
             var lines = new[] { numbered, null, "If it's finished, show it instead" };
@@ -442,8 +442,8 @@ namespace Arrow
                 y = r.Bottom;
                 if (lines[i] != null)
                 {
-                    var line = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = lines[i] });
-                    line.Bounds = new Rectangle(p + indent, y - Theme.Px(2), w - indent, line.Height);
+                    var line = f.Add(new Caption(Theme.Small, () => Theme.Muted) { Text = lines[i], MaxLines = Caption.Unlimited }); // the numbered name, whole
+                    line.Bounds = new Rectangle(p + indent, y - Theme.Px(2), w - indent, line.HeightFor(w - indent));
                     y = line.Bottom;
                 }
                 y += Theme.Px(8);
@@ -545,6 +545,7 @@ namespace Arrow
         public static void Shots(Form owner, string folder)
         {
             Dialog.Offscreen = true;
+            const string longName = "رحلة إلى جبال الأطلس الكبير في فصل الشتاء — الحلقة الأولى.mp4"; // a name shows whole, on every screen
             try
             {
                 var settings = new Settings { Dir = "C:\\Users\\PC\\Downloads", Connections = 8, MaxActive = 3, SpeedLimitKB = 500, Categories = true, Clipboard = true };
@@ -599,7 +600,7 @@ namespace Arrow
 
                 var running = new Download
                 {
-                    Id = "shot-run", Kind = "http", Status = "downloading", Url = "https://cdn.example.com/games/Last War Winter Storm.mp4", Name = "(1) MT NEWS on X 🚨🚨 الخريطة الجديدة.mp4",
+                    Id = "shot-run", Kind = "http", Status = "downloading", Url = "https://cdn.example.com/games/Last War Winter Storm.mp4", Name = longName,
                     Size = 734003200, Got = 330301440, Speed = 2516582, Connections = 3, Resumable = true, LimitKB = 500, WhenDone = "open",
                     // [start, end, pos, working] in MB: receiving, done, receiving, receiving, waiting
                     Segments = new[] { new[] { 0, 140, 126, 1 }, new[] { 140, 210, 210, 0 }, new[] { 210, 385, 294, 1 }, new[] { 385, 560, 420, 1 }, new[] { 560, 700, 560, 0 } }
@@ -640,7 +641,7 @@ namespace Arrow
                 var queues = new List<Queue> { new Queue { Id = Queue.Main, Name = "Main download queue" }, new Queue { Id = "night", Name = "Night" } };
                 using (var pop = new QueuePopover(null, queues)) Shot(folder, "fileinfo-later", pop, pop.Root);
                 FlatRadio[] radios;
-                Shot(folder, "duplicate", DuplicateDialog("photos-ete.zip", "Paused · 30%", "photos-ete (1).zip", out radios, out files));
+                Shot(folder, "duplicate", DuplicateDialog(longName, "Paused · 30%", Core.Numbered(longName), out radios, out files));
                 // the engine's default file types (engine.js CATEGORIES) and one custom category
                 Func<string, List<string>> exts = t => t.Split(' ').ToList();
                 var types = new Dictionary<string, List<string>> { { "Video", exts("mp4 mkv avi mov wmv flv webm m4v ts 3gp") }, { "Music", exts("mp3 wav flac aac m4a ogg wma opus") },
@@ -649,8 +650,8 @@ namespace Arrow
                 var state = new State { Settings = settings, Categories = types, Queues = queues, Downloads = new List<Download>() };
                 var photos = new Download
                 {
-                    Id = "shot-props", Kind = "http", Status = "paused", Url = "https://downloads.example.com/2026/photos-ete.zip", Name = "photos-ete.zip", Size = 524288000, Got = 157286400,
-                    File = "C:\\Users\\PC\\Downloads\\Compressed\\photos-ete.zip", Description = "Summer photos, part 1", Referer = "https://example.com/gallery",
+                    Id = "shot-props", Kind = "http", Status = "paused", Url = "https://downloads.example.com/2026/winter-ep1.mp4", Name = longName, Size = 524288000, Got = 157286400,
+                    File = "C:\\Users\\PC\\Downloads\\Video\\" + longName, Description = "Episode 1", Referer = "https://example.com/gallery",
                     Added = DateTimeOffset.Now.AddDays(-1).ToUnixTimeMilliseconds(), LastTry = DateTimeOffset.Now.AddHours(-2).ToUnixTimeMilliseconds(),
                 };
                 Shot(folder, "properties", new PropertiesDialog(null, photos, state));
@@ -678,8 +679,8 @@ namespace Arrow
                 var plan = new State
                 {
                     Queues = new List<Queue> { new Queue { Id = Queue.Main, Name = "Main download queue", MaxActive = 1, Running = true }, nightQueue },
-                    Downloads = new List<Download> { waiting("s1", "setup-2.4.1.exe", 104857600, "scheduled"), waiting("s2", "done.zip", 1048576, "done"),
-                        waiting("s3", "Ubuntu-24.04-desktop.iso", 6120328397, "scheduled"), waiting("s4", "Lecture 07 - Thermodynamics.mp4", 1288490189, "scheduled") },
+                    Downloads = new List<Download> { waiting("s1", longName, 1288490189, "scheduled"), waiting("s2", "done.zip", 1048576, "done"),
+                        waiting("s3", "Ubuntu-24.04-desktop.iso", 6120328397, "scheduled"), waiting("s4", "setup-2.4.1.exe", 104857600, "scheduled") },
                 };
                 var sch = new SchedulerDialog(null);
                 sch.Fill(plan);

@@ -419,6 +419,19 @@ namespace Arrow
             Eq(L(Core.FitColumns(new[] { "description", "added" }, 481, 1)), "description", "a later column is left out too");
             Eq(L(Core.FitColumns(defaults, 1300, 1.5)), "size | status | left | speed | lastTry", "scaled widths");
 
+            // rows that grow with their name: tops from heights, the row at a y
+            var tops = Core.RowTops(new[] { 48, 76, 48 });
+            Eq(string.Join(" ", tops), "0 48 124 172", "row tops");
+            Eq(string.Join(" ", Core.RowTops(new int[0])), "0", "no rows");
+            Eq(Core.RowAt(tops, 0), 0, "y 0 is the first row");
+            Eq(Core.RowAt(tops, 47), 0, "the first row's last pixel");
+            Eq(Core.RowAt(tops, 48), 1, "the second row's top");
+            Eq(Core.RowAt(tops, 123), 1, "inside the tall row");
+            Eq(Core.RowAt(tops, 171), 2, "the last row's last pixel");
+            Eq(Core.RowAt(tops, 172), -1, "under the rows");
+            Eq(Core.RowAt(tops, -1), -1, "above the rows");
+            Eq(Core.RowAt(Core.RowTops(new int[0]), 0), -1, "no rows: none at 0");
+
             // sorting: the default order, each column both ways, empty cells last, ties in the given order
             Func<string, string, long, long?, Download> row = (id, status, added, size) => new Download { Id = id, Name = id + ".zip", Kind = "http", Status = status, Added = added, Size = size, Got = 0 };
             var rows = new List<Download> { row("done1", "done", 50, 10), row("err", "error", 40, 30), row("run", "downloading", 10, 20), row("p-old", "paused", 5, null), row("p-new", "paused", 60, 40), row("done2", "done", 70, null), row("sch", "scheduled", 80, 5) };

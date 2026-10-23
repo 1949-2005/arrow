@@ -16,6 +16,9 @@ Every size is in pixels at 96 DPI (scale with the system DPI). Workers implement
   and switches live (`SystemEvents.UserPreferenceChanged`). Dark title bar in dark mode (DwmSetWindowAttribute 20, fallback 19).
 - Everything works from the keyboard (the list header is mouse-only: Sort ▾ is its keyboard path), every icon-only
   button has a tooltip and an AccessibleName, focus is always visible.
+- A download's name always shows whole: wrapped onto the lines it needs, never cut with "…" or clamped to N lines
+  (the list, the Scheduler's files, the details panel, the progress and Download complete windows, Properties,
+  Download File Info's header, Link already in the list). Only an editable field (Save As) stays one line.
 - Every window and dialog has an ARROW_SHOTS picture (`MainForm.Shots`, `Dialogs.Shots`) for visual review.
 
 ## Tokens
@@ -159,10 +162,13 @@ order. Its context menu (right-click, the menu key, Shift+F10): Open Scheduler (
   Description 150, Save to 160, Added 112. Shown by default: Size, Status, Time left, Speed, Last try, Description.
   Columns that don't fit are left out from the right (the first that doesn't fit and every one after it); Name
   keeps 220.
-- Custom-drawn rows, height 48, padding 12, no grid lines: the file's Windows icon at 24 px (as is, also when
-  selected), 12 px gap, the name (one line, ellipsis); a 3 px progress line under the name (radius 2, bar token
+- Custom-drawn rows, padding 12, no grid lines: the file's Windows icon at 24 px (as is, also when
+  selected), 12 px gap, the name, always whole: wrapped onto the lines it needs, never cut. A row is 48 high, or the
+  name's height + 28 when it wraps; with a progress line the name starts 7 from the top, else the name is centered.
+  A 3 px progress line 5 under the name's last line (radius 2, bar token
   track, accent fill; paused and scheduled fill = faint; error = err) for downloading, queued and paused rows, and
-  for failed or scheduled ones that have progress. Cells: one line, ellipsis. Size = Core.Size (empty when
+  for failed or scheduled ones that have progress. The icon and the cells sit on the name's first line. Cells: one
+  line, ellipsis. Size = Core.Size (empty when
   unknown); Status = "45%", "Merging", "Converting to MP3", "Queued", "In <queue name>" (scheduled), "Paused · 30%",
   "Failed" (in err), "Complete"; Time left and Speed only while downloading; Last try and Added = Core.DateLabel;
   Description; Save to = the folder. Finished rows: everything but the name in muted.
@@ -189,7 +195,7 @@ order. Its context menu (right-click, the menu key, Shift+F10): Open Scheduler (
 ### Details panel (the inspector; width 320, inspector token, padding 16, scrolls if short; hidden by default, View ▾ › Details panel)
 Shows the selection:
 - One download:
-  - Header: the file's Windows icon at 32 px in a 48 px slot, name (bold, max 2 lines),
+  - Header: the file's Windows icon at 32 px in a 48 px slot, name (bold, whole: as many lines as it needs),
     host of the url (muted) with a ghost Copy button (Copy glyph, tooltip "Copy link").
   - Progress: big percent ("45%", or "Done" when finished, "Failed" in err) + "974 MB of 2.11 GB" (muted);
     under it an 8 px segmented bar (Core.Pieces: one piece per connection for http, one fill otherwise),
@@ -292,7 +298,8 @@ errors show inline or in an Error dialog.
   picks At), "On these days" Mon–Sun chips (28 high; chosen = accent fill, onAccent text) + faint "None = every day",
   Stop: FlatCheck "At" [HH:MM], "If a file fails" Try again [N] times (0–10), "When the queue is done" Picker 200
   wide: Nothing / Sleep / Shut down. Then the queue's unfinished files in order ("Files in this queue (in order)",
-  Size, Status "Waiting" or the list's status; header 32, rows 36, three rows high) with Move up, Move down, Remove
+  Size, Status "Waiting" or the list's status; header 32, rows 36 or as tall as the wrapped name with Size and Status on its first line,
+  three rows of 36 high, it scrolls) with Move up, Move down, Remove
   from queue. Each change is validated inline (an invalid field gets the err border and is not sent) and sent at
   once, merged per queue and in order (POST /api/queues update); polls skip a focused or invalid field, and the form
   for 1 s after a send. Footer: Start now (left), Stop (for the selected queue), Close (primary).

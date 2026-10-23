@@ -1127,7 +1127,8 @@ namespace Arrow
             list.SelectRange(0, 2);
             Shot("main-several");
             details = inspector.Visible = true;
-            list.SelectRange(1, 1);
+            var longest = list.Items.OrderByDescending(d => Core.ShortName(d).Length).FirstOrDefault(); // its name, whole in the header
+            if (longest != null) list.Select(longest.Id);
             Shot("main-details");
             details = inspector.Visible = false;
             list.ClearSelection();

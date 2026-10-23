@@ -495,9 +495,11 @@ namespace Arrow
         }
     }
 
-    // Painted text: one line with an ellipsis, or up to MaxLines wrapped lines. Color is read at paint time.
+    // Painted text: one line with an ellipsis, or up to MaxLines wrapped lines (Unlimited: all, as a download's name).
+    // Color is read at paint time.
     public class Caption : Painted
     {
+        public const int Unlimited = 10000; // small enough that Font.Height * MaxLines can't overflow
         public Func<Color> Fore;
         public int MaxLines = 1;
         public bool Right;
@@ -811,7 +813,7 @@ namespace Arrow
         }
     }
 
-    // The download list: custom-drawn 48 px rows, native (themed) scrollbar with smooth wheel scrolling, hover,
+    // The download list: custom-drawn rows, 48 px or as tall as their wrapped name (a name always shows whole), native (themed) scrollbar with smooth wheel scrolling, hover,
     // multi-select (Ctrl, Shift, Ctrl+A), keyboard (arrows, Home/End, PageUp/PageDown, Enter, Space, menu key).
     public class DownloadList : ScrollableControl
     {
@@ -843,6 +845,9 @@ namespace Arrow
         int hover = -1;
         readonly Timer scroller = new Timer { Interval = 15 };
         int scrollTarget;
+        int[] tops = { 0 }, blocks = new int[0]; // each row's top (Core.RowTops) and its name's block height (Theme.NameHeight)
+        Dictionary<string, int> measured = new Dictionary<string, int>(); // name → block height at measuredWidth: polls measure only new names
+        int measuredWidth = -1;
 
         public DownloadList()
         {
@@ -864,7 +869,36 @@ namespace Arrow
             };
         }
 
-        int RowH { get { return Theme.Px(48); } }
+        int RowMin { get { return Theme.Px(48); } }
+        int Total { get { return tops[tops.Length - 1]; } }
+
+        // The name's width in the Name column, as PaintRow draws it
+        int NameWidth { get { return Spans()[0].Item3 - Theme.Px(12) - (Theme.Px(12) + Theme.Px(24 + 12)); } }
+
+        // Row heights from the names wrapped at the Name column's width: 48 at least, the name from 7 px, 28 for the
+        // space and the progress line under it
+        void Remeasure()
+        {
+            var w = NameWidth;
+            if (w != measuredWidth) { measured.Clear(); measuredWidth = w; }
+            var next = new Dictionary<string, int>(); // only the names still shown stay cached
+            blocks = new int[items.Count];
+            var heights = new int[items.Count];
+            for (var i = 0; i < items.Count; i++)
+            {
+                var name = Core.ShortName(items[i]);
+                int h;
+                if (!next.TryGetValue(name, out h) && !measured.TryGetValue(name, out h)) h = Theme.NameHeight(name, Theme.Body, w, Theme.Px(20));
+                next[name] = h;
+                blocks[i] = h;
+                heights[i] = Math.Max(RowMin, h + Theme.Px(28));
+            }
+            measured = next;
+            tops = Core.RowTops(heights);
+            Invalidate();
+            AutoScrollMinSize = new Size(0, Total); // last: a new scrollbar narrows the list, which measures again (taller, never a loop)
+        }
+
         public IList<Download> Items { get { return items; } }
         public List<Download> Selected { get { return items.Where(d => selected.Contains(d.Id)).ToList(); } }
         public Download Current { get { return items.FirstOrDefault(d => d.Id == cursor); } }
@@ -877,8 +911,8 @@ namespace Arrow
             var lost = selected.RemoveWhere(id => !ids.Contains(id)) > 0;
             if (cursor != null && !ids.Contains(cursor)) cursor = items.Count > 0 ? items[0].Id : null;
             if (anchor != null && !ids.Contains(anchor)) anchor = null;
-            AutoScrollMinSize = new Size(0, items.Count * RowH);
             if (hover >= items.Count) hover = -1;
+            Remeasure();
             PlaceEmptyButton();
             Invalidate();
             if (lost) Changed();
@@ -933,16 +967,17 @@ namespace Arrow
         void EnsureVisible(int i)
         {
             var y = -AutoScrollPosition.Y;
-            var top = i * RowH;
+            var top = tops[i];
+            var bottom = tops[i + 1];
             if (top < y) ScrollTo(top, false);
-            else if (top + RowH > y + ClientSize.Height) ScrollTo(top + RowH - ClientSize.Height, false);
+            else if (bottom > y + ClientSize.Height) ScrollTo(Math.Min(top, bottom - ClientSize.Height), false); // a row taller than the list: its top
         }
 
         void SetScroll(int y) { AutoScrollPosition = new Point(0, Math.Max(0, y)); Invalidate(); }
 
         void ScrollTo(int y, bool smooth)
         {
-            scrollTarget = Math.Max(0, Math.Min(y, items.Count * RowH - ClientSize.Height));
+            scrollTarget = Math.Max(0, Math.Min(y, Total - ClientSize.Height));
             if (smooth) scroller.Start();
             else { scroller.Stop(); SetScroll(scrollTarget); }
         }
@@ -957,11 +992,14 @@ namespace Arrow
 
         int IndexAt(int y)
         {
-            var i = (y - AutoScrollPosition.Y) / RowH;
-            return y >= 0 && i >= 0 && i < items.Count ? i : -1;
+            return y >= 0 ? Core.RowAt(tops, y - AutoScrollPosition.Y) : -1;
         }
 
-        Rectangle RowRect(int i) { return new Rectangle(0, i * RowH + AutoScrollPosition.Y, ClientSize.Width, RowH); }
+        Rectangle RowRect(int i)
+        {
+            if (i < 0 || i >= items.Count) return Rectangle.Empty;
+            return new Rectangle(0, tops[i] + AutoScrollPosition.Y, ClientSize.Width, tops[i + 1] - tops[i]);
+        }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
@@ -1014,7 +1052,6 @@ namespace Arrow
             base.OnKeyDown(e);
             if (items.Count == 0) return;
             var i = items.FindIndex(d => d.Id == cursor);
-            var page = Math.Max(1, ClientSize.Height / RowH - 1);
             int? j = null;
             switch (e.KeyCode)
             {
@@ -1022,8 +1059,16 @@ namespace Arrow
                 case Keys.Down: j = i + 1; break;
                 case Keys.Home: j = 0; break;
                 case Keys.End: j = items.Count - 1; break;
-                case Keys.PageUp: j = i - page; break;
-                case Keys.PageDown: j = Math.Max(0, i) + page; break;
+                case Keys.PageUp:
+                case Keys.PageDown:
+                    {
+                        // about a list's height, keeping a row of the last view; one row at least
+                        var k = Math.Max(0, i);
+                        var dir = e.KeyCode == Keys.PageDown ? 1 : -1;
+                        var to = Core.RowAt(tops, Math.Max(0, Math.Min(Total - 1, tops[k] + dir * Math.Max(RowMin, ClientSize.Height - RowMin))));
+                        j = to == k ? k + dir : to;
+                        break;
+                    }
             }
             if (j != null) Pick(Math.Max(0, Math.Min(items.Count - 1, j.Value)), e.Shift ? "range" : e.Control ? "move" : "only");
             else if (e.KeyCode == Keys.Space && e.Control && i >= 0) Pick(i, "toggle");
@@ -1051,13 +1096,18 @@ namespace Arrow
         void Fit()
         {
             var fit = Core.FitColumns(Chosen, ClientSize.Width, Theme.Scale);
-            if (Shown != null && fit.SequenceEqual(Shown)) return;
-            Shown = fit;
-            Invalidate();
-            Header.Invalidate();
+            if (Shown == null || !fit.SequenceEqual(Shown))
+            {
+                Shown = fit;
+                Invalidate();
+                Header.Invalidate();
+            }
+            if (NameWidth != measuredWidth) Remeasure();
         }
 
         protected override void OnResize(EventArgs e) { base.OnResize(e); Fit(); Header.Invalidate(); }
+        // the vertical scrollbar changes the width without OnResize
+        protected override void OnClientSizeChanged(EventArgs e) { base.OnClientSizeChanged(e); Fit(); Header.Invalidate(); }
 
         // [column, x, width] from Name to the right
         public List<Tuple<string, int, int>> Spans()
@@ -1095,18 +1145,19 @@ namespace Arrow
             {
                 var r = RowRect(i);
                 if (r.Top > ClientSize.Height) break;
-                if (r.IntersectsWith(e.ClipRectangle)) PaintRow(g, items[i], r, i);
+                if (r.IntersectsWith(e.ClipRectangle)) PaintRow(g, items[i], r, i, blocks[i]);
             }
         }
 
-        void PaintRow(Graphics g, Download d, Rectangle r, int i)
+        // block: the name's height (Theme.NameHeight); the icon and the cells stay on its first line
+        void PaintRow(Graphics g, Download d, Rectangle r, int i, int block)
         {
             var sel = selected.Contains(d.Id);
             if (sel || i == hover) using (var b = new SolidBrush(sel ? Theme.Sel : Theme.Hover)) g.FillRectangle(b, r);
             var pad = Theme.Px(12);
             // a line only where there is progress to show: empty tracks under Scheduled and Failed are noise
             var bar = d.Status == "downloading" || d.Status == "queued" || d.Status == "paused" || (d.Status == "error" || d.Status == "scheduled") && Core.Fraction(d, true) > 0;
-            var lineY = bar ? r.Y + Theme.Px(7) : r.Y + (r.Height - Theme.Px(20)) / 2;
+            var lineY = bar ? r.Y + Theme.Px(7) : r.Y + (r.Height - block) / 2;
             var lineH = Theme.Px(20);
             var cat = CategoryOf(d);
             // Windows' icon for the file type, centered on the name's line; drawn as is on the selection
@@ -1123,14 +1174,14 @@ namespace Arrow
             }
             var right = r.X + spans[0].Item3 - pad;
             var x = r.X + pad + Theme.Px(24 + 12);
-            Theme.DrawText(g, Core.ShortName(d), Theme.Body, new Rectangle(x, lineY, Math.Max(0, right - x), lineH), sel ? Theme.OnSel : Theme.Text);
+            Theme.DrawName(g, Core.ShortName(d), Theme.Body, new Rectangle(x, lineY, Math.Max(0, right - x), lineH), block, sel ? Theme.OnSel : Theme.Text);
             if (bar)
             {
                 var kind = d.Status == "error" ? BarKind.Err : d.Status == "paused" || d.Status == "scheduled" ? BarKind.Paused : BarKind.Normal;
                 // on the selection color the accent would vanish: onSel over a faded onSel track
                 var track = sel ? Theme.Mix(Theme.Sel, Theme.OnSel, 0.3) : Theme.Bar;
                 var fill = sel && kind == BarKind.Normal ? Theme.OnSel : SegmentBar.FillColor(kind);
-                SegmentBar.Draw(g, new Rectangle(x, r.Y + Theme.Px(32), right - x, Theme.Px(3)), new List<double[]> { new[] { 0, Core.Fraction(d, true) } }, track, fill);
+                SegmentBar.Draw(g, new Rectangle(x, lineY + block + Theme.Px(5), right - x, Theme.Px(3)), new List<double[]> { new[] { 0, Core.Fraction(d, true) } }, track, fill);
             }
             if (d.Id == cursor && Focused && ShowFocusCues)
             {

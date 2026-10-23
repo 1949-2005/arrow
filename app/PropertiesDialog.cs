@@ -14,7 +14,7 @@ namespace Arrow
         readonly Download d;
         readonly bool editUrl;
         readonly Tile tile = new Tile();
-        readonly Caption title = new Caption(Theme.Bold, () => Theme.Text);
+        readonly Caption title = new Caption(Theme.Bold, () => Theme.Text) { MaxLines = Caption.Unlimited }; // the name, whole
         readonly Caption sub = new Caption(Theme.Small, () => Theme.Muted);
         readonly Caption urlLabel, descLabel = Label("Description");
         readonly TextField url = new TextField('\0', "https://");
@@ -111,10 +111,11 @@ namespace Arrow
             int p = Pad, w = ClientSize.Width - 2 * p, row = Theme.Px(32), line = Theme.Px(20);
             tile.Location = new Point(p, p);
             var tx = tile.Right + Theme.Px(12);
-            var th = title.Height + Theme.Px(2) + sub.Height;
-            title.Bounds = new Rectangle(tx, p + (tile.Height - th) / 2, p + w - tx, title.Height);
+            var nh = title.HeightFor(p + w - tx);
+            var th = nh + Theme.Px(2) + sub.Height;
+            title.Bounds = new Rectangle(tx, p + Math.Max(0, (tile.Height - th) / 2), p + w - tx, nh);
             sub.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), p + w - tx, sub.Height);
-            var y = tile.Bottom + Theme.Px(16);
+            var y = Math.Max(tile.Bottom, sub.Bottom) + Theme.Px(16);
             urlLabel.Bounds = new Rectangle(p, y, w, line);
             y += line + Theme.Px(4);
             url.Bounds = new Rectangle(p, y, w, row);

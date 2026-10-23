@@ -1,6 +1,6 @@
 # 10 Names whole
 
-Status: in progress
+Status: resolved
 Blocked by: 09
 Tier: careful
 
@@ -13,3 +13,9 @@ Done when: no download name is cut anywhere, ARROW_SHOTS shows the long Arabic t
 both themes, and `npm test` passes.
 
 ## Comments
+Done (careful worker, reviewed by the orchestrator). The list's rows are 48 or as tall as the wrapped name (cached per
+name for the Name column's width; tops and a binary search in Core.RowTops / RowAt, tested); the Scheduler's files,
+the details panel, progress, Download complete, Properties, Download File Info's header and "Link already in the
+list" show the name whole. The Scheduler's file table keeps its fixed height and scrolls: a partly shown last row
+says there is more. Known limit: queue and category names (typed by the user, 40 and 30 characters at most) can
+still end in "…" in the sidebar and pickers.

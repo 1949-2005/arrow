@@ -19,7 +19,7 @@ namespace Arrow
 
         readonly Tile tile = new Tile();
         readonly Caption title = new Caption(Theme.Bold, () => Theme.Text);
-        readonly Caption name = new Caption(Theme.Body, () => Theme.Muted);
+        readonly Caption name = new Caption(Theme.Body, () => Theme.Muted) { MaxLines = Caption.Unlimited }; // whole
         readonly Caption big = new Caption(Theme.Big, () => Theme.Text);
         readonly Caption sub = new Caption(Theme.Body, () => Theme.Muted);
         readonly SegmentBar bar = new SegmentBar();
@@ -175,7 +175,9 @@ namespace Arrow
             tile.Complete = done;
             tile.Invalidate();
             title.Text = Core.Heading(d);
+            var renamed = name.Text != short_;
             name.Text = short_;
+            if (renamed) Relayout(); // its lines set the header's height
             Tips.SetToolTip(name, string.IsNullOrEmpty(d.File) ? short_ : d.File);
             if (done)
             {
@@ -316,10 +318,11 @@ namespace Arrow
             }
             tile.Location = new Point(p, y);
             var tx = p + tile.Width + Theme.Px(12);
-            var th = title.Height + Theme.Px(2) + name.Height;
-            title.Bounds = new Rectangle(tx, y + (tile.Height - th) / 2, w + p - tx, title.Height);
-            name.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), w + p - tx, name.Height);
-            y += tile.Height + Theme.Px(16);
+            var nh = name.HeightFor(w + p - tx);
+            var th = title.Height + Theme.Px(2) + nh;
+            title.Bounds = new Rectangle(tx, y + Math.Max(0, (tile.Height - th) / 2), w + p - tx, title.Height);
+            name.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), w + p - tx, nh);
+            y = Math.Max(y + tile.Height, name.Bottom) + Theme.Px(16);
             if (mode == "run")
             {
                 var bw = Theme.Measure("100%", big.Font).Width + Theme.Px(2);

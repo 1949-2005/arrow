@@ -370,14 +370,15 @@ namespace Arrow
             }
         }
 
-        // The queue's unfinished files in its order: a bordered table (header 32, rows 36, 1 px dividers), one selected
-        // row, Up/Down/Home/End and the wheel
+        // The queue's unfinished files in its order: a bordered table (header 32, rows 36 or as tall as the wrapped name,
+        // 1 px dividers), one selected row, Up/Down/Home/End and the wheel
         class QueueFiles : Painted
         {
             public List<Download> Items = new List<Download>();
             public string Selected;
             public event Action SelectionChanged;
             int scroll;
+            int[] tops = { 0 }, blocks = new int[0]; // each row's top under the header (Core.RowTops), its name's height
 
             public QueueFiles()
             {
@@ -388,12 +389,23 @@ namespace Arrow
 
             static int RowH { get { return Theme.Px(36); } }
             static int HeadH { get { return Theme.Px(32); } }
+            static int SizeW { get { return Theme.Px(80); } }
+            static int StatusW { get { return Theme.Px(132); } }
+            int NameWidth { get { return Width - StatusW - SizeW - 2 * Theme.Px(12); } }
+
+            // the Size and Status cells stay on the name's first line
+            void Measure()
+            {
+                blocks = Items.Select(d => Theme.NameHeight(Core.ShortName(d), Theme.Body, NameWidth, RowH)).ToArray();
+                tops = Core.RowTops(blocks.Select(b => Math.Max(RowH, b)).ToList());
+            }
             public int Index { get { return Items.FindIndex(d => d.Id == Selected); } }
 
             // another queue: nothing selected
             public void SetItems(List<Download> l, bool reset)
             {
                 Items = l;
+                Measure();
                 if (reset) scroll = 0;
                 if (reset || Selected != null && Index < 0) Select(null);
                 Scroll(scroll);
@@ -419,12 +431,12 @@ namespace Arrow
 
             void Scroll(int y)
             {
-                var max = Math.Max(0, Items.Count * RowH - (Height - HeadH));
+                var max = Math.Max(0, tops[tops.Length - 1] - (Height - HeadH));
                 scroll = Math.Max(0, Math.Min(max, y));
                 Invalidate();
             }
 
-            Rectangle Row(int i) { return new Rectangle(1, HeadH + i * RowH - scroll, Width - 2, RowH); }
+            Rectangle Row(int i) { return new Rectangle(1, HeadH + tops[i] - scroll, Width - 2, tops[i + 1] - tops[i]); }
 
             static string StatusText(Download d) { return d.Status == "scheduled" ? "Waiting" : Core.ListStatus(d, null); }
             static string SizeText(Download d) { var t = Core.Total(d); return t == null ? "" : Core.Size(t); }
@@ -432,13 +444,13 @@ namespace Arrow
             protected override void OnMouseDown(MouseEventArgs e)
             {
                 Focus();
-                var i = (e.Y - HeadH + scroll) / RowH;
-                if (e.Y >= HeadH && i < Items.Count) Select(Items[i].Id);
+                var i = Core.RowAt(tops, e.Y - HeadH + scroll);
+                if (e.Y >= HeadH && i >= 0) Select(Items[i].Id);
                 base.OnMouseDown(e);
             }
 
             protected override void OnMouseWheel(MouseEventArgs e) { Scroll(scroll - e.Delta * RowH / 120); base.OnMouseWheel(e); }
-            protected override void OnResize(EventArgs e) { base.OnResize(e); Scroll(scroll); }
+            protected override void OnResize(EventArgs e) { base.OnResize(e); Measure(); Scroll(scroll); }
             protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
             protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
             protected override bool IsInputKey(Keys k) { return k == Keys.Up || k == Keys.Down || k == Keys.Home || k == Keys.End || base.IsInputKey(k); }
@@ -457,7 +469,7 @@ namespace Arrow
             protected override void OnPaint(PaintEventArgs e)
             {
                 var g = e.Graphics;
-                int pad = Theme.Px(12), sizeW = Theme.Px(80), statusW = Theme.Px(132), w = Width;
+                int pad = Theme.Px(12), sizeW = SizeW, statusW = StatusW, w = Width;
                 var outline = new Rectangle(0, 0, w, Height);
                 int sizeX = w - statusW - sizeW, statusX = w - statusW;
                 var head = new Rectangle(0, 0, w, HeadH - 1);
@@ -480,9 +492,10 @@ namespace Arrow
                         var sel = d.Id == Selected;
                         if (sel) using (var b = new SolidBrush(Theme.Sel)) g.FillRectangle(b, r);
                         var fore = sel ? Theme.OnSel : Theme.Text;
-                        Theme.DrawText(g, Core.ShortName(d), Theme.Body, new Rectangle(pad, r.Y, sizeX - 2 * pad, r.Height), fore);
-                        Theme.DrawText(g, SizeText(d), Theme.Body, new Rectangle(sizeX, r.Y, sizeW - pad, r.Height), fore);
-                        Theme.DrawText(g, StatusText(d), Theme.Body, new Rectangle(statusX, r.Y, statusW - pad, r.Height), sel ? fore : d.Status == "error" ? Theme.Err : fore);
+                        var line = RowH;
+                        Theme.DrawName(g, Core.ShortName(d), Theme.Body, new Rectangle(pad, r.Y, sizeX - 2 * pad, line), blocks[i], fore);
+                        Theme.DrawText(g, SizeText(d), Theme.Body, new Rectangle(sizeX, r.Y, sizeW - pad, line), fore);
+                        Theme.DrawText(g, StatusText(d), Theme.Body, new Rectangle(statusX, r.Y, statusW - pad, line), sel ? fore : d.Status == "error" ? Theme.Err : fore);
                         if (i < Items.Count - 1) Theme.HLine(g, 1, w - 1, r.Bottom - 1);
                         if (sel && Focused && ShowFocusCues)
                             using (var p = new Pen(Theme.OnSel, Theme.Px(2))) g.DrawRectangle(p, r.X + Theme.Px(2), r.Y + Theme.Px(2), r.Width - Theme.Px(4), r.Height - Theme.Px(4));
@@ -501,7 +514,7 @@ namespace Arrow
                 {
                     var d = Items[i];
                     return new ItemAccessible(l, () => string.Join(", ", new[] { Core.ShortName(d), SizeText(d), StatusText(d) }.Where(s => s != "")), () => d.Id == Selected,
-                        () => Focused && d.Id == Selected, () => me.RectangleToScreen(Row(Math.Max(0, Items.IndexOf(d)))), () => Select(d.Id));
+                        () => Focused && d.Id == Selected, () => me.RectangleToScreen(Items.IndexOf(d) >= 0 ? Row(Items.IndexOf(d)) : Rectangle.Empty), () => Select(d.Id));
                 });
                 return l;
             }
