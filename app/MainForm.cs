@@ -225,6 +225,7 @@ namespace Arrow
             else
             {
                 tray = new NotifyIcon { Icon = AppIcon.Load(SystemInformation.SmallIconSize.Width) ?? SystemIcons.Application, Text = Program.Name, ContextMenuStrip = TrayMenu(), Visible = true };
+                ProgressDialog.AppTray = tray; // a download's tray icon goes right after this one
                 tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
                 tray.BalloonTipClicked += (s, e) => { ShowMain(); if (balloonId != null) Reveal(balloonId); };
             }

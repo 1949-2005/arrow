@@ -141,6 +141,21 @@ namespace Arrow
             return bmp;
         }
 
+        // Arrow's own tray icon (MainForm sets it). A download's icon takes its id: still a separate icon (its own hidden
+        // window), but Windows keys tray places by app and id, so it lands right after Arrow's instead of at the far left.
+        public static NotifyIcon AppTray;
+
+        static void Twin(NotifyIcon icon)
+        {
+            if (AppTray == null) return;
+            try
+            {
+                var id = typeof(NotifyIcon).GetField("id", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                id.SetValue(icon, id.GetValue(AppTray));
+            }
+            catch (Exception) { } // then Windows' place for a new icon: the far left
+        }
+
         void ToTray()
         {
             if (Offscreen || !trayable) return;
@@ -148,6 +163,7 @@ namespace Arrow
             {
                 using (var bmp = TrayBitmap(SystemInformation.SmallIconSize.Width)) trayImage = Icon.FromHandle(bmp.GetHicon());
                 trayIcon = new NotifyIcon { Icon = trayImage };
+                Twin(trayIcon); // before it is shown: Windows places it when it is added
                 trayIcon.MouseClick += (s, e) => FromTray();
                 trayIcon.MouseDoubleClick += (s, e) => FromTray();
                 Application.ApplicationExit += HideTrayIcon; // Quit: no icon left behind

@@ -277,8 +277,10 @@ errors show inline or in an Error dialog.
     SC_MINIMIZE, so Alt+Space > Minimize does the same. While the download runs (not failed, Download complete or
     removed) the window goes to the tray; otherwise it minimizes to the taskbar as usual. To the tray: the window
     hides (it keeps updating) and the download gets
-    its own tray icon: the Download glyph in done green on a transparent square at the system's small-icon size, so
-    it doesn't read as the app's icon. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
+    its own tray icon: a solid download arrow in done green (drawn as shapes, so it reads at 16 px) on a transparent
+    square at the system's small-icon size, so it doesn't read as the app's icon. It takes the id of Arrow's own tray
+    icon (still a separate icon, with its own window): Windows keys tray places by app and id, so it sits right after
+    Arrow's icon instead of at the far left, where a new icon goes. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
     "Paused · 45%"), then the name on a second line, within 127 characters (NotifyIcon's text field set by
     reflection; 63 if that fails): the only place a name is cut, its end giving way to "…". Left, right or double
     click: the window shows again where it was, in front, and the icon goes. When the download finishes, fails or is
