@@ -4,3 +4,6 @@ node_modules/
 # built by install.js
 /*.exe
 installed.json
+
+# built by build-installer.js
+/dist/

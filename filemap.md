@@ -7,6 +7,10 @@
 - `desktop.js` — the engine launcher: `brand.json` reading, `exe` (native `<name>.exe`) and `engineExe` (`<name> Engine.exe`) paths, port/URL, `powershell()`, `shortcut()`, `start()` (exits if the engine already runs, errors if another program has the port, else imports `server.js`); `node desktop.js`
 - `install.js` — builds `<name> Engine.exe` (Node single executable app: launcher, brand icon, version info, no console) and the native `<name>.exe` (`app/build.js` `compileApp()`); refuses while either runs; install/uninstall of both exes and the shortcuts (to the native exe); pure PE/icon/version-info helpers for tests
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
+- `build-installer.js` — `node build-installer.js`: stages what runs (the two exes, the engine's modules, brand, assets, extension, licenses, README.txt), zips it (Node's zlib) and compiles `installer/` around it into `dist\<name>Setup.exe` + `.sha256`
+- `installer/` — the setup (C# 5, compiled with the app's sources by `app/build.js` `compileSetup()`)
+  - `Setup.cs` — entry (`--uninstall`, `--quiet`, `ARROW_SETUP_SHOTS`) and `Installer`: payload copy, running Arrow and its clean quit, tools found as `ytdlp.js` finds them, winget, shortcuts, Settings > Apps key, uninstall, browsers; test hooks `ARROW_SETUP_*`
+  - `SetupForm.cs` — the window: options, progress steps, winget failure, Arrow running, done and the browser extension steps, uninstall pages, shots
 - `brand.json` — the app's name (Arrow) and icon (`assets/logo.ico`): the one place to rename or rebrand both exes (`extension.test.js` checks the extension's copies of the name)
 - `app/` — the native Windows app (C# 5 WinForms, compiled by Windows' own .NET Framework `csc.exe`) that replaces the web UI
   - `Core.cs` — pure logic: JSON (JavaScriptSerializer) with typed accessors, the `/api/state` model (`State`, `Settings`, `Queue`, `Download`, `Probe`, `FormatOption`), the helpers ported from the old web UI (numbers and dates in the user's regional format), the list's columns, cells, sorting and fitting, status texts ("In <queue>"), the speed limit text, the next queue start, duplicates, Properties, category and file-type checks and request bodies, and the parser of the sidebar's SVG icons (`ParseSvg`: any path data as absolute M/L/C/Z steps, plus the fill rule; transforms or other shapes give null)
@@ -27,7 +31,7 @@
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
   - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Categories, Queues); General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, the list's columns, sorting and status texts, the IDM-parity helpers, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), the SVG icon parser (`ParseSvg`), plus an `/api/state` round trip
-  - `build.js` — `compileApp()` (winexe with name, version, icon, manifest) and `compileTests()` through `csc.exe`
+  - `build.js` — `compileApp()` (winexe with name, version, icon, manifest), `compileSetup()` (the installer) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
 - `extension/` — MV3 extension for Chromium browsers (Brave, Chrome, Edge)
   - `manifest.json` — permissions
@@ -45,13 +49,15 @@
 - `server.test.js` — API access rules (Host, Origin, extension privileges), routes with query strings, `/api/open` and `open`, `/api/queues` and Later into a queue, `types` through `/api/settings`, pending downloads (503 until the native app polls) and `/api/confirm`, UTF-8 bodies, the Start with Windows shortcut, Pause all and Quit, against `server.js` spawned on a free port with a temp `FASTDL_STATE` and `FASTDL_STARTUP`
 - `desktop.test.js` — brand name rules, second start and port conflict (`node desktop.js` against a stand-in server)
 - `install.test.js` — icon resources, version info and PE edits; a real build + install + run + uninstall in a temp folder: native `<name>.exe` and `<name> Engine.exe`, shortcuts to the native exe (Windows)
+- `installer.test.js` — the engine's module list, the zip writer, and a real setup (Windows): built, installed into temp folders with the `ARROW_SETUP_*` hooks and a stand-in winget (files, tools, shortcuts, test Uninstall key, the installed engine and `--check`), refused while Arrow runs, `--quit-arrow`, `state.json` kept on reinstall, winget failing or missing, uninstall keeping downloads and (unless asked) `state.json`
 - `app.test.js` — the native app (Windows): `Tests.cs` passes, the exe builds with the brand icon, `--check` against `server.js` on a free port with temp state
 - `assets/logo.svg` — app logo source: the user's paper-plane arrow (`#3B3C3D`) on a white rounded tile; `logo.png` (512 px), `logo.ico` (16–256 px) and the extension's `icons/icon-16|32|48|128.png` are rendered from it, with thicker lines at small sizes. `brand.json` points at `logo.ico`, which goes into both exes and the tray as is
 - `assets/types/` — the user's SVG icons for Video, Music, Documents, Programs, Compressed and Other (paths with any commands, filled in the text color with the file's fill rule; a transform, another shape or fill="none" shows the glyph), the glyph being only the fallback for a missing or unreadable file
 - `package.json` — `start` and `test` scripts; `"type": "module"`; its `version` goes into the exe's file properties
 - `state.json` — runtime state and settings (gitignored, created on first run)
 - `<name>.exe`, `<name> Engine.exe`, `installed.json` — made by `install.js` (gitignored)
-- `README.md` — user guide: install, start, quit, uninstall, name and icon, extension install, the main window, queues and the Scheduler, speed limit, links already in the list, categories, when done, Properties, Download File Info, YouTube, features, settings, limits, privacy
+- `dist/` — `<name>Setup.exe` and `<name>Setup.exe.sha256`, made by `build-installer.js` for GitHub Releases (gitignored)
+- `README.md` — user guide: install (ArrowSetup.exe from Releases, SmartScreen, the browser extension), start, quit, uninstall, name and icon, the main window, queues and the Scheduler, speed limit, links already in the list, categories, when done, Properties, Download File Info, YouTube, features, settings, limits, privacy, build from source
 - `docs/agents/` — settings for the Matt Pocock engineering skills: issue tracker (local `.scratch/`), triage labels, domain-doc rules
 - `docs/SPEC.md` — behaviour, data model, API, security model
 - `docs/NATIVE_UI.md` — the native app's design: tokens, fonts, icons, the main window and every dialog, with sizes

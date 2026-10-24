@@ -342,3 +342,28 @@ errors show inline or in an Error dialog.
   some are finished) → Cancel / Remove (err fill, white text).
 - A one-line prompt (420 wide, e.g. "New queue": "Name of the new queue", up to 40 characters) → Cancel / Add.
 - About (400 wide): logo 64, name, version, "A download manager for Windows."
+
+## Setup (ArrowSetup.exe, `installer/`)
+One window in the dialogs' look (the Dialog base: inspector body, top footer, the same buttons, light or dark like
+Windows), 600 x 440, its own taskbar button and the exe's icon. Each page has a header: the logo (56 px), a Big title,
+a muted line.
+- Options: "Install <name>" / "A fast download manager for Windows"; Location (text field + Change…; a picked folder
+  gets its own <name> folder); FlatChecks "Desktop shortcut", "Start <name> with Windows" (both on) and "Get yt-dlp,
+  FFmpeg and Deno (needed for YouTube and video downloads)" (on; disabled with a green "Already installed" when they are
+  found). Footer: Cancel, Install (primary).
+- Progress: "Installing <name>" / the folder; three steps "Copying <name>", "Getting yt-dlp, FFmpeg and Deno", "Adding
+  shortcuts", each with a ring (waiting), a turning accent arc (running, bold title), a done check or an err icon, and a
+  small muted line under it (winget's last line, "Already installed", "Skipped", the error); the progress bar under
+  them. No buttons while it runs; closing waits.
+- A failed winget: the explanation under the bar (winget missing: get App Installer; else check the connection), a
+  ghost link "App Installer in the Microsoft Store", footer Skip and Try again (primary).
+- Arrow running (install or uninstall): "<name> is running. Quit it from its icon next to the clock, then click Try
+  again." Footer: Back (left), Quit <name>, Try again (primary).
+- Done: "<name> is installed" / version; a warn line when the tools are missing; "Add <name> to your browser" (bold) and
+  3 numbered steps: 1 "Open your browser's extensions page" with a button per installed browser (Brave, Chrome, Edge:
+  registered in App Paths) that opens it and copies its extensions address (browsers ignore chrome:// addresses on
+  their command line), with a small muted hint; 2 "Turn on Developer mode"; 3 "Click Load unpacked and choose this
+  folder:" with the read-only folder and Copy. Footer: Close, Open <name> (primary; started with today's PATH).
+- Uninstall: "Uninstall <name>" / the folder, what goes and that downloaded files stay, FlatCheck "Also remove the
+  download list and settings" (off). Footer: Cancel, Uninstall (danger). Then the steps "Removing shortcuts", "Removing
+  <name>", and "<name> is uninstalled" (where state.json stays, when kept) with Close.

@@ -2,20 +2,20 @@
 
 Arrow is a download manager that runs on your PC. It makes downloads faster by using several connections for each file, like IDM.
 
-## Requirements
-
-- Windows 10 or 11.
-- Node.js 20.3 or newer, to install Arrow. To check, open a command window and type `node --version`.
-- For the browser extension: Brave, Google Chrome or Microsoft Edge.
-
 ## Install
 
-- Double-click `install.cmd`. Wait about 15 seconds.
-- It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:
-  - `Arrow.exe` is the app you see: a normal Windows app with its own windows.
-  - `Arrow Engine.exe` does the downloads in the background (about 90 MB: it carries its own copy of Node.js). Arrow starts it for you.
-- Arrow stays in this folder. Do not move the folder after you install. If you must move it, uninstall first, move it, then install again.
-- If Arrow is running, `install.cmd` asks you to quit it first.
+1. Download **ArrowSetup.exe** from the [latest release](https://github.com/1949-2005/arrow/releases/latest).
+2. Double-click it. Windows may say *"Windows protected your PC"* because the file isn't code-signed: click **More info**, then **Run anyway**.
+3. Click **Install**. Arrow installs for your user account (no admin rights) in `%LOCALAPPDATA%\Programs\Arrow`, with a Start menu shortcut, a desktop shortcut and Start with Windows (you can turn the last two off). It also gets yt-dlp, FFmpeg and Deno with winget, for YouTube and video downloads.
+4. Add Arrow to your browser (Brave, Google Chrome or Microsoft Edge). The setup's last page shows these steps too:
+   1. Open the browser's extensions page: `brave://extensions`, `chrome://extensions` or `edge://extensions`.
+   2. Turn on **Developer mode**.
+   3. Click **Load unpacked** and choose the `extension` folder in Arrow's folder (`%LOCALAPPDATA%\Programs\Arrow\extension`).
+   4. Pin the Arrow icon to the toolbar.
+
+- To check the download: `Get-FileHash ArrowSetup.exe` in PowerShell shows the same SHA-256 as `ArrowSetup.exe.sha256` in the release.
+- To update, run a newer ArrowSetup.exe. Your download list and settings stay.
+- Requirements: Windows 10 or 11, 64-bit.
 
 ## Start
 
@@ -36,10 +36,9 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 ## Uninstall
 
-- Quit Arrow first (right-click the icon next to the clock, then Quit).
-- Double-click `uninstall.cmd`.
-- It removes the Start menu and desktop shortcuts, the Start with Windows shortcut, `Arrow.exe` and `Arrow Engine.exe`.
-- Your downloaded files stay. `state.json` (the download list and settings) stays too. Delete the folder if you want it all gone.
+- **Settings → Apps → Installed apps → Arrow → Uninstall**.
+- It asks whether to also remove the download list and settings (`state.json`).
+- Your downloaded files always stay.
 
 ## Name and icon
 
@@ -48,17 +47,6 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 - The browser extension has the name in its own files (`manifest.json`, `popup.html`, `popup.js`, `background.js`). A test checks that they match `brand.json`. Its icon is in `extension/icons/`.
 - To change the name or icon: quit the app, edit `brand.json` (and the extension's files), then double-click `install.cmd` again. It removes the shortcuts with the old name.
 - The name may use letters, digits, spaces and `. _ ( ) + ! -` (40 at most).
-
-## Updates
-
-- After you update the engine's files (the `.js` files), quit Arrow and start it again. No new install is needed.
-- Run `install.cmd` again after you update the app's files (the `app` folder), change `brand.json` or the icon, or update Node.js.
-
-## Install the browser extension
-
-- Brave: open `brave://extensions`, turn on "Developer mode", click "Load unpacked" and choose the `extension` folder.
-- Chrome: the same at `chrome://extensions`. Edge: the same at `edge://extensions`.
-- Then pin the Arrow icon to the toolbar.
 
 ## How to use
 
@@ -190,10 +178,9 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 ## YouTube videos
 
-- Arrow needs two free tools for this: yt-dlp and ffmpeg. Install them once, in a command window:
-  - `winget install yt-dlp.yt-dlp`
-  - `winget install yt-dlp.FFmpeg`
-  - If one is already installed, winget tells you so.
+- Arrow needs three free tools for this: yt-dlp, FFmpeg and Deno. The setup gets them with winget. If you skipped that step, run this once in a command window:
+  - `winget install yt-dlp.yt-dlp` (it brings FFmpeg and Deno)
+  - If they are already installed, winget tells you so.
 - Ways to start:
   - Point at the YouTube video and click **Download this video**. A list of formats opens, with the real size of each:
     - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
@@ -289,6 +276,21 @@ Options has four pages.
 - Your YouTube login cookies are never sent to Arrow or yt-dlp.
 - Finished files are marked as "downloaded from the internet", so Windows SmartScreen still checks programs before they run.
 - The download list and settings are saved in `state.json` next to the app. This file holds the links and login cookies of unfinished downloads. Do not share it.
+
+## Build from source
+
+- Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
+- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds.
+- Or run Arrow from this folder:
+  - Double-click `install.cmd`. Wait about 15 seconds.
+  - It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:
+    - `Arrow.exe` is the app you see: a normal Windows app with its own windows.
+    - `Arrow Engine.exe` does the downloads in the background (about 90 MB: it carries its own copy of Node.js). Arrow starts it for you.
+  - Arrow stays in this folder. Do not move the folder after you install. If you must move it, uninstall first, move it, then install again.
+  - If Arrow is running, `install.cmd` asks you to quit it first.
+  - After you update the engine's files (the `.js` files), quit Arrow and start it again. No new install is needed.
+  - Run `install.cmd` again after you update the app's files (the `app` folder), change `brand.json` or the icon, or update Node.js.
+  - To uninstall, quit Arrow, then double-click `uninstall.cmd`. It removes the shortcuts, `Arrow.exe` and `Arrow Engine.exe`. Your downloaded files and `state.json` (the download list and settings) stay.
 
 ## For developers
 

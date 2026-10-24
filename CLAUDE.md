@@ -4,6 +4,7 @@ IDM-style download manager: a Node.js >= 20.3 engine (ESM, zero npm dependencies
 
 ## Commands
 - Install the desktop app: `install.cmd` (= `node install.js`): builds `<name>.exe` (the native app) and `<name> Engine.exe` (the engine) here, adds Start menu and desktop shortcuts. `uninstall.cmd` undoes it.
+- Build the release setup: `node build-installer.js` → `dist\ArrowSetup.exe` + `.sha256` (per-user installer, `installer/`). Its tests install into temp folders through the `ARROW_SETUP_*` hooks: never the real Programs, Start menu, desktop, Startup folder, Uninstall key or winget.
 - Run the engine alone: `node desktop.js` or `npm start` → http://127.0.0.1:9614. The native app is built by `app/build.js` `compileApp()`; `node --test app.test.js` builds and checks it.
 - Test: `npm test` (node:test, local test servers only, no network)
 - Syntax-check a file: `node --check <file>`
