@@ -4,6 +4,16 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 ## Install
 
+Open **PowerShell** (press <kbd>Win</kbd>, type `powershell`, press Enter) and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/1949-2005/arrow/main/install.ps1 | iex
+```
+
+It downloads Arrow from this repo's [Releases](https://github.com/1949-2005/arrow/releases), checks its SHA-256 fingerprint, installs it for your user account (no admin rights) with yt-dlp, FFmpeg and Deno, and opens it. Then add Arrow to your browser (step 4 below). Run the same command again to update: your download list and settings stay.
+
+Prefer clicking?
+
 1. Download **ArrowSetup.exe** from the [latest release](https://github.com/1949-2005/arrow/releases/latest).
 2. Double-click it. Windows may say *"Windows protected your PC"* because the file isn't code-signed: click **More info**, then **Run anyway**.
 3. Click **Install**. Arrow installs for your user account (no admin rights) in `%LOCALAPPDATA%\Programs\Arrow`, with a Start menu shortcut, a desktop shortcut and Start with Windows (you can turn the last two off). It also gets yt-dlp, FFmpeg and Deno with winget, for YouTube and video downloads.
@@ -14,7 +24,7 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
    4. Pin the Arrow icon to the toolbar.
 
 - To check the download: `Get-FileHash ArrowSetup.exe` in PowerShell shows the same SHA-256 as `ArrowSetup.exe.sha256` in the release.
-- To update, run a newer ArrowSetup.exe. Your download list and settings stay.
+- To update, run the PowerShell command again, or a newer ArrowSetup.exe. Your download list and settings stay.
 - Requirements: Windows 10 or 11, 64-bit.
 
 ## Start
@@ -36,9 +46,14 @@ Arrow is a download manager that runs on your PC. It makes downloads faster by u
 
 ## Uninstall
 
-- **Settings → Apps → Installed apps → Arrow → Uninstall**.
-- It asks whether to also remove the download list and settings (`state.json`).
-- Your downloaded files always stay.
+- **Settings → Apps → Installed apps → Arrow → Uninstall**. It asks whether to also remove the download list and settings (`state.json`).
+- Or in PowerShell (keeps the download list and settings):
+
+  ```powershell
+  irm https://raw.githubusercontent.com/1949-2005/arrow/main/uninstall.ps1 | iex
+  ```
+
+- Your downloaded files always stay. Remove Arrow from your browser's extensions page too.
 
 ## Name and icon
 
