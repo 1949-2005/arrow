@@ -1,7 +1,7 @@
 // The progress window (docs/NATIVE_UI.md "Dialogs", the behavior of the old progress.html), styled like the inspector:
 // running (percent, segments, speed graph, facts, the Connections and Options disclosures, Pause/Resume and Cancel),
 // Download complete (Saved to, File size, Address, "Don't show this window again", Open with…, Open folder, Close, Open)
-// or removed. While it runs, Minimize to system tray hides it behind its own tray icon (a green download arrow).
+// or removed. While it runs, the title bar's minimize button hides it behind its own tray icon (a green download arrow).
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -40,7 +40,6 @@ namespace Arrow
         readonly FlatButton folder = new FlatButton("Open folder", '\0', ButtonKind.Secondary);
         readonly FlatButton close = new FlatButton("Close", '\0', ButtonKind.Secondary);
         readonly FlatButton open = new FlatButton("Open", '\0', ButtonKind.Primary);
-        readonly FlatButton toTray = new FlatButton("", Glyph.Minimize, ButtonKind.Ghost) { AccessibleName = "Minimize to system tray" };
         NotifyIcon trayIcon; // this download's own icon while the window is in the tray
         Icon trayImage;
         string trayTip;
@@ -54,14 +53,10 @@ namespace Arrow
             this.api = api;
             Id = id;
             ShowInTaskbar = !Offscreen;
+            MinimizeBox = true; // goes to the tray while the download runs (WndProc); maximize shows greyed, as in IDM
             for (var i = 0; i < 7; i++) facts.Add(new FactRow());
             facts[1].ValueColor = () => statusErr ? Theme.Err : Theme.Text;
-            foreach (var c in new Control[] { tile, title, toTray, name, big, sub, bar, graph }) Add(c);
-            toTray.Size = new Size(Theme.Px(28), Theme.Px(28));
-            toTray.Radius = Theme.Px(6);
-            toTray.Visible = false; // until a fill shows a running download
-            Tips.SetToolTip(toTray, toTray.AccessibleName);
-            toTray.Click += (s, e) => ToTray();
+            foreach (var c in new Control[] { tile, title, name, big, sub, bar, graph }) Add(c);
             foreach (var f in facts) Add(f);
             foreach (var c in new Control[] { connHead, table, optHead, limitCheck, limitField, kbs, doneLabel, donePicker, hideComplete }) Add(c);
             donePicker.Items.AddRange(new[] { "Nothing", "Open the file", "Sleep", "Shut down" });
@@ -196,6 +191,14 @@ namespace Arrow
             trayTip = tip;
         }
 
+        // The title bar's minimize (and Alt+Space > Minimize): to the tray while the download runs, else the taskbar
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_SYSCOMMAND = 0x0112, SC_MINIMIZE = 0xF020;
+            if (m.Msg == WM_SYSCOMMAND && (m.WParam.ToInt64() & 0xFFF0) == SC_MINIMIZE && trayable && !Offscreen) { ToTray(); return; }
+            base.WndProc(ref m);
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             if (mode == "done" && hideComplete.Checked && api != null)
@@ -253,7 +256,7 @@ namespace Arrow
         {
             FillView(download, categories, samples);
             var can = mode == "run" && !statusErr; // own flag: Visible reads false while the window is hidden
-            if (can != trayable) { trayable = can; Relayout(); }
+            trayable = can;
             if (!InTray) return;
             if (can) TrayText();
             else FromTray(); // Download complete, the error or "removed": shown again, as IDM pops up its complete window
@@ -394,7 +397,6 @@ namespace Arrow
             optHead.Visible = run;
             limitCheck.Visible = limitField.Visible = kbs.Visible = doneLabel.Visible = donePicker.Visible = run && optHead.Open;
             hideComplete.Visible = mode == "done";
-            toTray.Visible = trayable;
             var h = Place(int.MaxValue);
             if (showConns && connHead.Open && !Offscreen)
             {
@@ -424,9 +426,7 @@ namespace Arrow
             var tx = p + tile.Width + Theme.Px(12);
             var nh = name.HeightFor(w + p - tx);
             var th = title.Height + Theme.Px(2) + nh;
-            var bs = trayable ? toTray.Height : 0; // Minimize to system tray, at the right of the title's line
-            title.Bounds = new Rectangle(tx, y + Math.Max(0, (tile.Height - th) / 2), w + p - tx - (bs > 0 ? bs + Theme.Px(8) : 0), title.Height);
-            if (bs > 0) toTray.Location = new Point(p + w - bs, title.Top + (title.Height - bs) / 2);
+            title.Bounds = new Rectangle(tx, y + Math.Max(0, (tile.Height - th) / 2), w + p - tx, title.Height);
             name.Bounds = new Rectangle(tx, title.Bottom + Theme.Px(2), w + p - tx, nh);
             y = Math.Max(y + tile.Height, name.Bottom) + Theme.Px(16);
             if (mode == "run")

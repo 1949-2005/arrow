@@ -272,10 +272,11 @@ errors show inline or in an Error dialog.
     "When this download is done" + a Picker 180 wide: Nothing / Open the file / Sleep / Shut down → op 'whenDone'.
     Polls don't overwrite a change on its way.
   Footer: Pause/Resume and Cancel ("Cancel this download? The partial file is deleted."). Window title "45% · name".
-  - Minimize to system tray (IDM's extra caption button; the native caption keeps only Close): an icon-only ghost
-    button 28 x 28, radius 6, Minimize glyph, at the right of the title's line (the title gives up its width + 8),
-    tooltip and AccessibleName "Minimize to system tray", in the tab order after the title; shown while the download
-    runs (not failed, Download complete or removed). Click: the window hides (it keeps updating) and the download gets
+  - Minimize to system tray (IDM's caption button left of Close): the window's native minimize button (MinimizeBox
+    on; maximize shows greyed, as in IDM; its tooltip is Windows' own "Minimize"). WndProc catches WM_SYSCOMMAND /
+    SC_MINIMIZE, so Alt+Space > Minimize does the same. While the download runs (not failed, Download complete or
+    removed) the window goes to the tray; otherwise it minimizes to the taskbar as usual. To the tray: the window
+    hides (it keeps updating) and the download gets
     its own tray icon: the Download glyph in done green on a transparent square at the system's small-icon size, so
     it doesn't read as the app's icon. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
     "Paused · 45%"), then the name on a second line, within 127 characters (NotifyIcon's text field set by
