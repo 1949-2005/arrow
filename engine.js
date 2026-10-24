@@ -113,6 +113,8 @@ export class Manager {
   fired = new Map(); // '<queue id> start|stop' → the day and time it last fired, so each fires once a day
   limiter = new Limiter();
   stallMs = 30000;
+  staleMs = 5000; // a piece whose connection heard nothing this long goes to a fresh connection when one is free (IDM-like)
+  held = new Map(); // download id → the probe's response, open and unread until Start makes it connection #1 (never saved)
   dirty = false;
   saving = false;
   // "When all downloads finish": used once and never saved, so a forgotten "shut down" can't fire days later
@@ -279,10 +281,11 @@ export class Manager {
       }
       name = this.baseName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + ext);
     } else {
-      let found = nameFromUrl(d.url);
+      let found = nameFromUrl(d.url), res;
+      // bytes=0- like runHttp's first request: Start reads this response as connection #1 (IDM's trick), so 15 s for the headers only
+      const ac = new AbortController(), timer = setTimeout(() => ac.abort(new Error('no answer from the server for 15s')), 15000);
       try {
-        const res = await this.get(d.url, d, AbortSignal.timeout(15000), 'bytes=0-0');
-        res.body?.cancel().catch(() => {});
+        res = await this.get(d.url, d, ac.signal, 'bytes=0-');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         found = nameFromDisposition(res.headers.get('content-disposition') ?? '') || nameFromUrl(res.finalUrl);
         const total = /\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '')?.[1];
@@ -290,7 +293,12 @@ export class Manager {
         type = res.headers.get('content-type')?.split(';')[0].trim() || null;
       } catch (e) {
         error = e.cause?.message || e.message;
+      } finally {
+        clearTimeout(timer);
       }
+      // kept open and unread (no stall timer runs until a reader watches it); anything but Start lets it go (release())
+      if (res?.ok && d.status === 'pending' && this.list.includes(d)) this.held.set(d.id, res);
+      else res?.body?.cancel().catch(() => {});
       name = this.baseName(d, found);
     }
     if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...(d.kind === 'video' && { options: [], format: null, ...list }), ...dup() };
@@ -298,6 +306,12 @@ export class Manager {
 
   formats(url) {
     return listFormats(this, url);
+  }
+
+  // The probe's held response, closed: Cancel, Later, remove, a new address, expiry, quit
+  release(id) {
+    this.held.get(id)?.body?.cancel().catch(() => {});
+    this.held.delete(id);
   }
 
   // The Download File Info window's answer. Only our own page can call it (server.js), so the folder is the user's choice.
@@ -311,6 +325,7 @@ export class Manager {
     // also on cancel: the Duplicate window's "resume the existing one" cancels the new one
     if (DUPLICATES.includes(rememberDuplicates) && rememberDuplicates !== 'ask') { this.settings.duplicates = rememberDuplicates; this.dirty = true; }
     if (action === 'cancel') {
+      this.release(id);
       this.list.splice(this.list.indexOf(d), 1);
       return;
     }
@@ -348,6 +363,7 @@ export class Manager {
     d.status = action === 'start' ? 'queued' : 'scheduled';
     d.queue = q && (this.queue(q) ? q : MAIN); // removed while we waited: the main queue takes it, as remove does
     if (action === 'start') d.notify = true; // the app shows its Download complete window for it
+    else this.release(id);
     this.dirty = true;
     if (q && startQueue) this.startQueue(d.queue);
     this.pump();
@@ -358,6 +374,7 @@ export class Manager {
     const d = this.list.find(x => x.id === id);
     if (!d) throw new Error('download not found');
     const ctl = this.running.get(id);
+    if (['pause', 'url', 'remove', 'removeFile'].includes(op)) this.release(id);
     if (op === 'pause') {
       if (ctl || ['queued', 'scheduled'].includes(d.status)) d.status = 'paused';
       ctl?.ac.abort();
@@ -541,6 +558,7 @@ export class Manager {
       return await this.follow(url, d, AbortSignal.any([signal, conn.signal]), range, res => {
         res.watch = () => { clearTimeout(timer); timer = setTimeout(stalled, this.stallMs); };
         res.unwatch = () => clearTimeout(timer);
+        res.abort = reason => conn.abort(reason);
       });
     } finally {
       clearTimeout(timer);
@@ -611,9 +629,10 @@ export class Manager {
     const signal = ctl.ac.signal;
     let first = null;
     if (!d.segments || !d.resumable || !existsSync(d.tmp)) {
-      // First request doubles as the probe and becomes connection #1, like IDM.
-      let res, range = 'bytes=0-';
-      for (let t = 1; ; t++) {
+      // First request doubles as the probe and becomes connection #1, like IDM: the Download File Info probe's own when it is held.
+      let res = this.held.get(d.id), range = 'bytes=0-';
+      this.held.delete(d.id);
+      if (!res) for (let t = 1; ; t++) {
         let wait = 1000 * t;
         try {
           res = await this.get(d.url, d, signal, range);
@@ -645,12 +664,15 @@ export class Manager {
     }
 
     const fh = await fs.open(d.tmp, first ? 'w' : 'r+');
+    let check;
     try {
       if (first && d.size) await fh.truncate(d.size);
       await new Promise((resolve, reject) => {
         let err;
         ctl.max = d.resumable ? this.settings.connections : 1;
-        const launch = (s, res) => {
+        ctl.live = new Map(); // piece → {at: when its connection last heard data, ac: cuts that connection alone}
+        const launch = (s, res, stale = this.staleMs) => {
+          ctl.live.set(s, { at: Date.now(), ac: new AbortController(), stale });
           ctl.active.add(s);
           this.worker(d, s, ctl, fh, res)
             .catch(e => {
@@ -660,6 +682,7 @@ export class Manager {
             })
             .then(() => {
               ctl.active.delete(s);
+              ctl.live.delete(s);
               if (!signal.aborted) fill();
               if (!ctl.active.size) err ? reject(err) : resolve();
             });
@@ -667,6 +690,18 @@ export class Manager {
         const fill = () => {
           for (const s of d.segments) {
             if (ctl.active.size < ctl.max && !ctl.active.has(s) && (s.end == null || s.pos < s.end)) launch(s);
+          }
+          // A silent connection's piece goes whole to a fresh one, however small; the silent request is cut and its worker ends.
+          // Each takeover of a piece that heard nothing since waits twice as long: a server slow to answer isn't cut forever.
+          for (const s of [...ctl.active]) {
+            if (ctl.active.size >= ctl.max) break;
+            const live = ctl.live.get(s);
+            if (s.end == null || s.pos >= s.end || Date.now() - live.at < live.stale) continue;
+            const n = { start: s.pos, end: s.end, pos: s.pos };
+            s.end = s.pos;
+            live.ac.abort(new Error('taken over by a fresh connection'));
+            d.segments.push(n);
+            launch(n, null, live.stale * 2);
           }
           // Dynamic segmentation: a free connection takes the back half of the biggest remaining piece.
           while (d.resumable && ctl.active.size < ctl.max) {
@@ -683,8 +718,10 @@ export class Manager {
         if (first) launch(d.segments[0], first);
         fill();
         if (!ctl.active.size) err ? reject(err) : resolve();
+        check = setInterval(() => signal.aborted || fill(), 1000); // silent pieces, while every connection keeps going
       });
     } finally {
+      clearInterval(check);
       await fh.close();
     }
     if (signal.aborted) return;
@@ -695,12 +732,15 @@ export class Manager {
   }
 
   async worker(d, s, ctl, fh, res) {
-    const signal = ctl.ac.signal;
+    const signal = ctl.ac.signal, live = ctl.live.get(s), cut = AbortSignal.any([signal, live.ac.signal]);
+    const first = res; // made before this worker (the probe's or runHttp's): cut it by hand
+    if (first) cut.addEventListener('abort', () => first.abort(cut.reason), { once: true });
     for (let tries = 0; s.end == null || s.pos < s.end;) {
       try {
         if (!res) {
           if (!d.resumable) s.pos = 0; // no range support: every retry starts over
-          res = await this.get(d.url, d, signal, d.resumable && `bytes=${s.pos}-${s.end - 1}`);
+          live.at = Date.now();
+          res = await this.get(d.url, d, cut, d.resumable && `bytes=${s.pos}-${s.end - 1}`);
           const cr = res.headers.get('content-range') ?? '';
           if (d.resumable && !(res.status === 206 && cr.startsWith(`bytes ${s.pos}-`) && cr.endsWith(`/${d.size}`))) {
             throw new Error(`server refused to resume (HTTP ${res.status})`);
@@ -712,6 +752,8 @@ export class Manager {
         try {
           for await (const chunk of r.body ?? []) {
             r.unwatch(); // only time spent waiting on the server counts as a stall, not our speed limit
+            live.at = Infinity;
+            live.stale = this.staleMs; // data came: a later silence is a new stall
             // the segment can shrink while we stream, when a free connection splits it
             const n = s.end == null ? chunk.length : Math.min(chunk.length, s.end - s.pos);
             if (n > 0) {
@@ -722,6 +764,7 @@ export class Manager {
               tries = 0;
             }
             if (s.end != null && s.pos >= s.end) break;
+            live.at = Date.now();
             r.watch();
           }
         } finally {
@@ -732,7 +775,7 @@ export class Manager {
         else if (s.pos < s.end) throw new Error('connection closed early');
       } catch (e) {
         res = null;
-        if (signal.aborted) return;
+        if (signal.aborted || (s.end != null && s.pos >= s.end)) return; // stopped, or a fresh connection took the rest of this piece
         if (++tries > (ctl.active.size > 1 ? 2 : 5)) throw e; // give up sooner while other connections are still working
         await sleep(1000 * tries);
       }
@@ -743,6 +786,8 @@ export class Manager {
   tick(now = new Date()) {
     const stale = d => d.status === 'pending' && Date.now() - d.added >= this.pendingMs;
     if (this.list.some(stale)) this.list = this.list.filter(d => !stale(d));
+    // a held probe response lives only while its download waits for its window or to start (expired, paused, moved: let go)
+    for (const id of this.held.keys()) if (!['pending', 'queued'].includes(this.list.find(d => d.id === id)?.status)) this.release(id);
     for (const ctl of this.running.values()) {
       ctl.speed = ctl.speed * 0.3 + (ctl.bytes - ctl.last) * 0.7;
       ctl.last = ctl.bytes;

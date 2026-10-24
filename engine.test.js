@@ -30,22 +30,29 @@ function encrypt(buf, seq) {
 }
 
 let open = 0; // live connections to /limited.bin
-let stalledOnce = false, busyOnce = false, segStalledOnce = false, genSlow = false;
+let stalledOnce = false, busyOnce = false, segStalledOnce = false, genSlow = false, splitStalledOnce = false;
+const held = []; // /held.bin requests: {range, closed}
 
 const server = http.createServer(async (req, res) => {
   let u = req.url;
   if (u === '/busy.bin' && !busyOnce) { busyOnce = true; res.writeHead(429, { 'retry-after': '0' }); return res.end(); }
   if (u === '/busy.bin') u = '/file.bin';
+  if (u === '/slowstart.bin') { // a server slow to answer at all: every split-off request waits 1.2 s for its headers
+    if (Number(/bytes=(\d+)-/.exec(req.headers.range ?? '')?.[1]) > 0) await sleep(1200);
+    u = '/file.bin';
+  }
   if (u === '/empty.bin') { res.writeHead(req.headers.range ? 416 : 200, { 'content-length': 0 }); return res.end(); }
   if (u === '/limited.bin' && open >= 2) { res.writeHead(503); return res.end(); }
   if (u === '/limited.bin') { open++; res.on('close', () => open--); }
-  if (u === '/file.bin' || u === '/slow.bin' || u === '/limited.bin' || u === '/stall.bin') {
+  if (u === '/held.bin') { const r = { range: req.headers.range, closed: false }; held.push(r); req.socket.once('close', () => { r.closed = true; }); }
+  if (u === '/file.bin' || u === '/slow.bin' || u === '/limited.bin' || u === '/stall.bin' || u === '/splitstall.bin' || u === '/held.bin') {
     ranges.push(req.headers.range);
     cookies.push(req.headers.cookie);
     const m = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '');
     const start = m ? Number(m[1]) : 0, end = m?.[2] ? Number(m[2]) : data.length - 1;
     res.writeHead(m ? 206 : 200, { 'content-length': end - start + 1, ...(m && { 'content-range': `bytes ${start}-${end}/${data.length}` }) });
     if (u === '/stall.bin' && !stalledOnce) { stalledOnce = true; return res.write(data.subarray(start, start + 1048576)); } // then hangs
+    if (u === '/splitstall.bin' && start > 0 && !splitStalledOnce) { splitStalledOnce = true; return res.flushHeaders(); } // the first split-off request: headers, then nothing
     if (u === '/file.bin' || u === '/stall.bin') return res.end(data.subarray(start, end + 1));
     let closed = false;
     res.on('close', () => { closed = true; });
@@ -205,6 +212,30 @@ test('a connection that goes silent is cut off and the download recovers', async
   assert.ok(stalledOnce);
   mgr.update({ connections: 4 });
   mgr.stallMs = 30000;
+});
+
+test('a split-off connection that goes silent after its headers: a fresh connection takes its piece long before the 30 s watchdog', async () => {
+  assert.equal(mgr.stallMs, 30000, 'the takeover must be what saves it, not the watchdog');
+  const t = Date.now();
+  const d = mgr.add({ url: base + '/splitstall.bin' });
+  await until(() => ['done', 'error'].includes(d.status), 15000);
+  assert.equal(sha(await finished(d)), sha(data));
+  assert.ok(splitStalledOnce);
+  assert.ok(Date.now() - t < 15000, `took ${Date.now() - t} ms`);
+});
+
+test('a server slow to answer at all: each takeover of the same piece waits twice as long, so the download still finishes', async () => {
+  const was = mgr.staleMs;
+  mgr.staleMs = 300; // its split-off connections answer after 1.2 s: without the backoff they'd be cut every second, forever
+  mgr.update({ connections: 16 }); // more than 6 MB splits into, so free connections take over instead of splitting
+  try {
+    const d = mgr.add({ url: base + '/slowstart.bin' });
+    await until(() => ['done', 'error'].includes(d.status), 20000);
+    assert.equal(sha(await finished(d)), sha(data));
+  } finally {
+    mgr.staleMs = was;
+    mgr.update({ connections: 4 });
+  }
 });
 
 test('server without range support still downloads, on one connection', async () => {
@@ -580,7 +611,7 @@ test('duplicates: the probe names the existing download; number, replace, resume
 });
 
 // The Download File Info window: downloads from the extension wait as 'pending' until it answers.
-test('pending: never started; the probe reads name and size with a one-byte range', async () => {
+test('pending: never started; the probe reads name and size from an open-ended range it keeps for Start', async () => {
   ranges.length = 0;
   const d = mgr.add({ url: base + '/file.bin', confirm: true });
   assert.equal(d.status, 'pending');
@@ -589,13 +620,35 @@ test('pending: never started; the probe reads name and size with a one-byte rang
   await sleep(50);
   assert.equal(d.status, 'pending');
   assert.ok(!mgr.running.has(d.id));
-  assert.deepEqual(ranges, ['bytes=0-0']);
+  assert.deepEqual(ranges, ['bytes=0-']);
   const { duplicate, ...probe } = d.probe; // earlier tests downloaded the same link: see the duplicates test
   assert.deepEqual(probe, { name: 'file.bin', category: 'Other', size: data.length, type: null, error: null });
   assert.equal(duplicate.status, 'done');
   assert.equal(d.file, undefined, 'no file before the window answers');
   assert.deepEqual(mgr.view().downloads.find(x => x.id === d.id).probe, d.probe);
   await mgr.confirm(d.id, { action: 'cancel' });
+});
+
+test("Download File Info: the probe's connection becomes connection #1 on Start; Cancel, Later and remove let it go", async () => {
+  held.length = 0;
+  const d = mgr.add({ url: base + '/held.bin', confirm: true });
+  await until(() => d.probe);
+  await sleep(100);
+  assert.deepEqual(held.map(r => [r.range, r.closed]), [['bytes=0-', false]], 'the probe keeps its connection open');
+  await mgr.confirm(d.id, { action: 'start', path: path.join(dir, 'held', 'h.bin') });
+  assert.equal(sha(await finished(d)), sha(data));
+  assert.ok(held.length > 1, 'the other connections still split off');
+  assert.deepEqual(held.filter(r => r.range.startsWith('bytes=0-')).length, 1, `a new request for byte 0 after Start: ${held.map(r => r.range)}`);
+
+  const ends = { cancel: p => mgr.confirm(p.id, { action: 'cancel' }), later: p => mgr.confirm(p.id, { action: 'later', path: path.join(dir, 'held', 'later.bin') }), remove: p => mgr.act(p.id, 'remove') };
+  for (const [what, end] of Object.entries(ends)) {
+    held.length = 0;
+    const p = mgr.add({ url: base + '/held.bin', confirm: true });
+    await until(() => p.probe);
+    await end(p);
+    await until(() => held[0].closed, 5000).catch(() => assert.fail(`${what} keeps the probe's connection open`));
+    if (mgr.list.includes(p)) await mgr.act(p.id, 'remove');
+  }
 });
 
 test('pending probe: Content-Disposition name, Content-Length size and type; a failure keeps its error', async () => {
@@ -845,11 +898,14 @@ test('pending downloads are never saved, are dropped on load, and expire after 3
   await m2.load();
   assert.deepEqual(m2.list.map(d => d.id), [kept.id]);
 
+  await until(() => p.probe);
   m.tick();
   assert.ok(m.list.includes(p), 'not 30 minutes old yet');
+  assert.ok(m.held.has(p.id), 'its probe response waits for Start');
   p.added -= m.pendingMs;
   m.tick();
   assert.deepEqual(m.list, [kept]);
+  assert.equal(m.held.size, 0, 'expired: its probe response is let go');
 });
 
 // Queues: never-loaded Managers (no 1 s timer) ticked by hand with their own clock. 2026-10-18 is a Sunday (day 0).

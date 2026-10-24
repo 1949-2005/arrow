@@ -119,6 +119,7 @@ server.listen(PORT, '127.0.0.1', () => console.log(`${brand.name} running at htt
 
 // Running yt-dlp processes end with this process (libuv puts child processes in a job object).
 function quit() {
+  for (const id of mgr.held.keys()) mgr.release(id); // the Download File Info probes' open connections
   mgr.saveSync();
   process.exit(0);
 }
