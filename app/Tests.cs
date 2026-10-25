@@ -238,7 +238,7 @@ namespace Arrow
             Eq(Core.StatusText(err), "Error: HTTP 404", "status error");
             Eq(Core.Heading(with("done")), "Download complete", "heading done");
             Eq(Core.Fraction(with("done"), true), 1.0, "fraction done");
-            Func<string, Download> video = phase => new Download { Kind = "video", Status = "downloading", Size = 200, Got = 50, Phase = phase };
+            Func<string, Download> video = phase => new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=x", Status = "downloading", Size = 200, Got = 50, Phase = phase };
             Eq(Core.StatusText(video("audio")), "Downloading audio", "status video audio");
             Eq(Core.StatusText(video("converting")), "Converting to MP3", "status converting");
             Eq(Core.StatusText(video(null)), "Starting…", "status video starting");
@@ -249,6 +249,7 @@ namespace Arrow
             var held = with("paused"); held.Name = "file.zip";
             Eq(Core.TrayTip(held, 127), "Paused · 45%\nfile.zip", "tray tip paused");
             Eq(Core.TrayTip(video("merging"), 127), "Merging\nYouTube video", "tray tip merging");
+            Eq(Core.ShortName(new Download { Kind = "video", Url = "https://vimeo.com/1" }), "Video", "another sites video before its name is known");
             tray.Name = new string('a', 200);
             Eq(Core.TrayTip(tray, 127).Length, 127, "tray tip fits 127");
             Eq(Core.TrayTip(tray, 63), "45% · 2.4 MB/s\n" + new string('a', 47) + "…", "tray tip cut at 63");
@@ -289,6 +290,8 @@ namespace Arrow
             Eq(Core.ShortName(new Download { Kind = "http", Url = "https://x.com/" }), "https://x.com/", "shortName falls back to the URL");
             Eq(Core.ShortName(new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=x" }), "YouTube video", "shortName video");
             Ok(Core.IsYouTube("https://music.youtube.com/watch?v=x") && Core.IsYouTube("HTTPS://youtu.be/x") && !Core.IsYouTube("https://notyoutube.com/"), "isYouTube");
+            Ok(Core.IsVideoLink("https://vimeo.com/1") && Core.IsVideoLink("https://www.tiktok.com/@a/video/1") && Core.IsVideoLink("https://x.com/a/status/1") && Core.IsVideoLink("https://youtu.be/x"), "video links");
+            Ok(!Core.IsVideoLink("https://notvimeo.com/1") && !Core.IsVideoLink("https://example.com/x.com") && !Core.IsVideoLink("https://vimeo.com.evil.net/"), "not video links");
             Ok(Core.CanResume(err) && !Core.CanResume(http()) && Core.CanStop(with("scheduled")) && !Core.CanStop(with("done")), "canResume / canStop");
 
             // emoji: drawn in color by DirectWrite, everything else stays on TextRenderer

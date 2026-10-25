@@ -388,7 +388,7 @@ namespace Arrow
         public static string ShortName(Download d)
         {
             if (!string.IsNullOrEmpty(d.Name)) return d.Name;
-            if (d.Kind == "video") return "YouTube video";
+            if (d.Kind == "video") return IsYouTube(d.Url) ? "YouTube video" : "Video";
             var url = d.Url ?? "";
             var last = Uri.UnescapeDataString(url.Split('?')[0].Split('/').Last());
             return last != "" ? last : url;
@@ -560,6 +560,12 @@ namespace Arrow
         public static bool CanStop(Download d) { return d.Status == "downloading" || d.Status == "queued" || d.Status == "scheduled"; }
         public static bool CanPause(Download d) { return CanStop(d); }
         public static bool IsYouTube(string url) { return url != null && YouTube.IsMatch(url); }
+
+        // ytdlp.js SITES: the other video sites yt-dlp downloads from (with www., m. and the like in front)
+        static readonly Regex VideoSite = new Regex(@"^https?://([^/?#]+\.)?(vimeo\.com|dailymotion\.com|x\.com|twitter\.com|tiktok\.com|instagram\.com|facebook\.com|fb\.watch|reddit\.com|twitch\.tv|soundcloud\.com|bilibili\.com|streamable\.com)([:/?#]|$)", RegexOptions.IgnoreCase);
+
+        // A link yt-dlp downloads: YouTube or one of the other video sites (Add links offers its Quality)
+        public static bool IsVideoLink(string url) { return url != null && (YouTube.IsMatch(url) || VideoSite.IsMatch(url)); }
 
         // Sidebar category: from the file extension, else Other. YouTube is Video, or Music for M4A/MP3; HLS is always Video.
         public static string Category(Download d, IDictionary<string, List<string>> categories)

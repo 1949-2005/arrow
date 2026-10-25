@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { downloadHls, parsePlaylist, soundTemps } from './hls.js';
-import { downloadVideo, youtubeId, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf } from './ytdlp.js';
+import { downloadVideo, youtubeId, videoSite, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf } from './ytdlp.js';
 
 const MIN_SPLIT = 512 * 1024; // a connection is only split off when each half keeps at least this much
 // Honest name on purpose: some servers drop clients that claim to be Chrome but don't look like it.
@@ -218,8 +218,9 @@ export class Manager {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
-    if (yt && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
-    if (yt && format != null && !FORMAT_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`);
+    const video = !!yt || !!videoSite(u); // through yt-dlp: YouTube, and the other video sites' pages
+    if (video && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
+    if (video && format != null && !FORMAT_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`);
     const q = scheduled && !confirm ? String(queue ?? MAIN) : null;
     if (q && !this.queue(q)) throw new Error('queue not found');
     const d = {
@@ -227,13 +228,13 @@ export class Manager {
       url: yt ? `https://www.youtube.com/watch?v=${yt}` : u.href,
       name: name ? sanitize(name) : null,
       title: title ? sanitize(title) : null,
-      headers: yt ? {} : Object.fromEntries(Object.entries(headers ?? {}) // never cookies for yt-dlp
+      headers: video ? {} : Object.fromEntries(Object.entries(headers ?? {}) // never cookies for yt-dlp
         .map(([k, v]) => [k.toLowerCase(), v])
         .filter(([k, v]) => HEADERS_ALLOWED.includes(k) && typeof v === 'string')),
       cookieHost: u.hostname,
-      kind: yt ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
-      ...(yt && { quality }),
-      ...(yt && format != null && { format }),
+      kind: video ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
+      ...(video && { quality }),
+      ...(video && format != null && { format }),
       status: confirm ? 'pending' : q ? 'scheduled' : 'queued',
       queue: q,
       added: Date.now(),
@@ -269,7 +270,7 @@ export class Manager {
     const catOf = n => typeOf(this.settings.types, n);
     if (d.kind === 'video') {
       // Until yt-dlp's list is in, the window shows "Getting formats…" with the tab title ("(3) Title - YouTube") as the name.
-      const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+-\s+YouTube$/i, '') || 'video';
+      const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+[-|]\s+(YouTube|Vimeo|TikTok|Instagram|Facebook|Reddit|Twitch|Dailymotion|SoundCloud|X)$/i, '') || 'video';
       name = sanitize(tab + extOf(d.format, d.quality));
       if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, listing: true, ...dup() };
       try {
@@ -395,7 +396,7 @@ export class Manager {
       if (['paused', 'error', 'scheduled'].includes(d.status)) d.status = 'queued';
     } else if (op === 'url') { // "refresh download address" for expired links
       if (ctl) throw new Error('pause the download first');
-      if (d.kind === 'video') throw new Error('YouTube downloads keep their link');
+      if (d.kind === 'video') throw new Error('Video downloads keep their link');
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
       d.url = u.href;

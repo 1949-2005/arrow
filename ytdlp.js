@@ -22,6 +22,16 @@ const errorText = line => line.replace(/^ERROR:\s*(\[[^\]]+\]\s*([\w-]+:\s*)?)?/
 // The file extension of a format key, or of a legacy quality.
 export const extOf = (format, quality) => '.' + (format ?? (quality === 'mp3' ? 'mp3' : 'mp4')).split(':')[0];
 
+// Other sites yt-dlp downloads from (with www., m. and the like in front): their pages' video, as YouTube's
+export const SITES = ['vimeo.com', 'dailymotion.com', 'x.com', 'twitter.com', 'tiktok.com', 'instagram.com', 'facebook.com', 'fb.watch',
+  'reddit.com', 'twitch.tv', 'soundcloud.com', 'bilibili.com', 'streamable.com'];
+
+// A page link of one of SITES → its site, null for anything else (YouTube included: youtubeId() has its rules)
+export function videoSite(u) {
+  const h = u.hostname.toLowerCase();
+  return SITES.find(s => h === s || h.endsWith('.' + s)) ?? null;
+}
+
 // YouTube link → video ID, null for other sites. Channels, playlists and the like are refused.
 export function youtubeId(u) {
   if (u.hostname !== 'youtu.be' && !HOSTS.includes(u.hostname)) return null;
@@ -96,11 +106,14 @@ export function ytdlpArgs(d, settings, ffmpeg) {
 // The video's formats with their real sizes, as the format list shows them. Cached per video for 15 minutes;
 // callers that come while yt-dlp is still running share that run.
 export async function listFormats(mgr, url) {
-  const id = youtubeId(new URL(url));
-  if (!id) throw new Error('Only YouTube video links have a format list');
+  const u = new URL(url);
+  const yt = youtubeId(u);
+  if (!yt && !videoSite(u)) throw new Error('Only video links from YouTube and the other supported sites have a format list');
+  const id = yt ?? u.href; // the cache's key
+  const page = yt ? `https://www.youtube.com/watch?v=${yt}` : u.href;
   const hit = mgr.formatCache.get(id);
   if (hit && Date.now() - hit.at < FORMATS_MS) return hit.list;
-  const list = readFormats(mgr, id).catch(e => {
+  const list = readFormats(mgr, page, !!yt).catch(e => {
     if (mgr.formatCache.get(id)?.list === list) mgr.formatCache.delete(id);
     throw e;
   });
@@ -108,13 +121,13 @@ export async function listFormats(mgr, url) {
   return list;
 }
 
-async function readFormats(mgr, id) {
+async function readFormats(mgr, page, youtube) {
   const cmd = mgr.ytdlp ?? [findYtdlp()];
   let out;
   try {
     // skip=hls,dash: the list only offers https formats, so the stream manifests are not fetched (about 0.6 s less)
-    ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', '--extractor-args', 'youtube:skip=hls,dash',
-      ...(mgr.settings?.proxy ? ['--proxy', mgr.settings.proxy] : []), '--', `https://www.youtube.com/watch?v=${id}`],
+    ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', ...(youtube ? ['--extractor-args', 'youtube:skip=hls,dash'] : []),
+      ...(mgr.settings?.proxy ? ['--proxy', mgr.settings.proxy] : []), '--', page],
       { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }));
   } catch (e) {
     const line = /^ERROR:.*$/m.exec(e.stderr ?? '')?.[0];

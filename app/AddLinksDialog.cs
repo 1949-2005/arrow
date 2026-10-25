@@ -83,7 +83,7 @@ namespace Arrow
                     current = u;
                     var body = new Dictionary<string, object> { { "url", u }, { "scheduled", scheduled } };
                     if (single != "") body["name"] = single;
-                    if (Core.IsYouTube(u)) body["quality"] = q;
+                    if (Core.IsVideoLink(u)) body["quality"] = q;
                     a.Post("/api/add", body);
                 }
             }, err =>
@@ -107,7 +107,7 @@ namespace Arrow
             linksLabel.Bounds = new Rectangle(p, y, lw, row);
             links.Bounds = new Rectangle(x, y, vw, Theme.Px(120));
             y += links.Height + gap;
-            var yt = Typed().Any(Core.IsYouTube);
+            var yt = Typed().Any(Core.IsVideoLink);
             qualityLabel.Visible = quality.Visible = yt;
             if (yt)
             {

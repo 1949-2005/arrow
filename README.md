@@ -270,7 +270,7 @@ Options has four pages.
 
 ## Limits
 
-- No sites other than YouTube that send audio and video separately (DASH).
+- Video pages: YouTube, Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili and Streamable go through yt-dlp. Other sites' pages are not; their direct video and HLS links still work.
 - No DRM-protected video.
 - No torrents and no FTP.
 - Proxies: HTTP and HTTPS proxies only (no SOCKS).
@@ -280,6 +280,10 @@ Options has four pages.
 - Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
+
+## Other video sites
+
+Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Arrow downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Arrow never passes your browser's cookies to yt-dlp).
 
 ## Proxy
 
