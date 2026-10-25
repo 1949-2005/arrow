@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { engineFiles, zipFolder, buildSetup } from './build-installer.js';
 
 const repo = path.dirname(fileURLToPath(import.meta.url));
+const NAME = JSON.parse(readFileSync(path.join(repo, 'brand.json'), 'utf8')).name; // the app's name, as the setup uses it
 const win = { skip: process.platform !== 'win32' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -49,8 +50,8 @@ test('zipFolder writes a zip that unpacks to the same files', async () => {
 let tmp, setup, env, dir, key, engine;
 const freePort = () => new Promise(r => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
 const run = (exe, args = [], extra = {}) => spawnSync(exe, args, { env: { ...env, ...extra }, encoding: 'utf8', windowsHide: true, timeout: 120000 });
-const links = () => ['start', 'desktop', 'startup'].map(f => path.join(tmp, f, 'Arrow.lnk'));
-const regQuery = () => spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\Arrow'], { encoding: 'utf8', windowsHide: true });
+const links = () => ['start', 'desktop', 'startup'].map(f => path.join(tmp, f, NAME + '.lnk'));
+const regQuery = () => spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\' + NAME], { encoding: 'utf8', windowsHide: true });
 const shortcut = link => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
   '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:L); "$($s.TargetPath)|$($s.Arguments)"'], { env: { ...process.env, L: link } }).toString().trim();
 
@@ -58,7 +59,7 @@ before(async () => {
   if (process.platform !== 'win32') return;
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-setup-test-'));
   ({ out: setup } = await buildSetup(path.join(tmp, 'dist')));
-  dir = path.join(tmp, 'Programs', 'Arrow');
+  dir = path.join(tmp, 'Programs', NAME);
   key = 'Software\\ArrowSetupTest-' + crypto.randomBytes(4).toString('hex');
   // winget stand-in: puts the tool where winget would (WinGet\Links, WinGet\Packages), or fails
   await fs.writeFile(path.join(tmp, 'winget.mjs'), `import fs from 'node:fs';
@@ -89,38 +90,38 @@ after(async () => {
 
 test('build-installer writes the setup and its sha256 file', win, () => {
   const hash = crypto.createHash('sha256').update(readFileSync(setup)).digest('hex');
-  assert.equal(readFileSync(setup + '.sha256', 'utf8'), `${hash}  ArrowSetup.exe`);
+  assert.equal(readFileSync(setup + '.sha256', 'utf8'), `${hash}  ${NAME}Setup.exe`);
 });
 
 test('install: files, tools through winget, shortcuts, Settings > Apps; the engine runs from the install folder', win, async () => {
   const r = run(setup, ['--quiet']);
   assert.equal(r.status, 0, r.stderr);
-  for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe', ...engineFiles(), 'package.json', 'brand.json', 'assets/logo.ico',
+  for (const f of [NAME + '.exe', NAME + ' Engine.exe', 'Uninstall ' + NAME + '.exe', ...engineFiles(), 'package.json', 'brand.json', 'assets/logo.ico',
     'assets/types/video.svg', 'assets/icons/active.svg', 'extension/manifest.json', 'extension/icons/icon-128.png', 'LICENSE', 'README.txt', 'licenses/node-LICENSE.txt'])
     assert.ok(existsSync(path.join(dir, f)), f);
   const all = readdirSync(dir, { recursive: true }).map(f => f.replaceAll('\\', '/'));
   assert.deepEqual(all.filter(f => /\.test\.js$|^app\/|^fixtures|^docs|^\.scratch|state\.json|installed\.json|\.cs$/.test(f)), []);
   assert.equal(readFileSync(path.join(tmp, 'winget.log'), 'utf8'), 'yt-dlp.yt-dlp\n'); // it brings FFmpeg and Deno
-  assert.deepEqual(links().map(shortcut), [`${dir}\\Arrow.exe|`, `${dir}\\Arrow.exe|`, `${dir}\\Arrow.exe|--tray`]);
+  assert.deepEqual(links().map(shortcut), [`${dir}\\${NAME}.exe|`, `${dir}\\${NAME}.exe|`, `${dir}\\${NAME}.exe|--tray`]);
   const reg = regQuery().stdout;
-  for (const v of ['DisplayName    REG_SZ    Arrow', `DisplayVersion    REG_SZ    ${JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8')).version}`, 'Publisher    REG_SZ    1949-2005', `InstallLocation    REG_SZ    ${dir}`,
-    `UninstallString    REG_SZ    "${dir}\\Uninstall Arrow.exe"`, `DisplayIcon    REG_SZ    ${dir}\\Arrow.exe`, 'NoModify    REG_DWORD    0x1', 'NoRepair    REG_DWORD    0x1'])
+  for (const v of [`DisplayName    REG_SZ    ${NAME}`, `DisplayVersion    REG_SZ    ${JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8')).version}`, 'Publisher    REG_SZ    1949-2005', `InstallLocation    REG_SZ    ${dir}`,
+    `UninstallString    REG_SZ    "${dir}\\Uninstall ${NAME}.exe"`, `DisplayIcon    REG_SZ    ${dir}\\${NAME}.exe`, 'NoModify    REG_DWORD    0x1', 'NoRepair    REG_DWORD    0x1'])
     assert.ok(reg.includes(v), v + '\n' + reg);
   assert.ok(Number(/EstimatedSize\s+REG_DWORD\s+(0x[0-9a-f]+)/.exec(reg)[1]) > 30000, 'EstimatedSize in KB');
 
   // the engine exe loads desktop.js and its modules from the install folder; the app finds it
-  engine = spawn(path.join(dir, 'Arrow Engine.exe'), [], { env, stdio: 'ignore' });
+  engine = spawn(path.join(dir, NAME + ' Engine.exe'), [], { env, stdio: 'ignore' });
   for (const t = Date.now(); ; await sleep(100)) {
     try { if ((await fetch(`http://127.0.0.1:${env.FASTDL_PORT}/api/ping`)).ok) break; } catch {}
     if (Date.now() - t > 15000) throw new Error('the installed engine did not start');
   }
-  const check = run(path.join(dir, 'Arrow.exe'), ['--check', '--no-engine']);
+  const check = run(path.join(dir, NAME + '.exe'), ['--check', '--no-engine']);
   assert.equal(check.status, 0, check.stdout + check.stderr);
   assert.match(check.stdout, /engine ok, 0 downloads/);
 });
 
-test('reinstall: refused while Arrow runs, --quit-arrow quits it cleanly; state.json is kept', win, async () => {
-  assert.equal(run(setup, ['--quiet']).status, 2, 'Arrow is running');
+test('reinstall: refused while the app runs, --quit-arrow quits it cleanly; state.json is kept', win, async () => {
+  assert.equal(run(setup, ['--quiet']).status, 2, NAME + ' is running');
   const r = run(setup, ['--quiet', '--quit-arrow']);
   assert.equal(r.status, 0, r.stderr);
   const code = engine.exitCode ?? await Promise.race([new Promise(r => engine.once('exit', r)), sleep(5000).then(() => 'still running')]);
@@ -132,11 +133,11 @@ test('reinstall: refused while Arrow runs, --quit-arrow quits it cleanly; state.
   assert.ok(!existsSync(links()[1]), 'the desktop shortcut went with --no-desktop');
 });
 
-test('tools: a failing or missing winget still installs Arrow (exit 3)', win, async () => {
+test('tools: a failing or missing winget still installs the app (exit 3)', win, async () => {
   await fs.rm(path.join(tmp, 'local'), { recursive: true, force: true });
   assert.equal(run(setup, ['--quiet'], { FAKE_WINGET: 'fail' }).status, 3);
   assert.equal(run(setup, ['--quiet'], { ARROW_SETUP_WINGET: path.join(tmp, 'no-winget.exe') }).status, 3);
-  assert.ok(existsSync(path.join(dir, 'Arrow.exe')));
+  assert.ok(existsSync(path.join(dir, NAME + '.exe')));
 });
 
 test('--start opens the installed app once it is installed, as its own update does', win, async () => {
@@ -149,7 +150,7 @@ test('--start opens the installed app once it is installed, as its own update do
     const r = run(setup, ['--quiet', '--no-tools', '--start'], { ARROW_SETUP_START_ARGS: '--check-update', ARROW_UPDATES_URL: `http://127.0.0.1:${server.address().port}/latest` });
     assert.equal(r.status, 0, r.stderr);
     const ua = await Promise.race([got, sleep(20000).then(() => null)]);
-    assert.match(ua ?? '', /^Arrow\//, 'the installed Arrow.exe started and checked for updates');
+    assert.match(ua ?? '', new RegExp('^' + NAME + '/'), 'the installed app started and checked for updates');
   } finally {
     server.close();
   }
@@ -159,7 +160,7 @@ test('uninstall: shortcuts, files and the key go; state.json and downloads stay,
   const inside = path.join(dir, 'Downloads', 'video.mp4'); // a download folder inside the install folder
   await fs.mkdir(path.dirname(inside), { recursive: true });
   await fs.writeFile(inside, 'mine');
-  const r = run(path.join(dir, 'Uninstall Arrow.exe'), ['--quiet']);
+  const r = run(path.join(dir, 'Uninstall ' + NAME + '.exe'), ['--quiet']);
   assert.equal(r.status, 0, r.stderr);
   await sleep(4000); // cmd deletes the uninstaller once it has exited
   assert.deepEqual(links().filter(existsSync), []);
@@ -170,4 +171,33 @@ test('uninstall: shortcuts, files and the key go; state.json and downloads stay,
   assert.equal(run(setup, ['--quiet', '--uninstall', '--remove-data']).status, 0);
   assert.deepEqual(readdirSync(dir, { recursive: true }).map(f => f.replaceAll('\\', '/')).sort(), ['Downloads', 'Downloads/video.mp4']);
   assert.equal(readFileSync(inside, 'utf8'), 'mine');
+});
+
+test('an install under the former name, Arrow, is taken over in place: its download list stays, its exes, shortcuts and key go', win, async () => {
+  const old = path.join(tmp, 'local', 'Programs', 'Arrow');
+  await fs.mkdir(old, { recursive: true });
+  for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe']) await fs.writeFile(path.join(old, f), 'old');
+  await fs.writeFile(path.join(old, 'state.json'), '{"settings":{},"list":[],"marker":"arrow"}');
+  await fs.mkdir(path.join(tmp, 'local', 'Arrow'), { recursive: true });
+  await fs.writeFile(path.join(tmp, 'local', 'Arrow', 'ui.json'), '{"theme":"dark"}');
+  for (const f of ['start', 'desktop']) {
+    await fs.mkdir(path.join(tmp, f), { recursive: true });
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:L); $s.TargetPath = $env:T; $s.Save()'],
+      { env: { ...process.env, L: path.join(tmp, f, 'Arrow.lnk'), T: path.join(old, 'Arrow.exe') } });
+  }
+  spawnSync('reg.exe', ['add', 'HKCU\\' + key + '\\Arrow', '/v', 'InstallLocation', '/d', old, '/f'], { windowsHide: true });
+  const { ARROW_SETUP_DIR, ...noDir } = env; // where to install is the setup's own choice here
+  const r = spawnSync(setup, ['--quiet', '--no-tools'], { env: noDir, encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(path.join(old, NAME + '.exe')), 'installed into the former folder');
+  for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe']) assert.ok(!existsSync(path.join(old, f)), f + ' is gone');
+  assert.match(readFileSync(path.join(old, 'state.json'), 'utf8'), /"marker":"arrow"/, 'the download list stayed');
+  for (const f of ['start', 'desktop']) {
+    assert.ok(!existsSync(path.join(tmp, f, 'Arrow.lnk')), f + ': the old shortcut is gone');
+    assert.ok(existsSync(path.join(tmp, f, NAME + '.lnk')), f + ': the new one is there');
+  }
+  assert.notEqual(spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\Arrow'], { windowsHide: true }).status, 0, 'the former Apps entry is gone');
+  assert.match(spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\' + NAME, '/v', 'InstallLocation'], { encoding: 'utf8', windowsHide: true }).stdout, new RegExp(old.replace(/\\/g, '\\\\')));
+  assert.equal(readFileSync(path.join(tmp, 'local', NAME, 'ui.json'), 'utf8'), '{"theme":"dark"}', 'the window layout moved');
+  spawnSync(path.join(old, 'Uninstall ' + NAME + '.exe'), ['--quiet', '--remove-data'], { env: noDir, windowsHide: true, timeout: 60000 });
 });

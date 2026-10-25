@@ -1,63 +1,65 @@
-# Arrow
+# Glide
 
-Arrow is a download manager that runs on your PC. It makes downloads faster by using several connections for each file, like IDM.
+Glide is a download manager that runs on your PC. It makes downloads faster by using several connections for each file, like IDM.
+
+Glide used to be called **Arrow**. If you have Arrow, installing Glide (or Arrow's own **Update** button) replaces it in the same folder: your download list, settings and browser extension keep working.
 
 ## Install
 
 Open **PowerShell** (press <kbd>Win</kbd>, type `powershell`, press Enter) and paste:
 
 ```powershell
-irm https://raw.githubusercontent.com/1949-2005/arrow/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/1949-2005/glide/main/install.ps1 | iex
 ```
 
-It downloads Arrow from this repo's [Releases](https://github.com/1949-2005/arrow/releases), checks its SHA-256 fingerprint, installs it for your user account (no admin rights) with yt-dlp, FFmpeg and Deno, and opens it. Then add Arrow to your browser (step 4 below). Run the same command again to update: your download list and settings stay.
+It downloads Glide from this repo's [Releases](https://github.com/1949-2005/glide/releases), checks its SHA-256 fingerprint, installs it for your user account (no admin rights) with yt-dlp, FFmpeg and Deno, and opens it. Then add Glide to your browser (step 4 below). Run the same command again to update: your download list and settings stay.
 
 Prefer clicking?
 
-1. Download **ArrowSetup.exe** from the [latest release](https://github.com/1949-2005/arrow/releases/latest).
+1. Download **GlideSetup.exe** from the [latest release](https://github.com/1949-2005/glide/releases/latest).
 2. Double-click it. Windows may say *"Windows protected your PC"* because the file isn't code-signed: click **More info**, then **Run anyway**.
-3. Click **Install**. Arrow installs for your user account (no admin rights) in `%LOCALAPPDATA%\Programs\Arrow`, with a Start menu shortcut, a desktop shortcut and Start with Windows (you can turn the last two off). It also gets yt-dlp, FFmpeg and Deno with winget, for YouTube and video downloads.
-4. Add Arrow to your browser (Brave, Google Chrome or Microsoft Edge). The setup's last page shows these steps too:
+3. Click **Install**. Glide installs for your user account (no admin rights) in `%LOCALAPPDATA%\Programs\Glide`, with a Start menu shortcut, a desktop shortcut and Start with Windows (you can turn the last two off). It also gets yt-dlp, FFmpeg and Deno with winget, for YouTube and video downloads.
+4. Add Glide to your browser (Brave, Google Chrome or Microsoft Edge). The setup's last page shows these steps too:
    1. Open the browser's extensions page: `brave://extensions`, `chrome://extensions` or `edge://extensions`.
    2. Turn on **Developer mode**.
-   3. Click **Load unpacked** and choose the `extension` folder in Arrow's folder (`%LOCALAPPDATA%\Programs\Arrow\extension`).
-   4. Pin the Arrow icon to the toolbar.
+   3. Click **Load unpacked** and choose the `extension` folder in Glide's folder (`%LOCALAPPDATA%\Programs\Glide\extension`).
+   4. Pin the Glide icon to the toolbar.
 
-- To check the download: `Get-FileHash ArrowSetup.exe` in PowerShell shows the same SHA-256 as `ArrowSetup.exe.sha256` in the release.
-- To update, run the PowerShell command again, or a newer ArrowSetup.exe. Your download list and settings stay.
+- To check the download: `Get-FileHash GlideSetup.exe` in PowerShell shows the same SHA-256 as `GlideSetup.exe.sha256` in the release.
+- To update, run the PowerShell command again, or a newer GlideSetup.exe. Your download list and settings stay.
 - Requirements: Windows 10 or 11, 64-bit.
 
 ## Start
 
-- Click Arrow in the Start menu, or double-click the Arrow icon on the desktop.
-- The Arrow window opens, and the Arrow icon appears next to the clock.
+- Click Glide in the Start menu, or double-click the Glide icon on the desktop.
+- The Glide window opens, and the Glide icon appears next to the clock.
 - On Windows 11, a new icon may be hidden under the **^** arrow next to the clock. Drag it to the taskbar to always see it.
-- Start Arrow again while it runs: it only shows its window again.
+- Start Glide again while it runs: it only shows its window again.
 
 ## Close and quit
 
-- Close the window: Arrow keeps running next to the clock, like IDM. Downloads go on.
+- Close the window: Glide keeps running next to the clock, like IDM. Downloads go on.
 - Click the icon next to the clock to open the window again.
 - Right-click the icon for the menu:
-  - **Open Arrow** opens the window.
+  - **Open Glide** opens the window.
   - **Pause all** pauses the downloads that run or wait, and stops the queues that run. Files in a queue stay in it.
   - **Speed limit** turns the speed limit on or off. A check mark shows when it is on.
-  - **Quit** stops Arrow. Unfinished downloads continue the next time you start it.
+  - **Quit** stops Glide. Unfinished downloads continue the next time you start it.
 
 ## Uninstall
 
-- **Settings → Apps → Installed apps → Arrow → Uninstall**. It asks whether to also remove the download list and settings (`state.json`).
+- **Settings → Apps → Installed apps → Glide → Uninstall**. It asks whether to also remove the download list and settings (`state.json`).
 - Or in PowerShell (keeps the download list and settings):
 
   ```powershell
-  irm https://raw.githubusercontent.com/1949-2005/arrow/main/uninstall.ps1 | iex
+  irm https://raw.githubusercontent.com/1949-2005/glide/main/uninstall.ps1 | iex
   ```
 
-- Your downloaded files always stay. Remove Arrow from your browser's extensions page too.
+- Your downloaded files always stay. Remove Glide from your browser's extensions page too.
 
 ## Name and icon
 
-- `brand.json` holds the app's name (Arrow) and its icon file (`assets/logo.ico`).
+- `brand.json` holds the app's name (Glide) and its icon file (`assets/logo.ico`).
 - They are used for both programs, the window titles, the window and taskbar icon, the icon next to the clock, the shortcuts and the file properties.
 - The browser extension has the name in its own files (`manifest.json`, `popup.html`, `popup.js`, `background.js`). A test checks that they match `brand.json`. Its icon is in `extension/icons/`.
 - To change the name or icon: quit the app, edit `brand.json` (and the extension's files), then double-click `install.cmd` again. It removes the shortcuts with the old name.
@@ -68,8 +70,8 @@ Prefer clicking?
 - Paste a link in the bar at the top of the window and click **Download** (or press Enter). Ctrl+V anywhere in the window pastes there too. You can also drop links on the window.
 - The **Download File Info** window opens (see below). Pick where the file goes, then click **Start Download**.
 - To add several links at once, click the **Add several links** button (the list icon at the top right). "Save as" is used only for a single link. If you tick "Start later", the downloads go into the main queue.
-- Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Arrow tells you how many links that makes before it adds them. At most 1000 at a time.
-- Clipboard monitoring (turn it on in Options › General, "Offer links I copy"): copy a link to a file, for example a .zip or .mp4. Arrow offers "From clipboard" at the top of its window and adds the file only if you click Download.
+- Batch links: for numbered files, put the numbers in square brackets. `https://site.com/img[001-120].jpg` adds img001.jpg to img120.jpg (the leading zeros are kept). Glide tells you how many links that makes before it adds them. At most 1000 at a time.
+- Clipboard monitoring (turn it on in Options › General, "Offer links I copy"): copy a link to a file, for example a .zip or .mp4. Glide offers "From clipboard" at the top of its window and adds the file only if you click Download.
 - **Options** (the sliders icon at the top right, or Ctrl+,) holds the settings. The **⋯** button has About and Quit.
 
 ### The main window
@@ -91,14 +93,14 @@ Prefer clicking?
   - **Sort** (at the right of the search field) does the same from a menu.
   - **View** shows or hides columns. Right-click the column titles for the same menu. When the window is too narrow, the columns at the right are left out.
   - "Last try" is the last time the download started.
-- Select like in a file list: click, Ctrl+click, Shift+click, Ctrl+A. Enter or a double-click opens a finished file, or the progress window of an unfinished one. Space pauses or resumes. Delete removes. When you remove finished downloads, Arrow asks if it should also delete the files.
+- Select like in a file list: click, Ctrl+click, Shift+click, Ctrl+A. Enter or a double-click opens a finished file, or the progress window of an unfinished one. Space pauses or resumes. Delete removes. When you remove finished downloads, Glide asks if it should also delete the files.
 - Right-click a download for more: Open, Open with…, Show in folder, Copy link, Resume or Pause, Add to queue, Remove from queue, Move up and Move down (in a queue), Progress window, Properties… and Remove….
 - **The details panel** is hidden at first. To show it, click **View**, then **Details panel**. It shows the selected download: progress, speed, time left, connections, queue, last try, description, and buttons for Pause or Resume, Open, Show in folder, Copy link, Progress window, Properties and Remove.
 - The bar at the bottom shows how many downloads run and the total speed, the speed limit, and the next queue start (for example "Main queue at 02:00").
 
 ### Queues and the Scheduler
 
-- A queue is a list of downloads that start together, at a time you choose. Arrow always has the **Main queue**. You can add your own.
+- A queue is a list of downloads that start together, at a time you choose. Glide always has the **Main queue**. You can add your own.
 - To put downloads into a queue:
   - In the Download File Info window, click **Download Later**. Choose the queue (or click **+** for a new one). Tick **Start the queue now** if you want. Click **Add to queue**.
   - Or right-click downloads in the list and choose **Add to queue**, or drag them onto a queue in the sidebar.
@@ -109,12 +111,12 @@ Prefer clicking?
   - **Start**: "By hand only", or "At" a time, like 02:00.
   - **On these days**: click the days. No day chosen means every day.
   - **Stop**: tick "At" and type a time to stop the queue then. The files stay in the queue.
-  - **If a file fails**: Arrow tries a failed file again after 10 seconds, as many times as you choose (0 to 10).
+  - **If a file fails**: Glide tries a failed file again after 10 seconds, as many times as you choose (0 to 10).
   - **When the queue is done**: Nothing, Sleep or Shut down. See When done.
   - Under these, the queue's files in order. **Move up** and **Move down** change the order. **Remove from queue** takes a file out.
   - **New queue** adds a queue. **Delete** removes one. Its files go to the Main queue.
   - **Start now** and **Stop** start or stop the selected queue at once.
-- Arrow must be running to start a queue at its time. After a restart no queue runs until its next start time, or until you start it.
+- Glide must be running to start a queue at its time. After a restart no queue runs until its next start time, or until you start it.
 - A download you start by hand (Resume) runs at once, also when its queue does not run.
 
 ### Speed limit
@@ -127,16 +129,16 @@ Prefer clicking?
 
 ### When a link is already in the list
 
-- If you add a link that is already in your list, Arrow asks:
+- If you add a link that is already in your list, Glide asks:
   - **Download it again with a new name**: the new file gets (1), (2) and so on.
   - **Replace the existing file**: the old download goes from the list. The new file is saved over the old file.
-  - **Resume the existing download**: Arrow continues the old download. If it is finished, Arrow shows it instead.
+  - **Resume the existing download**: Glide continues the old download. If it is finished, Glide shows it instead.
 - Tick **Remember my choice** to skip this question next time. Change it in Options › General, "When a link is already in the list".
-- For links you add with "Add several links", Arrow does not ask: the new file gets a new name, or replaces the old one if you chose "Replace".
+- For links you add with "Add several links", Glide does not ask: the new file gets a new name, or replaces the old one if you chose "Replace".
 
 ### Categories
 
-- A category says which file types go together and where they are saved. Arrow has five: Video, Music, Programs, Documents and Compressed. Files of any other type go to Other.
+- A category says which file types go together and where they are saved. Glide has five: Video, Music, Programs, Documents and Compressed. Files of any other type go to Other.
 - Open **Options › Categories** to see them.
   - **Edit…** (or double-click): change the file types (separated by spaces, without the dot, like `mp4 mkv`) and the folder. The five built-in categories keep their names.
   - **Add**: make your own category, for example "Courses" with `srt vtt`. A file type belongs to one category only: when you add it to one, it leaves the other.
@@ -162,10 +164,10 @@ Prefer clicking?
 
 ### Download File Info, progress and Download complete
 
-- The **Download File Info** window is Arrow's own window, like IDM's. It opens for a pasted link and for every download from the browser:
+- The **Download File Info** window is Glide's own window, like IDM's. It opens for a pasted link and for every download from the browser:
   - It shows the link, the size (when the server tells it) and where the file goes.
   - For YouTube, choose the **Format** (MP4, WEBM, M4A or MP3). Each one shows its real size. The file name is the video's title.
-  - **Category** changes the folder. **+** makes a new category. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Arrow adds a number.
+  - **Category** changes the folder. **+** makes a new category. Type another path in **Save As**, or click **Browse…** to pick it in Windows. Missing folders are created. If a file with that name exists, Glide adds a number.
   - Tick **Remember this folder for Video** (the name follows the category) to keep that folder. Next time, every Video download goes there, also downloads that skip this window.
   - **Description** is optional. It shows in the list.
   - **Start Download** (or Enter) starts it, and the window shows its progress. **Download Later** puts it into a queue (see Queues and the Scheduler). **Cancel** (or Esc) drops it.
@@ -174,26 +176,26 @@ Prefer clicking?
 - The progress window shows the status, size, speed, time left and one bar piece per connection.
   - **Connections** lists each connection: how much it downloaded, and "Receiving data…", "Done" or "Waiting".
   - **Options** has the speed limit and "When this download is done" for this download.
-  - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Arrow remembers it.
+  - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Glide remembers it.
   - While it downloads, the **Minimize to tray** button in the title bar (three small grey down arrows stepping down like stairs, left of **—**) sends the window to the system tray; **—** minimizes it to the taskbar as usual. Three running grey arrows appear next to the clock while it downloads (they stand still while it is paused). Hover it for the progress, click it to bring the window back. It comes back by itself when the download finishes or fails.
 - **Download complete**: when a download you started with Start Download finishes, this window opens once. Click **Open**, **Open with…**, **Open folder** or **Close**. Tick **Don't show this window again** to stop it (turn it back on in Options › General, "Show the Download complete window").
 
 ### With the browser extension
 
 - With the extension:
-  - While the app runs, browser downloads go to Arrow automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
-  - Right-click a link or a video and choose "Download with Arrow".
-  - Point at a video on a web page. The Arrow panel appears at its top right, like IDM's. Click **Download this video**. If it says "No video found yet", let the video play for a few seconds, then click again.
+  - While the app runs, browser downloads go to Glide automatically. To stop this, open the extension popup and switch off "Take over browser downloads".
+  - Right-click a link or a video and choose "Download with Glide".
+  - Point at a video on a web page. The Glide panel appears at its top right, like IDM's. Click **Download this video**. If it says "No video found yet", let the video play for a few seconds, then click again.
     - **?** explains the panel. **×** hides it on that video until you reload the page.
     - Drag the panel to move it. Double-click its edge (the dots on the left) to put it back.
-  - Each of these opens Arrow's **Download File Info** window. It comes from Arrow, not from the browser, so Arrow must be running. If it is not, the browser keeps its own download, and the extension's other buttons say that Arrow is not running.
+  - Each of these opens Glide's **Download File Info** window. It comes from Glide, not from the browser, so Glide must be running. If it is not, the browser keeps its own download, and the extension's other buttons say that Glide is not running.
   - Play a video, then click the extension icon. It shows the media it found (the number on the icon tells how many). Click Download. The Download File Info window opens for these too.
-  - **Open Arrow** in the extension popup shows Arrow's window.
+  - **Open Glide** in the extension popup shows Glide's window.
   - To hide that button, open the extension popup and switch off "Show download button on videos".
 
 ## YouTube videos
 
-- Arrow needs three free tools for this: yt-dlp, FFmpeg and Deno. The setup gets them with winget. If you skipped that step, run this once in a command window:
+- Glide needs three free tools for this: yt-dlp, FFmpeg and Deno. The setup gets them with winget. If you skipped that step, run this once in a command window:
   - `winget install yt-dlp.yt-dlp` (it brings FFmpeg and Deno)
   - If they are already installed, winget tells you so.
 - Ways to start:
@@ -201,24 +203,24 @@ Prefer clicking?
     - **VIDEO · MP4** and **VIDEO · WEBM**: one line per resolution. The size counts the video and the sound.
     - **AUDIO**: M4A and MP3.
     - Click one. The Download File Info window opens with that format. It does not ask for the format again.
-    - Getting the list takes yt-dlp about 3 seconds (about 8 after YouTube updates its player). Arrow starts it as soon as you point at the video, so it is often ready when you click. It keeps the list for 15 minutes.
-  - In Brave, open a YouTube video page. Click the Arrow icon and click **Download this video**.
-  - Right-click a YouTube link and choose "Download with Arrow".
-  - Paste the link in the bar at the top of Arrow's window. The Download File Info window lists the formats.
-- The Download File Info window has one **Format** list, with real sizes. While Arrow reads the list, it says "Getting formats…". Only Cancel works until then.
-- Sizes are real: Arrow asks YouTube. A format without a known size is not shown. The final file can be a few KB bigger (merging, MP3 header).
+    - Getting the list takes yt-dlp about 3 seconds (about 8 after YouTube updates its player). Glide starts it as soon as you point at the video, so it is often ready when you click. It keeps the list for 15 minutes.
+  - In Brave, open a YouTube video page. Click the Glide icon and click **Download this video**.
+  - Right-click a YouTube link and choose "Download with Glide".
+  - Paste the link in the bar at the top of Glide's window. The Download File Info window lists the formats.
+- The Download File Info window has one **Format** list, with real sizes. While Glide reads the list, it says "Getting formats…". Only Cancel works until then.
+- Sizes are real: Glide asks YouTube. A format without a known size is not shown. The final file can be a few KB bigger (merging, MP3 header).
 - Just after a live stream, YouTube is still processing the recording. Its sizes are then approximate ("~1.04 GB"), and it downloads in many small pieces, several at once.
-- MP3 is made at 192 kbps. So Arrow knows its size before the download.
+- MP3 is made at 192 kbps. So Glide knows its size before the download.
 - The file name is the video's title: `<title>.mp4`, `.webm`, `.m4a` or `.mp3`.
 - Videos go to the `Video` folder. M4A and MP3 files go to the `Music` folder.
-- If Arrow can't read the format list, the window offers only "MP4 · best quality" and "MP3 · audio".
-- Arrow prefers H.264 video. It plays everywhere. Very high resolutions (like 4K) may use VP9 or AV1. VLC plays them.
+- If Glide can't read the format list, the window offers only "MP4 · best quality" and "MP3 · audio".
+- Glide prefers H.264 video. It plays everywhere. Very high resolutions (like 4K) may use VP9 or AV1. VLC plays them.
 - Pause and Resume work. One progress bar covers video and sound. "Merging" is the last step.
 - If YouTube downloads start to fail, run `winget upgrade yt-dlp.yt-dlp`.
 - Limits:
   - One video per link. No playlists or channels.
   - No live streams.
-  - No private, members-only or age-restricted videos. Arrow never sends your YouTube login.
+  - No private, members-only or age-restricted videos. Glide never sends your YouTube login.
   - The speed limit applies to each video. A new limit (for all downloads or for this one) takes effect when a video starts.
 - YouTube's terms only allow saving videos through YouTube's own app. Download your own videos, or videos you are allowed to save.
 
@@ -238,7 +240,7 @@ Prefer clicking?
 - List columns (size, status, time left, speed, last try, description, folder, date added), sorting, and a details panel.
 - A description for each download, and a Properties window.
 - HLS video streams (.m3u8), also AES-128 encrypted ones. They are saved as .ts (or .mp4).
-  - Some sites (like X) send the sound as a separate track. Arrow downloads it too and joins it to the video with ffmpeg, into one .mp4. This needs ffmpeg: `winget install yt-dlp.FFmpeg`.
+  - Some sites (like X) send the sound as a separate track. Glide downloads it too and joins it to the video with ffmpeg, into one .mp4. This needs ffmpeg: `winget install yt-dlp.FFmpeg`.
 - Change the address of a download whose link expired (in Properties).
 - Open, Open with… and Show in folder for finished files.
 - A desktop notification and a Download complete window when a download finishes.
@@ -246,9 +248,9 @@ Prefer clicking?
 - Browser cookies are passed along, so downloads that need a login work.
 - Batch links with number ranges, like `img[001-120].jpg`.
 - Clipboard monitoring (off by default).
-- Start with Windows (off by default): Arrow starts next to the clock when you sign in to Windows, without opening its window.
+- Start with Windows (off by default): Glide starts next to the clock when you sign in to Windows, without opening its window.
 - Sleep or shut down the PC when all downloads finish, when one download finishes, or when a queue is done, after a countdown you can cancel. Or open a file when it finishes.
-- A real Windows app: `Arrow.exe` with its own windows and icon, Start menu and desktop shortcuts, and an icon next to the clock with Open, Pause all, Speed limit and Quit. It follows Windows' light or dark mode.
+- A real Windows app: `Glide.exe` with its own windows and icon, Start menu and desktop shortcuts, and an icon next to the clock with Open, Pause all, Speed limit and Quit. It follows Windows' light or dark mode.
 
 ## Settings
 
@@ -274,19 +276,19 @@ Options has four pages.
 - No DRM-protected video.
 - No torrents and no FTP.
 - Proxies: HTTP and HTTPS proxies only (no SOCKS).
-- `Arrow.exe` and `Arrow Engine.exe` are not signed. If Windows Smart App Control is on, it may block Arrow.
-- If Arrow stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
+- `Glide.exe` and `Glide Engine.exe` are not signed. If Windows Smart App Control is on, it may block Glide.
+- If Glide stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
 - Clipboard monitoring only offers links that end in a file type of a category (Video, Music, Programs, Documents, Compressed, or your own).
 - Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 
 ## Other video sites
 
-Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Arrow downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Arrow never passes your browser's cookies to yt-dlp).
+Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Glide downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Glide never passes your browser's cookies to yt-dlp).
 
 ## Drop target
 
-**⋯ › Show drop target** puts a small Arrow tile on top of every window, like IDM's. Drag a link (or several) from your browser onto it to download them. It shows the total speed while something downloads. Drag it anywhere: it stays there next time. Double-click it to open Arrow, right-click it to hide it.
+**⋯ › Show drop target** puts a small Glide tile on top of every window, like IDM's. Drag a link (or several) from your browser onto it to download them. It shows the total speed while something downloads. Drag it anywhere: it stays there next time. Double-click it to open Glide, right-click it to hide it.
 
 ## Sites
 
@@ -294,51 +296,51 @@ Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebo
 
 ## Proxy
 
-**Options › Downloads › Use a proxy**, then its address, like `http://proxy.example.com:8080` (or `https://`, with `user:password@` before the host if it needs one). Every download, YouTube included, goes through it. Saving restarts Arrow's engine for a moment to take the new setting; running downloads stop and you resume them.
+**Options › Downloads › Use a proxy**, then its address, like `http://proxy.example.com:8080` (or `https://`, with `user:password@` before the host if it needs one). Every download, YouTube included, goes through it. Saving restarts Glide's engine for a moment to take the new setting; running downloads stop and you resume them.
 
 ## Updates
 
-Arrow checks GitHub for a new version 10 seconds after it starts and then once a day. When there is one, a bar at the top says so: **Update** downloads the new setup, checks its SHA-256 checksum, installs it and starts Arrow again (running downloads stop; resume them after). **×** hides that version. **⋯ › Check for updates** checks now, and **⋯ › Check for updates automatically** turns the daily check off.
+Glide checks GitHub for a new version 10 seconds after it starts and then once a day. When there is one, a bar at the top says so: **Update** downloads the new setup, checks its SHA-256 checksum, installs it and starts Glide again (running downloads stop; resume them after). **×** hides that version. **⋯ › Check for updates** checks now, and **⋯ › Check for updates automatically** turns the daily check off.
 
 ## Notifications
 
-When a download finishes, Arrow shows a Windows notification with **Open** and **Show in folder**. Click the notification itself to see the download in Arrow. If notifications are turned off in Windows (Settings › System › Notifications), Arrow shows a balloon by its tray icon instead.
+When a download finishes, Glide shows a Windows notification with **Open** and **Show in folder**. Click the notification itself to see the download in Glide. If notifications are turned off in Windows (Settings › System › Notifications), Glide shows a balloon by its tray icon instead.
 
 ## When something goes wrong
 
-Arrow writes `log.txt` next to its `state.json` (in its install folder): when it started and stopped, and the details of any crash. Open it from **⋯ › Open log file** and attach it to a bug report.
+Glide writes `log.txt` next to its `state.json` (in its install folder): when it started and stopped, and the details of any crash. Open it from **⋯ › Open log file** and attach it to a bug report.
 
 ## Privacy and safety
 
-- Arrow runs only on your computer (127.0.0.1). Other websites cannot control it.
-- The browser extension can only add downloads and show Arrow's window. It cannot change settings, turn on Start with Windows, or open files.
-- Start with Windows puts an "Arrow" shortcut in your Startup folder. Turning the setting off deletes it.
-- Clipboard monitoring reads the clipboard when it changes, only while the setting is on. If the clipboard holds anything other than one download link, Arrow ignores it. Nothing from the clipboard is saved.
+- Glide runs only on your computer (127.0.0.1). Other websites cannot control it.
+- The browser extension can only add downloads and show Glide's window. It cannot change settings, turn on Start with Windows, or open files.
+- Start with Windows puts an "Glide" shortcut in your Startup folder. Turning the setting off deletes it.
+- Clipboard monitoring reads the clipboard when it changes, only while the setting is on. If the clipboard holds anything other than one download link, Glide ignores it. Nothing from the clipboard is saved.
 - Browser cookies are only sent to the site they belong to.
-- Your YouTube login cookies are never sent to Arrow or yt-dlp.
+- Your YouTube login cookies are never sent to Glide or yt-dlp.
 - Finished files are marked as "downloaded from the internet", so Windows SmartScreen still checks programs before they run.
 - The download list and settings are saved in `state.json` next to the app. This file holds the links and login cookies of unfinished downloads. Do not share it.
 
 ## Build from source
 
 - Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
-- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
-- To sign the exes (so SmartScreen and Smart App Control trust them), set `ARROW_SIGN_PFX` to your code-signing certificate (.pfx) and `ARROW_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Arrow.exe, Arrow Engine.exe and ArrowSetup.exe with SHA-256 and a timestamp (`ARROW_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
-- Or run Arrow from this folder:
+- `node build-installer.js` makes `dist\GlideSetup.exe` and `dist\GlideSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
+- To sign the exes (so SmartScreen and Smart App Control trust them), set `ARROW_SIGN_PFX` to your code-signing certificate (.pfx) and `ARROW_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Glide.exe, Glide Engine.exe and GlideSetup.exe with SHA-256 and a timestamp (`ARROW_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
+- Or run Glide from this folder:
   - Double-click `install.cmd`. Wait about 15 seconds.
-  - It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:
-    - `Arrow.exe` is the app you see: a normal Windows app with its own windows.
-    - `Arrow Engine.exe` does the downloads in the background (about 90 MB: it carries its own copy of Node.js). Arrow starts it for you.
-  - Arrow stays in this folder. Do not move the folder after you install. If you must move it, uninstall first, move it, then install again.
-  - If Arrow is running, `install.cmd` asks you to quit it first.
-  - After you update the engine's files (the `.js` files), quit Arrow and start it again. No new install is needed.
+  - It makes two programs in this folder, puts Glide in the Start menu and on the desktop, and starts Glide:
+    - `Glide.exe` is the app you see: a normal Windows app with its own windows.
+    - `Glide Engine.exe` does the downloads in the background (about 90 MB: it carries its own copy of Node.js). Glide starts it for you.
+  - Glide stays in this folder. Do not move the folder after you install. If you must move it, uninstall first, move it, then install again.
+  - If Glide is running, `install.cmd` asks you to quit it first.
+  - After you update the engine's files (the `.js` files), quit Glide and start it again. No new install is needed.
   - Run `install.cmd` again after you update the app's files (the `app` folder), change `brand.json` or the icon, or update Node.js.
-  - To uninstall, quit Arrow, then double-click `uninstall.cmd`. It removes the shortcuts, `Arrow.exe` and `Arrow Engine.exe`. Your downloaded files and `state.json` (the download list and settings) stay.
+  - To uninstall, quit Glide, then double-click `uninstall.cmd`. It removes the shortcuts, `Glide.exe` and `Glide Engine.exe`. Your downloaded files and `state.json` (the download list and settings) stay.
 
 ## For developers
 
 - `npm test` runs all tests. No internet is needed.
 - `npm start` or `node desktop.js` runs only the engine (no window, no icon next to the clock), at http://127.0.0.1:9614.
-- The app's sources are in `app/`. Started without `Arrow Engine.exe` next to it, `Arrow.exe` runs `node desktop.js`.
+- The app's sources are in `app/`. Started without `Glide Engine.exe` next to it, `Glide.exe` runs `node desktop.js`.
 - The design of the app's windows is in `docs/NATIVE_UI.md`.
 - See `CLAUDE.md`, `docs/SPEC.md` and `filemap.md`.

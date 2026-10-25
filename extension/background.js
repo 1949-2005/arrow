@@ -1,7 +1,7 @@
 import { APP, sendConfirm, appAlive, pickMedia, isYouTubeVideo, youTubeId, playerData, optionsFromPlayer } from './common.js';
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
-  chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Arrow', contexts: ['link', 'video', 'audio', 'image'] });
+  chrome.contextMenus.create({ id: 'fastdl', title: 'Download with Glide', contexts: ['link', 'video', 'audio', 'image'] });
   if (reason !== 'install' && reason !== 'update') return;
   // Open tabs keep the previous content.js, cut off from the extension: give them the new one, which replaces it in place
   // (no reload). Restricted and discarded tabs refuse; they get it on their next load.
@@ -78,8 +78,8 @@ function formats(url) {
   if (!list) {
     list = fetch(APP + '/api/formats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
       .then(r => r.json())
-      .then(j => Array.isArray(j?.options) ? { title: String(j.title ?? ''), options: j.options } : { error: String(j?.error || 'Arrow could not list the formats.') },
-        () => ({ error: 'Arrow is not running.' }));
+      .then(j => Array.isArray(j?.options) ? { title: String(j.title ?? ''), options: j.options } : { error: String(j?.error || 'Glide could not list the formats.') },
+        () => ({ error: 'Glide is not running.' }));
     formatLists.set(url, list);
     list.then(r => { if (r.error) formatLists.delete(url); }); // failures are asked again next time
   }
@@ -111,7 +111,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   chain.then(() => chrome.storage.session.get(k)).then(async got => {
     const pick = pickMedia({ pageUrl, src, title, quality, format, media: got[k] ?? [] });
     if (pick.error) return reply(pick);
-    reply(await sendConfirm(pick) ? { ok: true } : { error: 'Arrow is not running.' });
-  }).catch(() => reply({ error: 'Arrow is not running.' }));
+    reply(await sendConfirm(pick) ? { ok: true } : { error: 'Glide is not running.' });
+  }).catch(() => reply({ error: 'Glide is not running.' }));
   return true; // reply comes later
 });

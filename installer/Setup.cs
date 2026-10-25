@@ -55,6 +55,7 @@ namespace Arrow.Setup
                     return 0;
                 }
                 Installer.Copy(dir, null);
+                Installer.TakeOverFormer(dir);
                 var tools = args.Contains("--no-tools") || Installer.GetTools(null) == null;
                 Installer.Shortcuts(dir, !args.Contains("--no-desktop"), !args.Contains("--no-startup"));
                 Installer.Register(dir);
@@ -86,7 +87,26 @@ namespace Arrow.Setup
         static string Programs { get { return Env("ARROW_SETUP_PROGRAMS") ?? Environment.GetFolderPath(Environment.SpecialFolder.Programs); } }
         static string Desktop { get { return Env("ARROW_SETUP_DESKTOP") ?? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); } }
         static string Startup { get { return Env("ARROW_SETUP_STARTUP") ?? Environment.GetFolderPath(Environment.SpecialFolder.Startup); } }
-        static string UninstallKey { get { return (Env("ARROW_SETUP_REGKEY") ?? @"Software\Microsoft\Windows\CurrentVersion\Uninstall") + "\\" + Name; } }
+        static string UninstallRoot { get { return Env("ARROW_SETUP_REGKEY") ?? @"Software\Microsoft\Windows\CurrentVersion\Uninstall"; } }
+        static string UninstallKey { get { return UninstallRoot + "\\" + Name; } }
+
+        // The app's earlier names: an install under one of them is taken over (its folder, its download list) by this one
+        public static readonly string[] Former = { "Arrow" };
+
+        // A former name's install: its name and folder, or null
+        static string[] FormerInstall()
+        {
+            foreach (var n in Former)
+            {
+                if (n == Name) continue;
+                using (var k = Registry.CurrentUser.OpenSubKey(UninstallRoot + "\\" + n))
+                {
+                    var at = k == null ? null : k.GetValue("InstallLocation") as string;
+                    if (!string.IsNullOrEmpty(at) && Directory.Exists(at)) return new[] { n, at };
+                }
+            }
+            return null;
+        }
         static string[] Links(string dir) { return new[] { Path.Combine(Programs, Name + ".lnk"), Path.Combine(Desktop, Name + ".lnk"), Path.Combine(Startup, Name + ".lnk") }; }
 
         // An earlier install's folder (upgrades go there), else %LOCALAPPDATA%\Programs\<name>
@@ -100,6 +120,9 @@ namespace Arrow.Setup
                     var at = k == null ? null : k.GetValue("InstallLocation") as string;
                     if (!string.IsNullOrEmpty(at)) return at;
                 }
+                // under a former name: the same folder, so the download list and the browser's unpacked extension stay put
+                var former = FormerInstall();
+                if (former != null) return former[1];
                 return Path.Combine(LocalAppData, "Programs", Name);
             }
         }
@@ -145,7 +168,7 @@ namespace Arrow.Setup
         public static List<Process> Running(string dir)
         {
             var found = new List<Process>();
-            foreach (var n in new[] { Name, Name + " Engine" })
+            foreach (var n in new[] { Name }.Concat(Former).Distinct().SelectMany(x => new[] { x, x + " Engine" }))
                 foreach (var p in Process.GetProcessesByName(n))
                 {
                     var image = ImagePath(p);
@@ -174,7 +197,7 @@ namespace Arrow.Setup
             {
                 var left = Running(dir);
                 if (left.Count == 0) return true;
-                if (left.All(p => p.ProcessName == Name)) // the engine is gone: the window waits for it in vain
+                if (left.All(p => !p.ProcessName.EndsWith(" Engine"))) // the engine is gone: the window waits for it in vain
                     foreach (var p in left) { try { p.Kill(); p.WaitForExit(3000); } catch (Exception) { } }
             }
             return Running(dir).Count == 0;
@@ -183,6 +206,30 @@ namespace Arrow.Setup
         // ---- install
 
         // The payload into dir: files are replaced, state.json (the download list and settings) is not in it, so it stays
+        // After Copy: what a former name left in dir goes (its exes, shortcuts, Settings > Apps entry, notification name);
+        // its window layout moves to this name's. The download list (state.json) is already where this name reads it.
+        public static void TakeOverFormer(string dir)
+        {
+            foreach (var n in Former)
+            {
+                if (n == Name) continue;
+                using (var k = Registry.CurrentUser.OpenSubKey(UninstallRoot + "\\" + n))
+                {
+                    var at = k == null ? null : k.GetValue("InstallLocation") as string;
+                    if (string.IsNullOrEmpty(at) || !Same(at, dir)) continue;
+                }
+                foreach (var f in new[] { n + ".exe", n + " Engine.exe", "Uninstall " + n + ".exe" })
+                    try { File.Delete(Path.Combine(dir, f)); } catch (Exception) { } // one still running goes with the next reboot's cleanup
+                foreach (var l in new[] { Path.Combine(Programs, n + ".lnk"), Path.Combine(Desktop, n + ".lnk"), Path.Combine(Startup, n + ".lnk") })
+                    if (File.Exists(l)) { var target = ShortcutTarget(l); if (target != null && Same(Path.GetDirectoryName(target), dir)) File.Delete(l); }
+                Registry.CurrentUser.DeleteSubKeyTree(UninstallRoot + "\\" + n, false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\AppUserModelId\1949-2005." + n, false);
+                var oldUi = Path.Combine(LocalAppData, n, "ui.json");
+                var newUi = Path.Combine(LocalAppData, Name, "ui.json");
+                if (File.Exists(oldUi) && !File.Exists(newUi)) { Directory.CreateDirectory(Path.GetDirectoryName(newUi)); File.Copy(oldUi, newUi); }
+            }
+        }
+
         public static void Copy(string dir, Action<double> progress)
         {
             Directory.CreateDirectory(dir);

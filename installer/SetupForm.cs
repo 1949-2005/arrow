@@ -292,7 +292,7 @@ namespace Arrow.Setup
         void RunCopy()
         {
             steps[0].Set(StepState.Running, null);
-            Work(() => Installer.Copy(dir, f => Ui(() => Progress(f * 0.7))), e =>
+            Work(() => { Installer.Copy(dir, f => Ui(() => Progress(f * 0.7))); Installer.TakeOverFormer(dir); }, e =>
             {
                 if (e == null) { steps[0].Set(StepState.Done, null); RunTools(); return; }
                 steps[0].Set(StepState.Failed, e.Message);

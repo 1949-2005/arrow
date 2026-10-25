@@ -84,7 +84,8 @@ test('--check-update reads the latest release: newer, the same, or missing its s
     p.stdout.on('data', d => stdout += d);
     p.on('exit', status => resolve({ status, stdout }));
   });
-  const assets = [{ name: 'ArrowSetup.exe', browser_download_url: 'http://x/s.exe' }, { name: 'ArrowSetup.exe.sha256', browser_download_url: 'http://x/s.sha256' }];
+  const assets = [{ name: 'TestDLSetup.exe', browser_download_url: 'http://x/s.exe' }, { name: 'TestDLSetup.exe.sha256', browser_download_url: 'http://x/s.sha256' }];
+  const former = [{ name: 'ArrowSetup.exe', browser_download_url: 'http://x/a.exe' }, { name: 'ArrowSetup.exe.sha256', browser_download_url: 'http://x/a.sha256' }];
   try {
     release = { tag_name: 'v1.2.0', assets };
     let r = await run();
@@ -96,7 +97,10 @@ test('--check-update reads the latest release: newer, the same, or missing its s
     release = { tag_name: 'v9.0.0', assets: [] };
     r = await run();
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /no ArrowSetup\.exe or no checksum/);
+    assert.match(r.stdout, /no TestDLSetup\.exe or no checksum/);
+    release = { tag_name: 'v9.1.0', assets: former }; // a release with the setup under the app's former name only
+    r = await run();
+    assert.equal(r.stdout.trim(), 'update v9.1.0');
   } finally {
     server.close();
   }

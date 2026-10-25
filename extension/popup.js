@@ -23,7 +23,7 @@ if (!$('#yt').hidden) {
     const b = $('#ytdl');
     b.disabled = true;
     const ok = !!await sendConfirm({ url: tab.url });
-    b.textContent = ok ? 'Sent ✓' : 'Failed. Is Arrow running?';
+    b.textContent = ok ? 'Sent ✓' : 'Failed. Is Glide running?';
     b.disabled = ok;
   };
 }

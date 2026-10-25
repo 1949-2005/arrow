@@ -352,7 +352,7 @@ test('popup YouTube button sends the video for the Download File Info window; no
   reset('down');
   els = await openPopup('https://youtu.be/dQw4w9WgXcQ');
   await els['#ytdl'].onclick();
-  assert.equal(els['#ytdl'].textContent, 'Failed. Is Arrow running?');
+  assert.equal(els['#ytdl'].textContent, 'Failed. Is Glide running?');
   assert.equal(els['#ytdl'].disabled, false);
   noWindow();
 });
@@ -456,7 +456,7 @@ test('video button message: sends the picked media with the page as referrer', a
   noWindow();
 
   reset('down');
-  assert.deepEqual(await videoMsg(vmsg({ src: 'https://cdn.x.com/v.mp4' })), { error: 'Arrow is not running.' });
+  assert.deepEqual(await videoMsg(vmsg({ src: 'https://cdn.x.com/v.mp4' })), { error: 'Glide is not running.' });
   noWindow();
 });
 
@@ -490,7 +490,7 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
   const other = 'https://youtu.be/dQw4w9WgXcQ';
   assert.deepEqual(await msg(other), { error: 'Private video' });
   reset('down');
-  assert.deepEqual(await msg(other), { error: 'Arrow is not running.' });
+  assert.deepEqual(await msg(other), { error: 'Glide is not running.' });
   reset();
   assert.deepEqual(await msg(other), LIST);
 });

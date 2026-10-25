@@ -7,7 +7,7 @@
 // An update injects this file again into open tabs (background.js onInstalled). A tab that already runs the new version gets
 // it a second time in the same JS world, so the top level uses var and function only: const would throw "already declared".
 
-var NAME = 'Arrow';
+var NAME = 'Glide';
 var LABEL = 'Download this video';
 
 // Big enough to be a player, not a thumbnail preview or an icon.

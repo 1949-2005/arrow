@@ -1,4 +1,4 @@
-// Updates from GitHub Releases, as install.ps1 does them: the latest release of brand.json's "repo", its ArrowSetup.exe
+// Updates from GitHub Releases, as install.ps1 does them: the latest release of brand.json's "repo", its <name>Setup.exe
 // checked against its .sha256, then run quietly (--quit-arrow ends this app; --start opens the new one). Network calls
 // run off the UI thread and report back through the callbacks, on that thread. ARROW_UPDATES_URL points the check
 // elsewhere (tests).
@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Threading;
@@ -20,7 +21,8 @@ namespace Arrow
 
     public static class Updater
     {
-        public const string SetupName = "ArrowSetup.exe";
+        // The release's setup: <name>Setup.exe, else one under the app's former name (a release keeps both for a while)
+        static string[] SetupNames { get { return new[] { Program.Name + "Setup.exe" }.Concat(new[] { "Arrow" }.Where(n => n != Program.Name).Select(n => n + "Setup.exe")).ToArray(); } }
 
         static string LatestUrl
         {
@@ -54,8 +56,9 @@ namespace Arrow
                     if (url == null) throw new InvalidOperationException("brand.json names no repository to update from.");
                     string json;
                     using (var c = Client()) json = c.DownloadString(url);
-                    var r = Core.ReleaseSetup(Json.Parse(json) as IDictionary<string, object>, SetupName);
-                    if (r == null) throw new InvalidOperationException("The latest release has no " + SetupName + " or no checksum.");
+                    var release = Json.Parse(json) as IDictionary<string, object>;
+                    var r = SetupNames.Select(n => Core.ReleaseSetup(release, n)).FirstOrDefault(x => x != null);
+                    if (r == null) throw new InvalidOperationException("The latest release has no " + SetupNames[0] + " or no checksum.");
                     if (Core.IsNewer(r[0], System.Windows.Forms.Application.ProductVersion)) found = new Release { Tag = r[0], Setup = r[1], Sum = r[2] };
                 }
                 catch (Exception e) { error = "Couldn't check for updates: " + e.Message; Log.Write("app", error); }
@@ -73,7 +76,7 @@ namespace Arrow
                 {
                     var dir = Path.Combine(Path.GetTempPath(), Program.Name + "-update");
                     Directory.CreateDirectory(dir);
-                    var setup = Path.Combine(dir, SetupName);
+                    var setup = Path.Combine(dir, SetupNames[0]);
                     string sum;
                     using (var c = Client())
                     {

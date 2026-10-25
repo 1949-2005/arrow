@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Arrow",
+  "name": "Glide",
   "version": "1.0",
-  "description": "Send downloads and page videos to the Arrow download manager.",
+  "description": "Send downloads and page videos to the Glide download manager.",
   "permissions": ["downloads", "contextMenus", "webRequest", "cookies", "storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "all_frames": true, "run_at": "document_idle" }],
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
-  "action": { "default_popup": "popup.html", "default_title": "Arrow", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } }
+  "action": { "default_popup": "popup.html", "default_title": "Glide", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } }
 }

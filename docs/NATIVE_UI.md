@@ -1,11 +1,11 @@
-# Native UI design (Arrow.exe, direction "Inspector")
+# Native UI design (Glide.exe, direction "Inspector")
 
 The approved design for the native Windows app that replaces ui.html, confirm.html and progress.html, with the IDM
 parity screens approved on 2026-10-22 (`.scratch/idm-parity/spec.md`, mockups m1–m5).
 Every size is in pixels at 96 DPI (scale with the system DPI). Workers implement this; they do not invent UI.
 
 ## Principles
-- IDM's features in Arrow's own look: what IDM offers (columns, a command bar, queues and a scheduler, the progress
+- IDM's features in Glide's own look: what IDM offers (columns, a command bar, queues and a scheduler, the progress
   and complete windows, properties, categories), drawn as a Windows 11 utility. No menu bar, no big icon toolbar (the
   command bar's ghost buttons are 32 high with 16 px glyphs), no grid lines in the download list (small tables in
   dialogs use 1 px row dividers). Flat surfaces, 1 px hairlines, rounded corners, generous spacing, one primary
@@ -251,7 +251,7 @@ primary button accent/onAccent, secondary buttons transparent with a line border
 Enter = primary, Esc = Cancel, dark title bar in dark mode, the brand icon, FormBorderStyle FixedDialog, no min/max
 boxes, centered on the main window (or the screen when it is hidden). Engine calls run off the UI thread; their
 errors show inline or in an Error dialog.
-- Download File Info (560 wide; one per pending download, appears in front even when Arrow is in the tray; same
+- Download File Info (560 wide; one per pending download, appears in front even when Glide is in the tray; same
   rules as confirm.html): header (the Save As name's Windows icon at 32 px, centered in a 48 px slot, "Download File
   Info", Core.Subtitle), then label column 86: URL (read-only, selectable), amber note when the probe failed,
   Format (YouTube only, 320 wide; while probe.listing it shows "Getting formats…" with a small spinner and only
@@ -301,9 +301,9 @@ errors show inline or in an Error dialog.
     hides (it keeps updating) and the download gets
     its own tray icon, IDM's running arrows: three chevrons down the square, no logo (drawn as shapes, so they read at 16 px), in grey of the taskbar's shade (`SystemUsesLightTheme`:
     #3B3C3D on a light taskbar, #D8D8DC on a dark one). While it downloads the lit chevron moves down every 330 ms;
-    paused or queued, all three stay dim. It takes the id of Arrow's own tray
+    paused or queued, all three stay dim. It takes the id of Glide's own tray
     icon (still a separate icon, with its own window): Windows keys tray places by app and id, so it sits right after
-    Arrow's icon instead of at the far left, where a new icon goes. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
+    Glide's icon instead of at the far left, where a new icon goes. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
     "Paused · 45%"), then the name on a second line, within 127 characters (NotifyIcon's text field set by
     reflection; 63 if that fails): the only place a name is cut, its end giving way to "…". Left, right or double
     click: the window shows again where it was, in front, and the icon goes. When the download finishes, fails or is
@@ -366,7 +366,7 @@ errors show inline or in an Error dialog.
 - A one-line prompt (420 wide, e.g. "New queue": "Name of the new queue", up to 40 characters) → Cancel / Add.
 - About (400 wide): logo 64, name, version, "A download manager for Windows."
 
-## Setup (ArrowSetup.exe, `installer/`)
+## Setup (GlideSetup.exe, `installer/`)
 One window in the dialogs' look (the Dialog base: inspector body, top footer, the same buttons, light or dark like
 Windows), 600 x 440, its own taskbar button and the exe's icon. Each page has a header: the logo (56 px), a Big title,
 a muted line.
@@ -380,7 +380,7 @@ a muted line.
   them. No buttons while it runs; closing waits.
 - A failed winget: the explanation under the bar (winget missing: get App Installer; else check the connection), a
   ghost link "App Installer in the Microsoft Store", footer Skip and Try again (primary).
-- Arrow running (install or uninstall): "<name> is running. Quit it from its icon next to the clock, then click Try
+- Glide running (install or uninstall): "<name> is running. Quit it from its icon next to the clock, then click Try
   again." Footer: Back (left), Quit <name>, Try again (primary).
 - Done: "<name> is installed" / version; a warn line when the tools are missing; "Add <name> to your browser" (bold) and
   3 numbered steps: 1 "Open your browser's extensions page" with a button per installed browser (Brave, Chrome, Edge:
