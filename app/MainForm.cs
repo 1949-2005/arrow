@@ -535,7 +535,7 @@ namespace Arrow
             Func<string, bool> has = t => t != null && t.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
             // a queue lists its downloads in its own order: the engine's list order
             var source = section.StartsWith("queue:") && state != null ? state.Downloads.Where(d => d.Status != "pending") : all;
-            var shown = source.Where(d => Matches(d, section) && (q == "" || has(Core.ShortName(d)) || has(d.Url))).ToList();
+            var shown = source.Where(d => Matches(d, section) && (q == "" || has(Core.ShortName(d)) || has(d.Url) || has(d.Description) || has(d.File))).ToList(); // the file: its folder too
             if (sortColumn != null) shown = Core.Sort(shown, sortColumn, sortDesc, Queues);
             list.Queues = Queues;
             list.SortColumn = sortColumn;
@@ -1007,6 +1007,7 @@ namespace Arrow
                 t.Click += (s, e) => { Theme.SetMode(mode); SaveUi(); };
                 sub.Items.Add(t);
             }
+            Item(m, "Open downloads folder", OpenDownloadsFolder, state != null);
             Item(m, "Check for updates", () => CheckUpdates(true), updatePercent < 0);
             var auto = Item(m, "Check for updates automatically", () => { autoUpdates = !autoUpdates; SaveUi(); }, true);
             auto.Checked = autoUpdates;
@@ -1024,6 +1025,7 @@ namespace Arrow
             var open = Item(m, "Open " + Program.Name, ShowMain, true);
             open.Font = Theme.Bold;
             Item(m, "Pause all", () => Run(() => api.Post("/api/pause-all", null)), true);
+            Item(m, "Open downloads folder", OpenDownloadsFolder, true);
             m.ShowCheckMargin = true;
             var limit = Item(m, "Speed limit", ToggleLimit, true);
             m.Opening += (s, e) => limit.Checked = state != null && Core.LimitOn(state.Settings);
@@ -1101,6 +1103,19 @@ namespace Arrow
             }
             list.Select(id);
             list.Focus();
+        }
+
+        // Options' Save to folder in Explorer (made first if it isn't there yet)
+        void OpenDownloadsFolder()
+        {
+            var dir = state != null ? state.Settings.Dir : null;
+            if (string.IsNullOrEmpty(dir)) return;
+            try
+            {
+                Directory.CreateDirectory(dir);
+                System.Diagnostics.Process.Start("explorer.exe", "\"" + dir + "\"");
+            }
+            catch (Exception e) { Dialogs.Error(this, "Couldn't open " + dir + ": " + e.Message); }
         }
 
         // ---- updates (Updater)

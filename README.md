@@ -85,7 +85,7 @@ Prefer clicking?
   - by status: All, Active, Finished, Failed, Scheduled;
   - by type: Video, Music, Programs, Documents, Compressed, your own categories, and Other;
   - by queue: Main queue and your own queues. A green dot shows that a queue runs. Right-click a queue to open the Scheduler.
-- The search field filters by name or link.
+- The search field filters by name, link, description or folder. **⋯ › Open downloads folder** (also in the tray menu) opens your Save to folder.
 - The list has columns: Name, Size, Status, Time left, Speed, Last try and Description. Save to and Added are there too, but hidden.
   - Click a column title to sort by it. Click again to reverse the order. Click a third time to go back to the normal order.
   - **Sort** (at the right of the search field) does the same from a menu.
