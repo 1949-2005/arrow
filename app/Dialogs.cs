@@ -527,6 +527,28 @@ namespace Arrow
 
         public static void About(IWin32Window owner) { Modal(AboutDialog(), owner); }
 
+        // Keyboard shortcuts (F1, Ctrl+/, More > Keyboard shortcuts): Core.Shortcuts, keys at the left
+        static Dialog ShortcutsDialog()
+        {
+            var f = new Dialog("Keyboard shortcuts", 460);
+            var y = Dialog.Pad;
+            foreach (var k in Core.Shortcuts)
+            {
+                var row = new FactRow();
+                row.Set(k[0], k[1]);
+                row.Bounds = new Rectangle(Dialog.Pad, y, f.ClientSize.Width - 2 * Dialog.Pad, row.Height);
+                f.Add(row);
+                y += row.Height + Theme.Px(4);
+            }
+            f.BodyHeight(y + Dialog.Pad - Theme.Px(4));
+            var close = Dialog.Button("Close", ButtonKind.Primary, DialogResult.OK);
+            f.Buttons(new FlatButton[0], new[] { close });
+            f.AcceptButton = f.CancelButton = close;
+            return f;
+        }
+
+        public static void Shortcuts(IWin32Window owner) { Modal(ShortcutsDialog(), owner); }
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct OpenAsInfo { public string File, Class; public int Flags; }
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
@@ -638,6 +660,7 @@ namespace Arrow
                 TextField field;
                 Shot(folder, "newqueue", TextDialog("New queue", "Name of the new queue", "Weekend", 40, "Add", out field));
                 Shot(folder, "about", AboutDialog());
+                Shot(folder, "shortcuts", ShortcutsDialog());
                 Shot(folder, "error", ErrorDialog("Couldn't reach the server: the connection was reset. Check the link, then try again."));
 
                 // issue 06: Download Later's popover, Link already in the list, Properties, the category editor

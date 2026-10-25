@@ -823,6 +823,21 @@ namespace Arrow
         public static readonly string[] DuplicateSettings = { "ask", "number", "replace", "resume" };
         public static int DuplicateIndex(string duplicates) { return Math.Max(0, Array.IndexOf(DuplicateSettings, duplicates)); } // unknown = Ask me, as the engine
 
+        // The main window's keyboard shortcuts (MainForm.ProcessCmdKey), as the Keyboard shortcuts window lists them
+        public static readonly string[][] Shortcuts =
+        {
+            new[] { "Ctrl+V", "Paste a link into the paste bar" },
+            new[] { "Ctrl+N", "Add several links" },
+            new[] { "Ctrl+F", "Search downloads" },
+            new[] { "Ctrl+A", "Select all downloads" },
+            new[] { "Ctrl+C", "Copy the selected downloads' links" },
+            new[] { "Delete", "Remove the selected downloads" },
+            new[] { "Enter", "Open the selected download" },
+            new[] { "Ctrl+,", "Options" },
+            new[] { "F1 or Ctrl+/", "This list" },
+            new[] { "Esc", "Clear the search, close a window" },
+        };
+
         // The app's theme (ui.json "theme"): follow Windows, or always light or dark
         public static readonly string[] ThemeModes = { "system", "light", "dark" };
         public static readonly string[] ThemeNames = { "Use Windows setting", "Light", "Dark" };

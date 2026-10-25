@@ -975,6 +975,8 @@ namespace Arrow
                 case Keys.Control | Keys.N: Dialogs.AddLinks(api, this, ""); return true;
                 case Keys.Control | Keys.F: search.Box.Focus(); search.Box.SelectAll(); return true;
                 case Keys.Control | Keys.Oemcomma: OpenOptions(OptionsDialog.General); return true;
+                case Keys.F1:
+                case Keys.Control | Keys.OemQuestion: Dialogs.Shortcuts(this); return true;
                 case Keys.Delete: if (inText) break; Remove(list.Selected); return true;
                 case Keys.Control | Keys.A: if (inText) break; list.SelectAll(); return true;
                 case Keys.Control | Keys.C: if (inText) break; CopyLinks(); return true;
@@ -1023,6 +1025,7 @@ namespace Arrow
             var auto = Item(m, "Check for updates automatically", () => { autoUpdates = !autoUpdates; SaveUi(); }, true);
             auto.Checked = autoUpdates;
             m.ShowCheckMargin = true;
+            Item(m, "Keyboard shortcuts", () => Dialogs.Shortcuts(this), true);
             Item(m, "Open log file", () => Run(() => System.Diagnostics.Process.Start(Log.File)), Log.File != null && File.Exists(Log.File));
             Item(m, "About " + Program.Name, () => Dialogs.About(this), true);
             m.Items.Add(new ToolStripSeparator());

@@ -539,6 +539,7 @@ namespace Arrow
             Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
             Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
             Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
+            Ok(Core.Shortcuts.Length > 0 && Core.Shortcuts.All(k => k.Length == 2 && k[0] != "" && k[1] != ""), "each shortcut has keys and what they do");
 
             // updates
             Ok(Core.IsNewer("v1.0.1", "1.0.0") && Core.IsNewer("1.1", "1.0.9") && Core.IsNewer("v2.0.0", "1.9.9"), "newer versions");
