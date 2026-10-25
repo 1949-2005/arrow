@@ -1,13 +1,13 @@
-// ArrowSetup.exe (built by build-installer.js): installs Arrow for the user's account from the zip it carries, and
-// uninstalls it again as "Uninstall Arrow.exe" (a copy of itself in the install folder). No admin rights.
+// GlideSetup.exe (built by build-installer.js): installs Glide for the user's account from the zip it carries, and
+// uninstalls it again as "Uninstall Glide.exe" (a copy of itself in the install folder). No admin rights.
 //   (no arguments)      the setup window (SetupForm)
 //   --uninstall         uninstall mode (also when the exe's name starts with "Uninstall")
 //   --quiet             no window: install (--no-desktop, --no-startup, --no-tools) or uninstall (--remove-data);
-//                       --quit-arrow quits a running Arrow first; --start opens it after installing (its own update).
-//                       Exit 0 ok, 1 error, 2 Arrow is running, 3 tools missing.
-// Test hooks, so nothing touches the real system: ARROW_SETUP_DIR (install folder), ARROW_SETUP_PROGRAMS / _DESKTOP /
-// _STARTUP (shortcut folders), ARROW_SETUP_REGKEY (HKCU key holding the Uninstall entry), ARROW_SETUP_WINGET (the winget
-// command), FASTDL_PORT (the engine to quit); ARROW_SETUP_SHOTS=<folder> saves PNGs of every page and exits.
+//                       --quit-app quits a running Glide first; --start opens it after installing (its own update).
+//                       Exit 0 ok, 1 error, 2 Glide is running, 3 tools missing.
+// Test hooks, so nothing touches the real system: GLIDE_SETUP_DIR (install folder), GLIDE_SETUP_PROGRAMS / _DESKTOP /
+// _STARTUP (shortcut folders), GLIDE_SETUP_REGKEY (HKCU key holding the Uninstall entry), GLIDE_SETUP_WINGET (the winget
+// command), FASTDL_PORT (the engine to quit); GLIDE_SETUP_SHOTS=<folder> saves PNGs of every page and exits.
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -23,7 +23,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace Arrow.Setup
+namespace Glide.Setup
 {
     public static class SetupProgram
     {
@@ -35,7 +35,7 @@ namespace Arrow.Setup
             var uninstall = args.Contains("--uninstall") || Path.GetFileName(Application.ExecutablePath).StartsWith("Uninstall", StringComparison.OrdinalIgnoreCase);
             if (args.Contains("--quiet")) return Quiet(uninstall, args);
             Theme.Init();
-            var shots = Environment.GetEnvironmentVariable("ARROW_SETUP_SHOTS");
+            var shots = Environment.GetEnvironmentVariable("GLIDE_SETUP_SHOTS");
             if (!string.IsNullOrEmpty(shots)) { SetupForm.Shots(shots); return 0; }
             Application.Run(new SetupForm(uninstall));
             return 0;
@@ -46,7 +46,7 @@ namespace Arrow.Setup
             try
             {
                 var dir = uninstall ? Installer.InstalledDir : Installer.DefaultDir;
-                if (Installer.Running(dir).Count > 0 && !(args.Contains("--quit-arrow") && Installer.QuitArrow(dir))) { Console.Error.WriteLine(Installer.Name + " is running."); return 2; }
+                if (Installer.Running(dir).Count > 0 && !(args.Contains("--quit-app") && Installer.QuitApp(dir))) { Console.Error.WriteLine(Installer.Name + " is running."); return 2; }
                 if (uninstall)
                 {
                     Installer.RemoveShortcuts(dir);
@@ -55,13 +55,12 @@ namespace Arrow.Setup
                     return 0;
                 }
                 Installer.Copy(dir, null);
-                Installer.TakeOverFormer(dir);
                 var tools = args.Contains("--no-tools") || Installer.GetTools(null) == null;
                 Installer.Shortcuts(dir, !args.Contains("--no-desktop"), !args.Contains("--no-startup"));
                 Installer.Register(dir);
-                // the app's own update; ARROW_SETUP_START_ARGS: tests start it with --check-update instead of its window
+                // the app's own update; GLIDE_SETUP_START_ARGS: tests start it with --check-update instead of its window
                 if (args.Contains("--start"))
-                    Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe"), Environment.GetEnvironmentVariable("ARROW_SETUP_START_ARGS") ?? "") { WorkingDirectory = dir, UseShellExecute = true }); // shell: inherits none of our handles
+                    Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe"), Environment.GetEnvironmentVariable("GLIDE_SETUP_START_ARGS") ?? "") { WorkingDirectory = dir, UseShellExecute = true }); // shell: inherits none of our handles
                 return tools ? 0 : 3;
             }
             catch (Exception e)
@@ -84,29 +83,12 @@ namespace Arrow.Setup
 
         static string Env(string key) { var v = Environment.GetEnvironmentVariable(key); return string.IsNullOrEmpty(v) ? null : v; }
         static string LocalAppData { get { return Env("LOCALAPPDATA") ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData); } }
-        static string Programs { get { return Env("ARROW_SETUP_PROGRAMS") ?? Environment.GetFolderPath(Environment.SpecialFolder.Programs); } }
-        static string Desktop { get { return Env("ARROW_SETUP_DESKTOP") ?? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); } }
-        static string Startup { get { return Env("ARROW_SETUP_STARTUP") ?? Environment.GetFolderPath(Environment.SpecialFolder.Startup); } }
-        static string UninstallRoot { get { return Env("ARROW_SETUP_REGKEY") ?? @"Software\Microsoft\Windows\CurrentVersion\Uninstall"; } }
+        static string Programs { get { return Env("GLIDE_SETUP_PROGRAMS") ?? Environment.GetFolderPath(Environment.SpecialFolder.Programs); } }
+        static string Desktop { get { return Env("GLIDE_SETUP_DESKTOP") ?? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); } }
+        static string Startup { get { return Env("GLIDE_SETUP_STARTUP") ?? Environment.GetFolderPath(Environment.SpecialFolder.Startup); } }
+        static string UninstallRoot { get { return Env("GLIDE_SETUP_REGKEY") ?? @"Software\Microsoft\Windows\CurrentVersion\Uninstall"; } }
         static string UninstallKey { get { return UninstallRoot + "\\" + Name; } }
 
-        // The app's earlier names: an install under one of them is taken over (its folder, its download list) by this one
-        public static readonly string[] Former = { "Arrow" };
-
-        // A former name's install: its name and folder, or null
-        static string[] FormerInstall()
-        {
-            foreach (var n in Former)
-            {
-                if (n == Name) continue;
-                using (var k = Registry.CurrentUser.OpenSubKey(UninstallRoot + "\\" + n))
-                {
-                    var at = k == null ? null : k.GetValue("InstallLocation") as string;
-                    if (!string.IsNullOrEmpty(at) && Directory.Exists(at)) return new[] { n, at };
-                }
-            }
-            return null;
-        }
         static string[] Links(string dir) { return new[] { Path.Combine(Programs, Name + ".lnk"), Path.Combine(Desktop, Name + ".lnk"), Path.Combine(Startup, Name + ".lnk") }; }
 
         // An earlier install's folder (upgrades go there), else %LOCALAPPDATA%\Programs\<name>
@@ -114,15 +96,12 @@ namespace Arrow.Setup
         {
             get
             {
-                if (Env("ARROW_SETUP_DIR") != null) return Env("ARROW_SETUP_DIR");
+                if (Env("GLIDE_SETUP_DIR") != null) return Env("GLIDE_SETUP_DIR");
                 using (var k = Registry.CurrentUser.OpenSubKey(UninstallKey))
                 {
                     var at = k == null ? null : k.GetValue("InstallLocation") as string;
                     if (!string.IsNullOrEmpty(at)) return at;
                 }
-                // under a former name: the same folder, so the download list and the browser's unpacked extension stay put
-                var former = FormerInstall();
-                if (former != null) return former[1];
                 return Path.Combine(LocalAppData, "Programs", Name);
             }
         }
@@ -132,7 +111,7 @@ namespace Arrow.Setup
         {
             get
             {
-                if (Env("ARROW_SETUP_DIR") != null) return Env("ARROW_SETUP_DIR");
+                if (Env("GLIDE_SETUP_DIR") != null) return Env("GLIDE_SETUP_DIR");
                 var self = Application.ExecutablePath;
                 return Path.GetFileName(self).StartsWith("Uninstall", StringComparison.OrdinalIgnoreCase) ? Path.GetDirectoryName(self) : DefaultDir;
             }
@@ -140,7 +119,7 @@ namespace Arrow.Setup
 
         static ZipArchive Payload() { return new ZipArchive(Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"), ZipArchiveMode.Read); }
 
-        // ---- Arrow running from dir: Windows can't replace or delete a running exe
+        // ---- Glide running from dir: Windows can't replace or delete a running exe
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
@@ -164,11 +143,11 @@ namespace Arrow.Setup
 
         static bool Same(string a, string b) { return string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); }
 
-        // Arrow's own processes started from dir (another copy elsewhere doesn't lock these files)
+        // Glide's own processes started from dir (another copy elsewhere doesn't lock these files)
         public static List<Process> Running(string dir)
         {
             var found = new List<Process>();
-            foreach (var n in new[] { Name }.Concat(Former).Distinct().SelectMany(x => new[] { x, x + " Engine" }))
+            foreach (var n in new[] { Name, Name + " Engine" })
                 foreach (var p in Process.GetProcessesByName(n))
                 {
                     var image = ImagePath(p);
@@ -178,7 +157,7 @@ namespace Arrow.Setup
         }
 
         // The engine's clean quit (POST /api/quit saves the download list), then the window, which keeps nothing unsaved
-        public static bool QuitArrow(string dir)
+        public static bool QuitApp(string dir)
         {
             int port;
             if (!int.TryParse(Env("FASTDL_PORT"), out port)) port = 9614;
@@ -206,30 +185,6 @@ namespace Arrow.Setup
         // ---- install
 
         // The payload into dir: files are replaced, state.json (the download list and settings) is not in it, so it stays
-        // After Copy: what a former name left in dir goes (its exes, shortcuts, Settings > Apps entry, notification name);
-        // its window layout moves to this name's. The download list (state.json) is already where this name reads it.
-        public static void TakeOverFormer(string dir)
-        {
-            foreach (var n in Former)
-            {
-                if (n == Name) continue;
-                using (var k = Registry.CurrentUser.OpenSubKey(UninstallRoot + "\\" + n))
-                {
-                    var at = k == null ? null : k.GetValue("InstallLocation") as string;
-                    if (string.IsNullOrEmpty(at) || !Same(at, dir)) continue;
-                }
-                foreach (var f in new[] { n + ".exe", n + " Engine.exe", "Uninstall " + n + ".exe" })
-                    try { File.Delete(Path.Combine(dir, f)); } catch (Exception) { } // one still running goes with the next reboot's cleanup
-                foreach (var l in new[] { Path.Combine(Programs, n + ".lnk"), Path.Combine(Desktop, n + ".lnk"), Path.Combine(Startup, n + ".lnk") })
-                    if (File.Exists(l)) { var target = ShortcutTarget(l); if (target != null && Same(Path.GetDirectoryName(target), dir)) File.Delete(l); }
-                Registry.CurrentUser.DeleteSubKeyTree(UninstallRoot + "\\" + n, false);
-                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\AppUserModelId\1949-2005." + n, false);
-                var oldUi = Path.Combine(LocalAppData, n, "ui.json");
-                var newUi = Path.Combine(LocalAppData, Name, "ui.json");
-                if (File.Exists(oldUi) && !File.Exists(newUi)) { Directory.CreateDirectory(Path.GetDirectoryName(newUi)); File.Copy(oldUi, newUi); }
-            }
-        }
-
         public static void Copy(string dir, Action<double> progress)
         {
             Directory.CreateDirectory(dir);
@@ -340,7 +295,7 @@ namespace Arrow.Setup
 
         static int Winget(string id, Action<string> line)
         {
-            var psi = new ProcessStartInfo(Env("ARROW_SETUP_WINGET") ?? "winget",
+            var psi = new ProcessStartInfo(Env("GLIDE_SETUP_WINGET") ?? "winget",
                 "install -e --id " + id + " --accept-package-agreements --accept-source-agreements --disable-interactivity")
             {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
@@ -456,8 +411,8 @@ namespace Arrow.Setup
 
         // ---- after the install
 
-        // Arrow started with today's PATH, so yt-dlp finds the Deno winget just put there
-        public static void StartArrow(string dir)
+        // Glide started with today's PATH, so yt-dlp finds the Deno winget just put there
+        public static void StartApp(string dir)
         {
             var psi = new ProcessStartInfo(AppExe(dir)) { UseShellExecute = false, WorkingDirectory = dir };
             var user = Registry.GetValue(@"HKEY_CURRENT_USER\Environment", "Path", "") as string;

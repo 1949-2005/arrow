@@ -1,4 +1,4 @@
-// Builds dist\<name>Setup.exe, one file that installs Arrow for the user's account, and its .sha256 checksum:
+// Builds dist\<name>Setup.exe, one file that installs Glide for the user's account, and its .sha256 checksum:
 //   node build-installer.js
 // A clean copy of what runs (the native app, the engine exe and the .js files it loads, brand.json, assets, the
 // extension, licenses) is zipped into the setup (installer/*.cs, compiled with the app's own sources and look).
@@ -105,19 +105,19 @@ async function fetchNodeLicense() {
   return nodeLicenseCopy();
 }
 
-// Code signing, when ARROW_SIGN_PFX names a code-signing certificate (.pfx; its password in ARROW_SIGN_PASSWORD):
-// Windows' own Set-AuthenticodeSignature, SHA-256, timestamped (ARROW_SIGN_TIMESTAMP, default DigiCert's) so the
-// signature outlives the certificate. Without ARROW_SIGN_PFX nothing is signed. Returns whether it signed.
+// Code signing, when GLIDE_SIGN_PFX names a code-signing certificate (.pfx; its password in GLIDE_SIGN_PASSWORD):
+// Windows' own Set-AuthenticodeSignature, SHA-256, timestamped (GLIDE_SIGN_TIMESTAMP, default DigiCert's) so the
+// signature outlives the certificate. Without GLIDE_SIGN_PFX nothing is signed. Returns whether it signed.
 export async function sign(files) {
-  const pfx = process.env.ARROW_SIGN_PFX;
+  const pfx = process.env.GLIDE_SIGN_PFX;
   if (!pfx) return false;
-  if (!existsSync(pfx)) throw new Error(`ARROW_SIGN_PFX: ${pfx} does not exist`);
+  if (!existsSync(pfx)) throw new Error(`GLIDE_SIGN_PFX: ${pfx} does not exist`);
   for (const f of files) {
     const { stdout } = await powershell(
       '$c = New-Object Security.Cryptography.X509Certificates.X509Certificate2($env:FDL_PFX, $env:FDL_PW); ' +
       '$s = Set-AuthenticodeSignature -FilePath $env:FDL_FILE -Certificate $c -HashAlgorithm SHA256 -TimestampServer $env:FDL_TS; ' +
       'if (-not $s.SignerCertificate) { throw "not signed: $($s.StatusMessage)" }; $s.Status',
-      { FDL_PFX: pfx, FDL_PW: process.env.ARROW_SIGN_PASSWORD ?? '', FDL_FILE: f, FDL_TS: process.env.ARROW_SIGN_TIMESTAMP || 'http://timestamp.digicert.com' });
+      { FDL_PFX: pfx, FDL_PW: process.env.GLIDE_SIGN_PASSWORD ?? '', FDL_FILE: f, FDL_TS: process.env.GLIDE_SIGN_TIMESTAMP || 'http://timestamp.digicert.com' });
     console.log(`Signed ${path.basename(f)} (${stdout.trim()})`);
   }
   return true;
@@ -141,7 +141,7 @@ export async function stage(staging) {
 }
 
 export async function buildSetup(dist = path.join(here, 'dist')) {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-setup-'));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-setup-'));
   try {
     const staging = path.join(tmp, 'app');
     await fs.mkdir(staging);

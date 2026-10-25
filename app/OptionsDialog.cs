@@ -7,12 +7,12 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class OptionsDialog : Dialog
     {
         public const string General = "general", Downloads = "downloads", Sites = "sites", Categories = "categories", Queues = "queues";
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         Settings settings; // the engine's, again after each category change
         readonly Dictionary<string, object> before; // General and Downloads as the dialog opened
         readonly int limitKB; // kept while the limit is off
@@ -330,7 +330,7 @@ namespace Arrow
             });
         }
 
-        public void SelectCategory(string name) { table.Select(name); } // ARROW_SHOTS
+        public void SelectCategory(string name) { table.Select(name); } // GLIDE_SHOTS
 
         void Refill(Settings s)
         {

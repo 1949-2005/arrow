@@ -19,7 +19,7 @@ Every size is in pixels at 96 DPI (scale with the system DPI). Workers implement
 - A download's name always shows whole: wrapped onto the lines it needs, never cut with "…" or clamped to N lines
   (the list, the Scheduler's files, the details panel, the progress and Download complete windows, Properties,
   Download File Info's header, Link already in the list). Only an editable field (Save As) stays one line.
-- Every window and dialog has an ARROW_SHOTS picture (`MainForm.Shots`, `Dialogs.Shots`) for visual review.
+- Every window and dialog has an GLIDE_SHOTS picture (`MainForm.Shots`, `Dialogs.Shots`) for visual review.
 
 ## Tokens
 | Token | Light | Dark | Use |

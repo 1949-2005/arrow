@@ -17,7 +17,7 @@ const repo = path.dirname(fileURLToPath(import.meta.url));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let dir, engine;
 
-const temp = async () => dir ??= await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-app-'));
+const temp = async () => dir ??= await fs.mkdtemp(path.join(os.tmpdir(), 'glide-app-'));
 after(async () => {
   engine?.kill();
   if (dir) await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
@@ -76,7 +76,7 @@ test('--check-update reads the latest release: newer, the same, or missing its s
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(release));
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  const env = { ...process.env, ARROW_UPDATES_URL: `http://127.0.0.1:${server.address().port}/releases/latest` };
+  const env = { ...process.env, GLIDE_UPDATES_URL: `http://127.0.0.1:${server.address().port}/releases/latest` };
   // spawn, not spawnSync: the fake GitHub above answers from this process
   const run = () => new Promise(resolve => {
     const p = spawn(exe, ['--check-update'], { env, windowsHide: true });
@@ -85,7 +85,6 @@ test('--check-update reads the latest release: newer, the same, or missing its s
     p.on('exit', status => resolve({ status, stdout }));
   });
   const assets = [{ name: 'TestDLSetup.exe', browser_download_url: 'http://x/s.exe' }, { name: 'TestDLSetup.exe.sha256', browser_download_url: 'http://x/s.sha256' }];
-  const former = [{ name: 'ArrowSetup.exe', browser_download_url: 'http://x/a.exe' }, { name: 'ArrowSetup.exe.sha256', browser_download_url: 'http://x/a.sha256' }];
   try {
     release = { tag_name: 'v1.2.0', assets };
     let r = await run();
@@ -98,9 +97,6 @@ test('--check-update reads the latest release: newer, the same, or missing its s
     r = await run();
     assert.equal(r.status, 1);
     assert.match(r.stdout, /no TestDLSetup\.exe or no checksum/);
-    release = { tag_name: 'v9.1.0', assets: former }; // a release with the setup under the app's former name only
-    r = await run();
-    assert.equal(r.stdout.trim(), 'update v9.1.0');
   } finally {
     server.close();
   }

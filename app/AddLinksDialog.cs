@@ -7,11 +7,11 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class AddLinksDialog : Dialog
     {
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         readonly Caption linksLabel = Label("Links"), qualityLabel = Label("Quality"), nameLabel = Label("Save as");
         readonly TextField links = new TextField('\0', "One link per line. img[001-120].jpg adds 120 links.");
         readonly Picker quality = new Picker { AccessibleName = "Quality", Height = Theme.Px(32) };

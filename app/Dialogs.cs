@@ -1,5 +1,5 @@
 // The dialogs (docs/NATIVE_UI.md "Dialogs"): the static API the main window calls, the themed Dialog base, the small
-// modal dialogs (Confirm, Remove, a text prompt, Link already in the list, Error, About), and ARROW_SHOTS pictures of every dialog.
+// modal dialogs (Confirm, Remove, a text prompt, Link already in the list, Error, About), and GLIDE_SHOTS pictures of every dialog.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -10,13 +10,13 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     // A themed dialog: Body (inspector token) over Foot (top token, top hairline, buttons at the left and the right).
     // Esc closes it when it has no CancelButton.
     public class Dialog : Form
     {
-        public static bool Offscreen; // ARROW_SHOTS: shown beyond the screens, never activated
+        public static bool Offscreen; // GLIDE_SHOTS: shown beyond the screens, never activated
         public readonly Panel Root = new Panel { Dock = DockStyle.Fill };
         public readonly Panel Body = new Panel { Dock = DockStyle.Fill, TabIndex = 0 };
         public readonly Canvas Foot;
@@ -562,7 +562,7 @@ namespace Arrow
             SHOpenWithDialog(owner == null ? IntPtr.Zero : owner.Handle, ref info);
         }
 
-        // ---- ARROW_SHOTS: every dialog from made-up downloads (no engine calls, no Save dialogs), as PNGs
+        // ---- GLIDE_SHOTS: every dialog from made-up downloads (no engine calls, no Save dialogs), as PNGs
 
         public static void Shots(Form owner, string folder)
         {

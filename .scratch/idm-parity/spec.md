@@ -1,9 +1,9 @@
-# IDM parity: IDM's features in Arrow's own look
+# IDM parity: IDM's features in Glide's own look
 
 Status: approved by the user on 2026-10-22 (engine, and the screens from mockups/).
 
-The user asked for "the same UX as IDM" and chose: keep Arrow's modern Windows 11 look (docs/NATIVE_UI.md), add what
-IDM has and Arrow lacks, in four areas: main window, download progress, queues and scheduler, dialogs and options.
+The user asked for "the same UX as IDM" and chose: keep Glide's modern Windows 11 look (docs/NATIVE_UI.md), add what
+IDM has and Glide lacks, in four areas: main window, download progress, queues and scheduler, dialogs and options.
 Not in this round: proxy, site logins, sounds, virus check, site grabber, export/import, browser-extension changes.
 
 ## What IDM has (read from IDM 6.43.15's own menus and dialogs, in our words)
@@ -115,8 +115,8 @@ or applies the saved choice, then answers through `confirm`:
 - Folders stay in `settings.folders` per category, as today.
 
 ## Screens (approved 2026-10-22 from the mockups in mockups/; the user chose "details panel hidden by default")
-Arrow's look stays: docs/NATIVE_UI.md's tokens, fonts, radii, controls (FlatButton, TextField, Picker, FlatCheck,
-…), no grid lines, keyboard and accessibility rules. Pixel sizes at 96 DPI. Every new dialog also gets an ARROW_SHOTS
+Glide's look stays: docs/NATIVE_UI.md's tokens, fonts, radii, controls (FlatButton, TextField, Picker, FlatCheck,
+…), no grid lines, keyboard and accessibility rules. Pixel sizes at 96 DPI. Every new dialog also gets an GLIDE_SHOTS
 picture (Dialogs.Shots) so the orchestrator can review real screenshots. The mockup numbers below match
 mockups/m1–m5.
 

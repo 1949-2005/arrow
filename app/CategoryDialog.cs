@@ -6,11 +6,11 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class CategoryDialog : Dialog
     {
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         readonly Settings settings;
         readonly string original; // null for a new category
         readonly bool builtIn;

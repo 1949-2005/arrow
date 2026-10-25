@@ -8,7 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     // Controls holding native children whose colors must be set again after a theme switch
     public interface IThemed { void Restyle(); }

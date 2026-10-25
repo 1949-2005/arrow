@@ -13,7 +13,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 test('log: one line per entry with time and source; more lines indent', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-log-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-log-'));
   const file = path.join(dir, 'log.txt');
   log(file, 'engine', 'started');
   log(file, 'app', 'Error: boom\n   at x');
@@ -25,7 +25,7 @@ test('log: one line per entry with time and source; more lines indent', async ()
 });
 
 test('log: past 1 MB the oldest half goes, at a line start', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-log-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-log-'));
   const file = path.join(dir, 'log.txt');
   writeFileSync(file, Array.from({ length: 20000 }, (_, i) => `old line ${i} ${'x'.repeat(50)}`).join('\n') + '\n');
   log(file, 'engine', 'newest');
@@ -41,7 +41,7 @@ test('log: an unwritable file is ignored', () => {
 });
 
 test('engine: an uncaught exception lands in log.txt next to state.json, which is saved; exit code 1', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-crash-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-crash-'));
   const probe = net.createServer();
   await new Promise(r => probe.listen(0, '127.0.0.1', r));
   const port = probe.address().port;

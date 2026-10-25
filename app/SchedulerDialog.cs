@@ -8,11 +8,11 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class SchedulerDialog : Dialog
     {
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         readonly Column left = new Column();
         readonly Sidebar queueList = new Sidebar { Counts = false, AccessibleName = "Queues" };
         readonly FlatButton newQueue = new FlatButton("New queue", Glyph.Add, ButtonKind.Secondary), delete = new FlatButton("Delete", '\0', ButtonKind.Secondary) { Destructive = true };

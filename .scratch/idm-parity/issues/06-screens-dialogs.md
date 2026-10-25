@@ -9,7 +9,7 @@ Implement spec.md "Screens › 5 Download File Info", "6 Link already in the lis
 Categories" (it is opened from Download File Info's "+" too). Properties replaces "Change link…".
 
 Done when: each works as specified (including a duplicate that becomes known after the window opened, and a saved
-duplicates choice that skips the window), ARROW_SHOTS has a picture of each, and `npm test` passes.
+duplicates choice that skips the window), GLIDE_SHOTS has a picture of each, and `npm test` passes.
 
 ## Comments
 Done (medium worker, reviewed by the orchestrator: pictures match mockups m4 and m5 left). Review fix: the engine's

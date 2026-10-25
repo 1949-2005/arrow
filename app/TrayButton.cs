@@ -9,7 +9,7 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class TrayButton : Form
     {
@@ -103,7 +103,7 @@ namespace Arrow
             }
         }
 
-        // The button in r: also for pictures of it (ARROW_SHOTS, reviews): the tray icon's three arrows side by side, apart
+        // The button in r: also for pictures of it (GLIDE_SHOTS, reviews): the tray icon's three arrows side by side, apart
         // and stepping down like stairs,
         // all in its grey and still (the download may not have started yet)
         public static void Paint(Graphics g, Rectangle r, bool dark, bool active, bool hover, bool pressed)

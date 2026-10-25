@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class MainForm : Form
     {
@@ -1296,7 +1296,7 @@ namespace Arrow
             base.OnFormClosed(e);
         }
 
-        // ---- ARROW_SHOTS: PNGs of the window for visual review, then exit
+        // ---- GLIDE_SHOTS: PNGs of the window for visual review, then exit
 
         void Shots()
         {

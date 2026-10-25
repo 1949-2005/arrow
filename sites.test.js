@@ -30,7 +30,7 @@ test('sites: a host matches itself and its subdomains, the longest entry wins', 
 });
 
 test('sites: saved with the settings; a new download from the site gets its speed limit', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-sites-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-sites-'));
   const mgr = new Manager(path.join(dir, 'state.json'));
   await mgr.load();
   mgr.update({ sites: [{ host: 'slow.example.com', connections: 1, limitKB: 300 }] });

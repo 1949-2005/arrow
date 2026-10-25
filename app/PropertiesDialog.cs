@@ -6,11 +6,11 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class PropertiesDialog : Dialog
     {
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         readonly Download d;
         readonly bool editUrl;
         readonly Tile tile = new Tile();

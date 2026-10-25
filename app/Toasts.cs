@@ -9,7 +9,7 @@ using Microsoft.Win32;
 using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
 
-namespace Arrow
+namespace Glide
 {
     public static class Toasts
     {

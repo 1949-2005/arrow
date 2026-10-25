@@ -57,15 +57,15 @@ function fileName(title, key) {
 var send = msg => { try { return chrome.runtime.sendMessage(msg).catch(() => null); } catch { return Promise.resolve(null); } };
 
 // The second run in the same world (see above) leaves the running copy alone: one panel.
-if (typeof document !== 'undefined' && !globalThis.arrowMain) {
-  globalThis.arrowMain = true;
+if (typeof document !== 'undefined' && !globalThis.glideMain) {
+  globalThis.glideMain = true;
   main();
 }
 
 function main() {
   // After an update, this tab's previous copy runs in another JS world, cut off from the extension. A new copy says so on the
   // shared document before it listens itself; the old one then removes its panel and stops every handler (life.abort()).
-  const START = 'arrow-start-' + chrome.runtime.id, life = new AbortController(), on = { signal: life.signal };
+  const START = 'glide-start-' + chrome.runtime.id, life = new AbortController(), on = { signal: life.signal };
   document.dispatchEvent(new Event(START));
   document.addEventListener(START, () => {
     life.abort();

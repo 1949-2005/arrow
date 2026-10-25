@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
-namespace Arrow
+namespace Glide
 {
     public static class Json
     {
@@ -879,7 +879,7 @@ namespace Arrow
             return tag == null || setup == null || sum == null ? null : new[] { tag, setup, sum };
         }
 
-        // "<hex>  ArrowSetup.exe" (or just the hex): the hash, lower case; null when it isn't 64 hex digits
+        // "<hex>  GlideSetup.exe" (or just the hex): the hash, lower case; null when it isn't 64 hex digits
         public static string Sha256Of(string sumFile)
         {
             var hex = (sumFile ?? "").Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
@@ -889,7 +889,7 @@ namespace Arrow
         // The setup's quiet update: quit the running app, reinstall, start it again; keep the shortcuts as they are
         public static string SetupArgs(bool desktopLink, bool startupLink)
         {
-            return "--quiet --quit-arrow --start" + (desktopLink ? "" : " --no-desktop") + (startupLink ? "" : " --no-startup");
+            return "--quiet --quit-app --start" + (desktopLink ? "" : " --no-desktop") + (startupLink ? "" : " --no-startup");
         }
 
         // A folder inside the download folder from that folder's own name on (Options › Categories: "Downloads\Video"); others as they are

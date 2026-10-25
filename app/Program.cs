@@ -3,8 +3,8 @@
 //   --no-engine  never start the engine (tests)
 //   --check      no UI: ping the engine, read /api/state, print the result, exit 0 or 1
 //   --check-notification  shows one Windows notification, checks the notification center has it, removes it
-//   --check-update  no UI: ask GitHub (or ARROW_UPDATES_URL) for a newer release, print it, exit 0 or 1
-// ARROW_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
+//   --check-update  no UI: ask GitHub (or GLIDE_UPDATES_URL) for a newer release, print it, exit 0 or 1
+// GLIDE_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -15,7 +15,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public static class Program
     {
@@ -46,7 +46,7 @@ namespace Arrow
             if (args.Contains("--check-update")) return CheckUpdate();
             if (args.Contains("--check-notification")) { var r = Toasts.Check(); Console.WriteLine(r); return r == "ok" ? 0 : 1; }
             Theme.Init(); // SystemEvents raises the theme switch on the thread that first touched it: this one
-            var shots = Environment.GetEnvironmentVariable("ARROW_SHOTS");
+            var shots = Environment.GetEnvironmentVariable("GLIDE_SHOTS");
             if (!string.IsNullOrEmpty(shots))
             {
                 Application.Run(new MainForm(api, true, shots));
@@ -95,7 +95,7 @@ namespace Arrow
             Log.Write("app", "crash: " + e);
             try
             {
-                if (Environment.GetEnvironmentVariable("ARROW_SHOTS") == null)
+                if (Environment.GetEnvironmentVariable("GLIDE_SHOTS") == null)
                     MessageBox.Show(Name + " hit an error and has to close. Your downloads keep going in the background.\n\nDetails are in " + Log.File,
                         Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }

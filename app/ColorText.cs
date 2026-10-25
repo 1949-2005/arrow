@@ -6,7 +6,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public static class ColorText
     {

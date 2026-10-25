@@ -1,5 +1,5 @@
-// The setup window, in Arrow's own look (its Dialog, controls and theme, light or dark like Windows):
-// install: Options → Progress → Done; uninstall: Confirm → Progress → Done. "Arrow is running" and a winget failure
+// The setup window, in Glide's own look (its Dialog, controls and theme, light or dark like Windows):
+// install: Options → Progress → Done; uninstall: Confirm → Progress → Done. "Glide is running" and a winget failure
 // stop on the way with Try again.
 using System;
 using System.Collections.Generic;
@@ -15,7 +15,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Arrow.Setup
+namespace Glide.Setup
 {
     public enum StepState { Waiting, Running, Done, Failed, Skipped }
 
@@ -292,7 +292,7 @@ namespace Arrow.Setup
         void RunCopy()
         {
             steps[0].Set(StepState.Running, null);
-            Work(() => { Installer.Copy(dir, f => Ui(() => Progress(f * 0.7))); Installer.TakeOverFormer(dir); }, e =>
+            Work(() => Installer.Copy(dir, f => Ui(() => Progress(f * 0.7))), e =>
             {
                 if (e == null) { steps[0].Set(StepState.Done, null); RunTools(); return; }
                 steps[0].Set(StepState.Failed, e.Message);
@@ -412,7 +412,7 @@ namespace Arrow.Setup
             path.Box.AccessibleName = "Extension folder";
             Add(path);
             Add(copy);
-            var open = Btn("Open " + Installer.Name, ButtonKind.Primary, () => { try { Installer.StartArrow(dir); } catch (Exception) { } Close(); });
+            var open = Btn("Open " + Installer.Name, ButtonKind.Primary, () => { try { Installer.StartApp(dir); } catch (Exception) { } Close(); });
             var close = Btn("Close", ButtonKind.Secondary, Close);
             Buttons(new FlatButton[0], new[] { close, open });
             AcceptButton = open;
@@ -420,7 +420,7 @@ namespace Arrow.Setup
             ActiveControl = open;
         }
 
-        // ---- Arrow is running
+        // ---- Glide is running
 
         void IfNotRunning(Action go)
         {
@@ -440,7 +440,7 @@ namespace Arrow.Setup
             {
                 quit.Enabled = retry.Enabled = false;
                 var ok = false;
-                Work(() => ok = Installer.QuitArrow(dir), err =>
+                Work(() => ok = Installer.QuitApp(dir), err =>
                 {
                     quit.Enabled = retry.Enabled = true;
                     if (ok) go();
@@ -511,7 +511,7 @@ namespace Arrow.Setup
             AcceptButton = CancelButton = close;
         }
 
-        // ---- ARROW_SETUP_SHOTS: every page from made-up states (nothing installed, nothing run), as PNGs
+        // ---- GLIDE_SETUP_SHOTS: every page from made-up states (nothing installed, nothing run), as PNGs
 
         public static void Shots(string folder)
         {

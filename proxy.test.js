@@ -39,7 +39,7 @@ test('yt-dlp gets the proxy', () => {
 });
 
 test('changing the proxy restarts the engine with it; a bad one is refused', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-proxy-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-proxy-'));
   const probe = net.createServer();
   await new Promise(r => probe.listen(0, '127.0.0.1', r));
   const port = probe.address().port;

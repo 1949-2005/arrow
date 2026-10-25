@@ -29,7 +29,7 @@ const literal = s => '"' + String(s).replaceAll('\\', '\\\\').replaceAll('"', '\
 // A winexe from the app's sources (and extra ones) with name, version and icon; title shows in the file's properties
 async function compileExe({ out, name, title = name, version, icon, main, extra = [], args = [] }) {
   const [a, b, c] = `${version}.0.0`.split('.').map(n => Number(n) & 0xffff); // a.b.c.0, as install.js versionInfo()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-build-'));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-build-'));
   try {
     const info = path.join(tmp, 'AssemblyInfo.cs');
     await fs.writeFile(info, `using System.Reflection;
@@ -49,17 +49,17 @@ async function compileExe({ out, name, title = name, version, icon, main, extra 
 }
 
 // out: the exe's path. name becomes Application.ProductName, which the app uses as its name.
-export const compileApp = ({ out, name, version, icon }) => compileExe({ out, name, version, icon, main: 'Arrow.Program' });
+export const compileApp = ({ out, name, version, icon }) => compileExe({ out, name, version, icon, main: 'Glide.Program' });
 
 // The installer: installer/*.cs with the app's sources (its look), payload (the zip it installs) and the logo as resources
 export function compileSetup({ out, name, version, icon, payload, logo }) {
   const dir = path.join(here, '..', 'installer');
-  return compileExe({ out, name, title: name + ' Setup', version, icon, main: 'Arrow.Setup.SetupProgram',
+  return compileExe({ out, name, title: name + ' Setup', version, icon, main: 'Glide.Setup.SetupProgram',
     extra: readdirSync(dir).filter(f => f.endsWith('.cs')).map(f => path.join(dir, f)),
     args: ['/reference:System.IO.Compression.dll', `/resource:${payload},payload.zip`, `/resource:${logo},logo.png`] });
 }
 
 // A console exe that runs Tests.cs against the pure logic and the API client
 export async function compileTests(out) {
-  await csc(['/target:exe', '/main:Arrow.Tests', `/out:${out}`, src('Core.cs'), src('Api.cs'), src('Tests.cs')]);
+  await csc(['/target:exe', '/main:Glide.Tests', `/out:${out}`, src('Core.cs'), src('Api.cs'), src('Tests.cs')]);
 }

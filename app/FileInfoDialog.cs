@@ -9,12 +9,12 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class FileInfoDialog : Dialog
     {
         public readonly string Id;
-        public readonly Api Api; // null in ARROW_SHOTS
+        public readonly Api Api; // null in GLIDE_SHOTS
         static readonly string[] DefaultCategories = { "Compressed", "Documents", "Music", "Programs", "Video", "Other" };
         string[] cats = DefaultCategories; // settings.types' names in alphabetical order, then Other
 
@@ -464,7 +464,7 @@ namespace Arrow
         readonly FlatButton go = new FlatButton("Add to queue", '\0', ButtonKind.Primary);
         readonly ToolTip tips = new ToolTip();
         readonly List<string> ids = new List<string>();
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         bool asking; // the New queue prompt is open: the popover stays
         public event Action<string, bool> Chosen; // queue id, start it now
 

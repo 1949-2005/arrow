@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace Arrow
+namespace Glide
 {
     public static class Glyph
     {
@@ -63,14 +63,14 @@ namespace Arrow
             SmallBold = new Font(regular, 9f, FontStyle.Bold);
             Big = new Font(regular, 18f, FontStyle.Bold);
             IconFamily = pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
-            var env = (Environment.GetEnvironmentVariable("ARROW_THEME") ?? "").ToLowerInvariant();
+            var env = (Environment.GetEnvironmentVariable("GLIDE_THEME") ?? "").ToLowerInvariant();
             forced = env == "light" || env == "dark";
             Dark = forced ? env == "dark" : SystemDark();
             if (!forced) SystemEvents.UserPreferenceChanged += (s, e) => { if (mode == "system") Apply(SystemDark()); };
         }
 
         static string mode = "system";
-        // "system" follows Windows, live; "light" and "dark" stay put (ui.json "theme"). ARROW_THEME wins over all three
+        // "system" follows Windows, live; "light" and "dark" stay put (ui.json "theme"). GLIDE_THEME wins over all three
         public static string Mode { get { return mode; } }
 
         public static void SetMode(string m)

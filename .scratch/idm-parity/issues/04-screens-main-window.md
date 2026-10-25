@@ -11,7 +11,7 @@ powerOp) and Api calls for the new actions and /api/queues. The countdown strip 
 come from `state.categories` in order, plus Other (custom categories show the Other glyph).
 
 Done when: everything in that section works, Tests.cs covers the new pure helpers (status texts such as "In <queue>",
-sorting, which columns fit a width), ARROW_SHOTS pictures show the new main window (columns, command bar, queues) and
+sorting, which columns fit a width), GLIDE_SHOTS pictures show the new main window (columns, command bar, queues) and
 `npm test` passes.
 
 ## Comments

@@ -22,7 +22,7 @@ test('the engine files are desktop.js and what it imports, followed through', ()
 });
 
 test('zipFolder writes a zip that unpacks to the same files', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-zip-'));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-zip-'));
   try {
     await fs.mkdir(path.join(tmp, 'in', 'a', 'b'), { recursive: true });
     const files = { 'x.txt': 'hello', 'a/b/é.bin': crypto.randomBytes(70000), 'a/empty.txt': '' };
@@ -57,10 +57,10 @@ const shortcut = link => execFileSync('powershell.exe', ['-NoProfile', '-NonInte
 
 before(async () => {
   if (process.platform !== 'win32') return;
-  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-setup-test-'));
+  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-setup-test-'));
   ({ out: setup } = await buildSetup(path.join(tmp, 'dist')));
   dir = path.join(tmp, 'Programs', NAME);
-  key = 'Software\\ArrowSetupTest-' + crypto.randomBytes(4).toString('hex');
+  key = 'Software\\GlideSetupTest-' + crypto.randomBytes(4).toString('hex');
   // winget stand-in: puts the tool where winget would (WinGet\Links, WinGet\Packages), or fails
   await fs.writeFile(path.join(tmp, 'winget.mjs'), `import fs from 'node:fs';
 const id = process.argv[process.argv.indexOf('--id') + 1], w = process.env.LOCALAPPDATA + '/Microsoft/WinGet';
@@ -74,9 +74,9 @@ console.log('Successfully installed');
 `);
   await fs.writeFile(path.join(tmp, 'winget.cmd'), `@"${process.execPath}" "%~dp0winget.mjs" %*\r\n`);
   env = {
-    ...process.env, ARROW_SETUP_DIR: dir, ARROW_SETUP_PROGRAMS: path.join(tmp, 'start'), ARROW_SETUP_DESKTOP: path.join(tmp, 'desktop'),
-    ARROW_SETUP_STARTUP: path.join(tmp, 'startup'), FASTDL_STARTUP: path.join(tmp, 'startup'), ARROW_SETUP_REGKEY: key,
-    ARROW_SETUP_WINGET: path.join(tmp, 'winget.cmd'), FAKE_WINGET_LOG: path.join(tmp, 'winget.log'), FASTDL_PORT: String(await freePort()),
+    ...process.env, GLIDE_SETUP_DIR: dir, GLIDE_SETUP_PROGRAMS: path.join(tmp, 'start'), GLIDE_SETUP_DESKTOP: path.join(tmp, 'desktop'),
+    GLIDE_SETUP_STARTUP: path.join(tmp, 'startup'), FASTDL_STARTUP: path.join(tmp, 'startup'), GLIDE_SETUP_REGKEY: key,
+    GLIDE_SETUP_WINGET: path.join(tmp, 'winget.cmd'), FAKE_WINGET_LOG: path.join(tmp, 'winget.log'), FASTDL_PORT: String(await freePort()),
     LOCALAPPDATA: path.join(tmp, 'local'), // no tools found there, until the stand-in puts them
     PATH: [path.join(process.env.SystemRoot, 'System32'), process.env.SystemRoot].join(';'), FASTDL_YTDLP: '', FASTDL_FFMPEG: '',
   };
@@ -120,9 +120,9 @@ test('install: files, tools through winget, shortcuts, Settings > Apps; the engi
   assert.match(check.stdout, /engine ok, 0 downloads/);
 });
 
-test('reinstall: refused while the app runs, --quit-arrow quits it cleanly; state.json is kept', win, async () => {
+test('reinstall: refused while the app runs, --quit-app quits it cleanly; state.json is kept', win, async () => {
   assert.equal(run(setup, ['--quiet']).status, 2, NAME + ' is running');
-  const r = run(setup, ['--quiet', '--quit-arrow']);
+  const r = run(setup, ['--quiet', '--quit-app']);
   assert.equal(r.status, 0, r.stderr);
   const code = engine.exitCode ?? await Promise.race([new Promise(r => engine.once('exit', r)), sleep(5000).then(() => 'still running')]);
   assert.equal(code, 0, 'the engine quit cleanly');
@@ -136,7 +136,7 @@ test('reinstall: refused while the app runs, --quit-arrow quits it cleanly; stat
 test('tools: a failing or missing winget still installs the app (exit 3)', win, async () => {
   await fs.rm(path.join(tmp, 'local'), { recursive: true, force: true });
   assert.equal(run(setup, ['--quiet'], { FAKE_WINGET: 'fail' }).status, 3);
-  assert.equal(run(setup, ['--quiet'], { ARROW_SETUP_WINGET: path.join(tmp, 'no-winget.exe') }).status, 3);
+  assert.equal(run(setup, ['--quiet'], { GLIDE_SETUP_WINGET: path.join(tmp, 'no-winget.exe') }).status, 3);
   assert.ok(existsSync(path.join(dir, NAME + '.exe')));
 });
 
@@ -147,7 +147,7 @@ test('--start opens the installed app once it is installed, as its own update do
   const server = http.createServer((req, res) => { seen(req.headers['user-agent']); res.end(JSON.stringify({ tag_name: 'v0.0.1', assets: [] })); });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   try {
-    const r = run(setup, ['--quiet', '--no-tools', '--start'], { ARROW_SETUP_START_ARGS: '--check-update', ARROW_UPDATES_URL: `http://127.0.0.1:${server.address().port}/latest` });
+    const r = run(setup, ['--quiet', '--no-tools', '--start'], { GLIDE_SETUP_START_ARGS: '--check-update', GLIDE_UPDATES_URL: `http://127.0.0.1:${server.address().port}/latest` });
     assert.equal(r.status, 0, r.stderr);
     const ua = await Promise.race([got, sleep(20000).then(() => null)]);
     assert.match(ua ?? '', new RegExp('^' + NAME + '/'), 'the installed app started and checked for updates');
@@ -173,31 +173,3 @@ test('uninstall: shortcuts, files and the key go; state.json and downloads stay,
   assert.equal(readFileSync(inside, 'utf8'), 'mine');
 });
 
-test('an install under the former name, Arrow, is taken over in place: its download list stays, its exes, shortcuts and key go', win, async () => {
-  const old = path.join(tmp, 'local', 'Programs', 'Arrow');
-  await fs.mkdir(old, { recursive: true });
-  for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe']) await fs.writeFile(path.join(old, f), 'old');
-  await fs.writeFile(path.join(old, 'state.json'), '{"settings":{},"list":[],"marker":"arrow"}');
-  await fs.mkdir(path.join(tmp, 'local', 'Arrow'), { recursive: true });
-  await fs.writeFile(path.join(tmp, 'local', 'Arrow', 'ui.json'), '{"theme":"dark"}');
-  for (const f of ['start', 'desktop']) {
-    await fs.mkdir(path.join(tmp, f), { recursive: true });
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:L); $s.TargetPath = $env:T; $s.Save()'],
-      { env: { ...process.env, L: path.join(tmp, f, 'Arrow.lnk'), T: path.join(old, 'Arrow.exe') } });
-  }
-  spawnSync('reg.exe', ['add', 'HKCU\\' + key + '\\Arrow', '/v', 'InstallLocation', '/d', old, '/f'], { windowsHide: true });
-  const { ARROW_SETUP_DIR, ...noDir } = env; // where to install is the setup's own choice here
-  const r = spawnSync(setup, ['--quiet', '--no-tools'], { env: noDir, encoding: 'utf8', windowsHide: true, timeout: 120000 });
-  assert.equal(r.status, 0, r.stderr);
-  assert.ok(existsSync(path.join(old, NAME + '.exe')), 'installed into the former folder');
-  for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe']) assert.ok(!existsSync(path.join(old, f)), f + ' is gone');
-  assert.match(readFileSync(path.join(old, 'state.json'), 'utf8'), /"marker":"arrow"/, 'the download list stayed');
-  for (const f of ['start', 'desktop']) {
-    assert.ok(!existsSync(path.join(tmp, f, 'Arrow.lnk')), f + ': the old shortcut is gone');
-    assert.ok(existsSync(path.join(tmp, f, NAME + '.lnk')), f + ': the new one is there');
-  }
-  assert.notEqual(spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\Arrow'], { windowsHide: true }).status, 0, 'the former Apps entry is gone');
-  assert.match(spawnSync('reg.exe', ['query', 'HKCU\\' + key + '\\' + NAME, '/v', 'InstallLocation'], { encoding: 'utf8', windowsHide: true }).stdout, new RegExp(old.replace(/\\/g, '\\\\')));
-  assert.equal(readFileSync(path.join(tmp, 'local', NAME, 'ui.json'), 'utf8'), '{"theme":"dark"}', 'the window layout moved');
-  spawnSync(path.join(old, 'Uninstall ' + NAME + '.exe'), ['--quiet', '--remove-data'], { env: noDir, windowsHide: true, timeout: 60000 });
-});

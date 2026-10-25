@@ -8,7 +8,7 @@ Implement spec.md "Screens › 8 Options" (mockups/m5-options.png right): the pa
 (speed limit with `speedLimitOn`), Categories (with the editor from issue 06) and Queues; the old Schedule section
 goes.
 
-Done when: every setting saves and reloads, ARROW_SHOTS has a picture of each page, and `npm test` passes.
+Done when: every setting saves and reloads, GLIDE_SHOTS has a picture of each page, and `npm test` passes.
 
 ## Comments
 Done (medium worker, reviewed by the orchestrator: matches mockup m5). Review fixes: a row grows so its name, file

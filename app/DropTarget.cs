@@ -7,7 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class DropTarget : Form
     {

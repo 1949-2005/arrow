@@ -2,8 +2,6 @@
 
 Glide is a download manager that runs on your PC. It makes downloads faster by using several connections for each file, like IDM.
 
-Glide used to be called **Arrow**. If you have Arrow, installing Glide (or Arrow's own **Update** button) replaces it in the same folder: your download list, settings and browser extension keep working.
-
 ## Install
 
 Open **PowerShell** (press <kbd>Win</kbd>, type `powershell`, press Enter) and paste:
@@ -325,7 +323,7 @@ Glide writes `log.txt` next to its `state.json` (in its install folder): when it
 
 - Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
 - `node build-installer.js` makes `dist\GlideSetup.exe` and `dist\GlideSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
-- To sign the exes (so SmartScreen and Smart App Control trust them), set `ARROW_SIGN_PFX` to your code-signing certificate (.pfx) and `ARROW_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Glide.exe, Glide Engine.exe and GlideSetup.exe with SHA-256 and a timestamp (`ARROW_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
+- To sign the exes (so SmartScreen and Smart App Control trust them), set `GLIDE_SIGN_PFX` to your code-signing certificate (.pfx) and `GLIDE_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Glide.exe, Glide Engine.exe and GlideSetup.exe with SHA-256 and a timestamp (`GLIDE_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
 - Or run Glide from this folder:
   - Double-click `install.cmd`. Wait about 15 seconds.
   - It makes two programs in this folder, puts Glide in the Start menu and on the desktop, and starts Glide:

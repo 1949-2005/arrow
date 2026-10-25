@@ -9,12 +9,12 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Arrow
+namespace Glide
 {
     public class ProgressDialog : Dialog
     {
         public readonly string Id;
-        readonly Api api; // null in ARROW_SHOTS
+        readonly Api api; // null in GLIDE_SHOTS
         static readonly string[] WhenDoneValues = { "", "open", "sleep", "shutdown" };
 
         readonly Tile tile = new Tile();
@@ -157,8 +157,8 @@ namespace Arrow
             if (trayIcon.Icon != icon) trayIcon.Icon = icon;
         }
 
-        // Arrow's own tray icon (MainForm sets it). A download's icon takes its id: still a separate icon (its own hidden
-        // window), but Windows keys tray places by app and id, so it lands right after Arrow's instead of at the far left.
+        // Glide's own tray icon (MainForm sets it). A download's icon takes its id: still a separate icon (its own hidden
+        // window), but Windows keys tray places by app and id, so it lands right after Glide's instead of at the far left.
         public static NotifyIcon AppTray;
 
         static void Twin(NotifyIcon icon)

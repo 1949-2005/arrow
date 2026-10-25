@@ -10,7 +10,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace Arrow
+namespace Glide
 {
     public static class FileIcons
     {

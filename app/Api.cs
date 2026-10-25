@@ -6,7 +6,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 
-namespace Arrow
+namespace Glide
 {
     public class ApiException : Exception
     {
@@ -16,7 +16,7 @@ namespace Arrow
 
     public class Api
     {
-        public static string AppName = "Arrow"; // Program sets the brand name
+        public static string AppName = "Glide"; // Program sets the brand name
         public readonly string Base;
 
         public Api()

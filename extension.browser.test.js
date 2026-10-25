@@ -45,7 +45,7 @@ const state = async () => (await fetch(appUrl + '/api/state')).json();
 
 before(async () => {
   if (skip.skip) return;
-  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'arrow-browser-'));
+  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-browser-'));
   // the test site: a page with a download link, and the file
   site = http.createServer((req, res) => {
     if (req.url === '/page.html') return res.writeHead(200, { 'content-type': 'text/html' }).end('<a id="dl" href="/files/report.zip">Report</a>');
@@ -108,13 +108,13 @@ test('the extension loads in Edge as a service worker', skip, async () => {
   assert.ok(worker, 'background.js runs');
 });
 
-test('with the app open, a download the page starts goes to Arrow as pending, not to the browser', skip, async () => {
+test('with the app open, a download the page starts goes to Glide as pending, not to the browser', skip, async () => {
   polling = setInterval(() => state().catch(() => { }), 1000); // the native app polls /api/state: it counts as open
   await state();
   await clickDownload();
   let d;
   for (const t = Date.now(); !d && Date.now() - t < 15000; await sleep(200)) d = (await state()).downloads.find(x => x.url === siteUrl + '/files/report.zip');
-  assert.ok(d, 'Arrow got the download');
+  assert.ok(d, 'Glide got the download');
   assert.equal(d.status, 'pending', 'it waits for the Download File Info window');
   const dir = path.join(tmp, 'browser-downloads');
   assert.ok(!existsSync(dir) || !readdirSync(dir).some(f => f.startsWith('report')), 'the browser did not keep it');
@@ -134,5 +134,5 @@ test('with the app closed, the browser keeps its download', skip, async () => {
     mine = result.value ?? [];
   }
   assert.ok(mine.length > 0, 'the browser downloads it again');
-  assert.equal((await state()).downloads.filter(d => d.url === siteUrl + '/files/report.zip').length, 1, 'Arrow did not take a second one');
+  assert.equal((await state()).downloads.filter(d => d.url === siteUrl + '/files/report.zip').length, 1, 'Glide did not take a second one');
 });
