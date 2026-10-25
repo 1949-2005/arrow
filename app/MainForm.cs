@@ -976,6 +976,7 @@ namespace Arrow
                 t.Click += (s, e) => { Theme.SetMode(mode); SaveUi(); };
                 sub.Items.Add(t);
             }
+            Item(m, "Open log file", () => Run(() => System.Diagnostics.Process.Start(Log.File)), Log.File != null && File.Exists(Log.File));
             Item(m, "About " + Program.Name, () => Dialogs.About(this), true);
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Quit " + Program.Name, Quit, true);

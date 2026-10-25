@@ -27,6 +27,7 @@ namespace Arrow
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            CatchCrashes();
             Api.AppName = Name;
             var api = new Api();
             if (args.Contains("--check")) return Check(api, args.Contains("--no-engine"));
@@ -59,6 +60,33 @@ namespace Arrow
                 Application.Run(new MainForm(api, !args.Contains("--tray"), null));
                 return 0;
             }
+        }
+
+        // log.txt next to state.json (the engine writes the same file); an unhandled exception is logged, said, and ends
+        // the app (the engine and its downloads keep running)
+        static void CatchCrashes()
+        {
+            var state = Environment.GetEnvironmentVariable("FASTDL_STATE");
+            Log.File = Path.Combine(string.IsNullOrEmpty(state) ? Folder : Path.GetDirectoryName(Path.GetFullPath(state)), "log.txt");
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (s, e) => Crash(e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => Crash(e.ExceptionObject as Exception);
+        }
+
+        static int crashed;
+
+        static void Crash(Exception e)
+        {
+            if (Interlocked.Exchange(ref crashed, 1) == 1) return;
+            Log.Write("app", "crash: " + e);
+            try
+            {
+                if (Environment.GetEnvironmentVariable("ARROW_SHOTS") == null)
+                    MessageBox.Show(Name + " hit an error and has to close. Your downloads keep going in the background.\n\nDetails are in " + Log.File,
+                        Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception) { }
+            Environment.Exit(1);
         }
 
         static int Check(Api api, bool noEngine)

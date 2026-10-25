@@ -6,8 +6,12 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Manager } from './engine.js';
 import { here, brand, exe, port as PORT, startupDir, powershell, shortcut } from './desktop.js';
+import { log, catchCrashes } from './log.js';
 
-const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
+const stateFile = process.env.FASTDL_STATE || path.join(here, 'state.json');
+const logFile = path.join(path.dirname(stateFile), 'log.txt'); // the native app writes to the same file
+const mgr = new Manager(stateFile);
+catchCrashes(logFile, () => mgr.saveSync());
 await mgr.load();
 let opens = 0, appSeen = 0; // POST /api/open count, and when the native app last polled /api/state
 const startupLink = path.join(startupDir, brand.name + '.lnk');
@@ -112,15 +116,22 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('error', e => {
-  console.error(e.code === 'EADDRINUSE' ? `${brand.name} is already running on port ${PORT}` : e.message);
+  const why = e.code === 'EADDRINUSE' ? `${brand.name} is already running on port ${PORT}` : e.message;
+  console.error(why);
+  log(logFile, 'engine', 'could not start: ' + why);
   process.exit(1);
 });
-server.listen(PORT, '127.0.0.1', () => console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`));
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`);
+  log(logFile, 'engine', `started on port ${PORT}, Node ${process.versions.node}`);
+  if (process.env.FASTDL_CRASH) setTimeout(() => { throw new Error('FASTDL_CRASH'); }); // tests: an uncaught exception
+});
 
 // Running yt-dlp processes end with this process (libuv puts child processes in a job object).
 function quit() {
   for (const id of mgr.held.keys()) mgr.release(id); // the Download File Info probes' open connections
   mgr.saveSync();
+  log(logFile, 'engine', 'quit');
   process.exit(0);
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, quit);

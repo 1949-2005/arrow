@@ -1011,4 +1011,32 @@ namespace Arrow
         static int Skip(string d, int i) { while (i < d.Length && (char.IsWhiteSpace(d[i]) || d[i] == ',')) i++; return i; }
         static void Step(List<SvgStep> steps, char op, params double[] args) { steps.Add(new SvgStep { Op = op, Args = args }); }
     }
+
+    // log.txt (log.js's format, the engine writes the same file): "<ISO time> [source] message", more lines indented;
+    // past 1 MB the oldest half goes. Never throws: a log that cannot be written must not stop the app.
+    public static class Log
+    {
+        public const int Max = 1 << 20;
+        public static string File; // set by Program: next to state.json
+
+        public static void Write(string source, string message)
+        {
+            var file = File;
+            if (string.IsNullOrEmpty(file)) return;
+            try
+            {
+                var line = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture) + " [" + source + "] "
+                    + (message ?? "").Replace("\r\n", "\n").Replace("\n", "\n    ") + "\n";
+                lock (typeof(Log))
+                {
+                    System.IO.File.AppendAllText(file, line, new System.Text.UTF8Encoding(false));
+                    if (new System.IO.FileInfo(file).Length <= Max) return;
+                    var text = System.IO.File.ReadAllText(file);
+                    var cut = text.IndexOf('\n', Math.Max(0, text.Length - Max / 2));
+                    System.IO.File.WriteAllText(file, cut < 0 ? "" : text.Substring(cut + 1), new System.Text.UTF8Encoding(false));
+                }
+            }
+            catch (Exception) { }
+        }
+    }
 }

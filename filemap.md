@@ -1,6 +1,7 @@
 # File map
 
 - `engine.js` — core: pending downloads (probe with `probe.duplicate`, `confirm()`), the run queue, dynamic segmentation, resume, retries, stall watchdog, global and per-download speed limits, duplicates (number / replace / resume), named queues and their scheduler tick (`queues()`, `startQueue()`, `stopQueue()`, retries, when done), editable categories (`settings.types`, `CATEGORIES` as the default), per-download description, when done, last try and the Download complete flag, the one power countdown (all downloads, a download, a queue), `state.json` persistence and migrations, `view()` for the native app
+- `log.js` — `log.txt` next to `state.json` (the native app's `Log` in `Core.cs` writes the same file and format): one line per entry, trimmed to its newest half past 1 MB; `catchCrashes()` logs uncaught errors, saves the state and exits 1 (`FASTDL_CRASH` makes one, for tests)
 - `hls.js` — HLS (.m3u8): best-variant pick and its separate sound track (X), AES-128 decryption, parallel segment fetch written in order, ffmpeg join of video and sound
 - `ytdlp.js` — YouTube via yt-dlp + ffmpeg: URL check, format list with real sizes (`listFormats`, cached 15 min), format key / quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
 - `server.js` — the engine's local HTTP API on 127.0.0.1:9614 (JSON only, no pages); Host/Origin checks live here; extensions only get ping, add, formats and open; `open` counter in `/api/state` (tray, popup's Open); `/api/queues` (the Scheduler); `mgr.opener` (Open, and a download's "when done: open"); app presence (`confirm: true` → 503 when the native app has not polled `/api/state` for 5 s); pause all, quit; Windows integration: Start with Windows shortcut (native exe `--tray`), sleep/shutdown commands (`mgr.power`)
@@ -44,6 +45,7 @@
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches, Open (`POST /api/open`)
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; per-download fields and limit, duplicates, the countdown, queues and their scheduler (a test clock), categories; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, `playerData`/`optionsFromPlayer` against `formatOptions`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
+- `log.test.js` — log line format, trimming, an unwritable file, and a real engine crash (`FASTDL_CRASH`) landing in `log.txt`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files, answers `-J`)
 - `fixtures/ytdlp-formats.json` — `yt-dlp -J` output of a fake 19 s video, used for the format list

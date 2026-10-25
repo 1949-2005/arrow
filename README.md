@@ -281,6 +281,10 @@ Options has four pages.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
 
+## When something goes wrong
+
+Arrow writes `log.txt` next to its `state.json` (in its install folder): when it started and stopped, and the details of any crash. Open it from **⋯ › Open log file** and attach it to a bug report.
+
 ## Privacy and safety
 
 - Arrow runs only on your computer (127.0.0.1). Other websites cannot control it.

@@ -536,6 +536,23 @@ namespace Arrow
             Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
             Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
             Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
+
+            // log.txt
+            var logFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arrow-log-" + Guid.NewGuid().ToString("N") + ".txt");
+            Log.File = logFile;
+            Log.Write("app", "Error: boom\r\n   at x");
+            var logLines = File.ReadAllText(logFile).Split('\n');
+            Ok(System.Text.RegularExpressions.Regex.IsMatch(logLines[0], @"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z \[app\] Error: boom$"), "log line");
+            Eq(logLines[1], "       at x", "log: more lines indented");
+            File.WriteAllText(logFile, string.Join("\n", Enumerable.Range(0, 20000).Select(i => "old line " + i + " " + new string('x', 50))) + "\n");
+            Log.Write("app", "newest");
+            var logText = File.ReadAllText(logFile);
+            Ok(logText.Length <= Log.Max / 2 + 100, "log trimmed to half");
+            Ok(logText.StartsWith("old line ") && logText.EndsWith("[app] newest\n"), "log trimmed at a line start, newest kept");
+            File.Delete(logFile);
+            Log.File = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "no-such-dir-arrow", "log.txt");
+            Log.Write("app", "lost"); // must not throw
+            Log.File = null;
             var was = new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 8 }, { "speedLimitOn", false }, { "duplicates", "ask" } };
             Eq(sent(Core.Changed(was, new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 16 }, { "speedLimitOn", true }, { "duplicates", "ask" } })),
                 Q("{'connections':16,'speedLimitOn':true}"), "only the changed settings");
