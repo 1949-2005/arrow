@@ -587,7 +587,8 @@ namespace Arrow
             if (kind != stripKind)
             {
                 stripKind = kind;
-                strip.Svg = kind == "update" || kind == "updating" ? "active" : null; // the user's download arrow
+                strip.Svg = null;
+                strip.Logo = kind == "update" || kind == "updating"; // a new version of the app: its logo
                 if (kind == "offline")
                 {
                     strip.Icon = Glyph.Error;
