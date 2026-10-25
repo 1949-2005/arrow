@@ -320,6 +320,7 @@ Arrow writes `log.txt` next to its `state.json` (in its install folder): when it
 
 - Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
 - `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
+- To sign the exes (so SmartScreen and Smart App Control trust them), set `ARROW_SIGN_PFX` to your code-signing certificate (.pfx) and `ARROW_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Arrow.exe, Arrow Engine.exe and ArrowSetup.exe with SHA-256 and a timestamp (`ARROW_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
 - Or run Arrow from this folder:
   - Double-click `install.cmd`. Wait about 15 seconds.
   - It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:
