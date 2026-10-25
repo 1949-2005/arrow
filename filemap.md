@@ -47,6 +47,7 @@
   - `icons/` — the logo for the toolbar and the extensions page (16, 32, 48, 128 px)
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches, Open (`POST /api/open`)
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; per-download fields and limit, duplicates, the countdown, queues and their scheduler (a test clock), categories; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
+- `extension.browser.test.js` — the extension in a real browser: headless Edge loads a copy pointed at a test engine, a page's download link goes to Arrow while the app is open and stays in the browser while it is closed; skipped without Edge or while Internet Download Manager runs (its browser integration takes the downloads)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, `playerData`/`optionsFromPlayer` against `formatOptions`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `sites.test.js` — per-site settings: hosts cleaned, matched with their subdomains (the longest entry wins), saved, and a new download taking its site's limit
 - `proxy.test.js` — the proxy setting's rule, the variables the engine needs for it, yt-dlp's `--proxy`, and a real engine restarting with the proxy when it changes
