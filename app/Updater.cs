@@ -80,6 +80,7 @@ namespace Arrow
                         sum = c.DownloadString(r.Sum);
                         var expected = Core.Sha256Of(sum);
                         if (expected == null) throw new InvalidOperationException("The release's checksum file is unreadable.");
+                        c.Headers[HttpRequestHeader.UserAgent] = Program.Name + "/" + System.Windows.Forms.Application.ProductVersion; // WebClient clears its headers after each request
                         c.DownloadProgressChanged += (s, e) => Post(ui, () => progress(e.ProgressPercentage));
                         var wait = new ManualResetEvent(false);
                         Exception err = null;

@@ -93,7 +93,9 @@ namespace Arrow
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
-            if (e.Button != MouseButtons.Left || e.Clicks > 1) return;
+            if (e.Button != MouseButtons.Left) return;
+            // the second click of a double-click arrives here (the tile has no title bar to get WM_NCLBUTTONDBLCLK)
+            if (e.Clicks > 1) { var h = Opened; if (h != null) h(); return; }
             const int WM_NCLBUTTONDOWN = 0xA1, HTCAPTION = 2;
             ReleaseCapture();
             SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
