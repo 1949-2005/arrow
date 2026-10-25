@@ -50,6 +50,10 @@ namespace Arrow
         bool autoUpdates = true;
         string skipVersion;
         int updatePercent = -1;
+        // IDM's drop target (DropTarget): ui.json's switch and place; null while hidden
+        DropTarget dropTarget;
+        bool dropShown;
+        Point? dropAt;
         readonly System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer { Interval = 10000 }; // the first check 10 s after start, then daily
         int openSeen, polls;
         State state;
@@ -231,6 +235,7 @@ namespace Arrow
             {
                 LoadUi();
                 Dialogs.UiChanged = SaveUi;
+                ShowDropTarget(dropShown);
                 updateTimer.Tick += (s, e) => { updateTimer.Interval = 24 * 60 * 60 * 1000; if (autoUpdates) CheckUpdates(false); };
                 updateTimer.Start();
             }
@@ -479,6 +484,7 @@ namespace Arrow
             }
             foreach (var id in speeds.Keys.Except(running.Select(d => d.Id)).ToList()) speeds.Remove(id);
             Push(totals, running.Sum(d => (double)d.Speed));
+            if (dropTarget != null) dropTarget.Speed = running.Count > 0 ? Core.Size(running.Sum(d => (double)d.Speed)) + "/s" : "";
 
             if (firstPoll) openSeen = s.Open;
             else if (s.Open > openSeen) { openSeen = s.Open; if (shots == null) ShowMain(); }
@@ -1011,6 +1017,8 @@ namespace Arrow
                 sub.Items.Add(t);
             }
             Item(m, "Open downloads folder", OpenDownloadsFolder, state != null);
+            var drop = Item(m, "Show drop target", () => { ShowDropTarget(!dropShown); SaveUi(); }, true);
+            drop.Checked = dropShown;
             Item(m, "Check for updates", () => CheckUpdates(true), updatePercent < 0);
             var auto = Item(m, "Check for updates automatically", () => { autoUpdates = !autoUpdates; SaveUi(); }, true);
             auto.Checked = autoUpdates;
@@ -1108,6 +1116,24 @@ namespace Arrow
             list.Focus();
         }
 
+        // The drop target on or off; it comes back where it was, if that place is still on a screen
+        void ShowDropTarget(bool on)
+        {
+            dropShown = on;
+            if (!on)
+            {
+                if (dropTarget != null) { dropTarget.Close(); dropTarget.Dispose(); dropTarget = null; }
+                return;
+            }
+            if (dropTarget != null) return;
+            dropTarget = new DropTarget(DropText, text => { if (Regex.Split(text.Trim(), @"\s+").Count(w => LinkRx.IsMatch(w)) > 1) ShowMain(); Drop(text); });
+            if (dropAt.HasValue && Screen.AllScreens.Any(s => s.WorkingArea.Contains(new Rectangle(dropAt.Value, dropTarget.Size)))) dropTarget.Location = dropAt.Value;
+            dropTarget.Opened += ShowMain;
+            dropTarget.Hidden += () => { ShowDropTarget(false); SaveUi(); };
+            dropTarget.Moved += () => { dropAt = dropTarget.Location; SaveUi(); };
+            dropTarget.Show();
+        }
+
         // Options' Save to folder in Explorer (made first if it isn't there yet)
         void OpenDownloadsFolder()
         {
@@ -1181,6 +1207,9 @@ namespace Arrow
             if (!Library.Contains(section) && !section.StartsWith("type:") && !section.StartsWith("queue:")) section = "type:" + section; // from before Types had a prefix
             trayHint = o.Bool("trayHint") ?? false;
             autoUpdates = o.Bool("updates") ?? true;
+            dropShown = o.Bool("dropTarget") ?? false;
+            int? dx = o.Int("dropX"), dy = o.Int("dropY");
+            if (dx != null && dy != null) dropAt = new Point(dx.Value, dy.Value);
             skipVersion = o.Str("skipVersion");
             var sort = o.Str("sort");
             sortColumn = Core.Columns.Contains(sort) ? sort : null;
@@ -1214,6 +1243,7 @@ namespace Arrow
                 { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
                 { "theme", Theme.Mode },
                 { "updates", autoUpdates }, { "skipVersion", skipVersion },
+                { "dropTarget", dropShown }, { "dropX", dropAt.HasValue ? (object)dropAt.Value.X : null }, { "dropY", dropAt.HasValue ? (object)dropAt.Value.Y : null },
             };
             try
             {
@@ -1246,6 +1276,7 @@ namespace Arrow
         {
             poller.Stop();
             updateTimer.Dispose();
+            if (dropTarget != null) dropTarget.Dispose();
             Theme.Changed -= onTheme;
             Program.ShowRequested -= onShow;
             Listen(false);
@@ -1308,6 +1339,13 @@ namespace Arrow
             updatePercent = 45;
             UpdateStrip();
             Shot("main-strip-updating");
+            foreach (var sp in new[] { "", "2.4 MB/s" }) // the drop target, idle and while downloading
+                using (var dt = new DropTarget(DropText, t => { }) { Speed = sp })
+                using (var bmp = new Bitmap(dt.Width, dt.Height))
+                {
+                    dt.DrawToBitmap(bmp, new Rectangle(Point.Empty, dt.Size));
+                    bmp.Save(Path.Combine(shots, "drop-target" + (sp == "" ? "" : "-running") + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
+                }
             update = null;
             updatePercent = -1;
             offered = "https://downloads.example.com/files/setup-2.4.1.zip";

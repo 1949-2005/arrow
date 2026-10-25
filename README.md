@@ -285,6 +285,10 @@ Options has four pages.
 
 Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Arrow downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Arrow never passes your browser's cookies to yt-dlp).
 
+## Drop target
+
+**⋯ › Show drop target** puts a small Arrow tile on top of every window, like IDM's. Drag a link (or several) from your browser onto it to download them. It shows the total speed while something downloads. Drag it anywhere: it stays there next time. Double-click it to open Arrow, right-click it to hide it.
+
 ## Sites
 
 **Options › Sites** gives a site its own settings: the connections per download (for servers that block many at once) and a speed limit (in KB/s). They count for the site and its subdomains, so `example.com` covers `dl.example.com` too. 0 keeps the usual setting. A download's own limit, set in its progress window, still wins.
