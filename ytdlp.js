@@ -48,9 +48,11 @@ const onPath = n => (process.env.PATH ?? '').split(path.delimiter).filter(Boolea
 // WinGet installs land here; a FastDL started before the install still has the old PATH.
 const winget = (...p) => process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', ...p) : '';
 
+// WinGet's copy first: the one `winget upgrade yt-dlp.yt-dlp` keeps current. Other apps (Parabolic…) put their own,
+// often old, yt-dlp on PATH, and YouTube refuses an old one.
 export function findYtdlp() {
-  const f = [process.env.FASTDL_YTDLP, ...onPath('yt-dlp'), winget('Links', 'yt-dlp.exe'),
-    ...subdirs(winget('Packages'), 'yt-dlp.yt-dlp_').map(p => path.join(p, 'yt-dlp.exe'))].find(f => f && existsSync(f));
+  const f = [process.env.FASTDL_YTDLP, winget('Links', 'yt-dlp.exe'),
+    ...subdirs(winget('Packages'), 'yt-dlp.yt-dlp_').map(p => path.join(p, 'yt-dlp.exe')), ...onPath('yt-dlp')].find(f => f && existsSync(f));
   if (!f) throw new Error('yt-dlp is not installed. Run: winget install yt-dlp.yt-dlp');
   return f;
 }

@@ -7,7 +7,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
-import { ytdlpArgs, youtubeId, formatOptions } from './ytdlp.js';
+import { ytdlpArgs, youtubeId, formatOptions, findYtdlp } from './ytdlp.js';
 
 // Stands in for googlevideo.com: answers the one-byte range request for formats that have no exact filesize
 const ranges = [];
@@ -50,6 +50,28 @@ async function until(check, what, ms = 15000) {
 const settled = d => until(() => !['queued', 'downloading'].includes(d.status), 'the download to stop');
 const view = d => mgr.view().downloads.find(x => x.id === d.id);
 const logLines = async () => (await fs.readFile(logFile, 'utf8').catch(() => '')).split('\n');
+
+test("WinGet's yt-dlp comes before an older one another app put on PATH", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'glide-find-'));
+  const env = { LOCALAPPDATA: process.env.LOCALAPPDATA, PATH: process.env.PATH, FASTDL_YTDLP: process.env.FASTDL_YTDLP };
+  try {
+    const links = path.join(dir, 'Microsoft', 'WinGet', 'Links'), other = path.join(dir, 'Parabolic');
+    await fs.mkdir(links, { recursive: true });
+    await fs.mkdir(other);
+    const name = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+    await fs.writeFile(path.join(links, 'yt-dlp.exe'), '');
+    await fs.writeFile(path.join(other, name), '');
+    delete process.env.FASTDL_YTDLP;
+    process.env.LOCALAPPDATA = dir;
+    process.env.PATH = other;
+    assert.equal(findYtdlp(), path.join(links, 'yt-dlp.exe'));
+    await fs.rm(links, { recursive: true });
+    assert.equal(findYtdlp(), path.join(other, name), 'PATH when WinGet has none');
+  } finally {
+    for (const [k, v] of Object.entries(env)) v === undefined ? delete process.env[k] : process.env[k] = v;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
 
 test('YouTube links are normalized; channels and playlists are refused', () => {
   const m = new Manager(path.join(dir, 'unused.json'));

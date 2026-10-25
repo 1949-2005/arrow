@@ -16,8 +16,14 @@ export const REMOTE_PORT = Number(process.env.FASTDL_REMOTE_PORT) || 9615;
 const PAIR_MS = 10 * 60000, TICKET_MS = 60000, MAX_BODY = 64 << 10;
 const OPS = ['pause', 'resume', 'remove'];
 
-// A link's last path part (decoded), else the link: what a download not named yet shows
-const fileOfUrl = u => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()) || u; } catch { return u; } };
+// What a download not named yet shows: the link's file name (note.txt), else the link without its scheme
+// (youtube.com/watch?v=…), since a page's last path part ("watch") says nothing
+export const fileOfUrl = u => {
+  try {
+    const x = new URL(u), last = decodeURIComponent(x.pathname.split('/').pop());
+    return /\.\w{1,5}$/.test(last) ? last : x.host.replace(/^www\./, '') + x.pathname + x.search;
+  } catch { return u; }
+};
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const token = n => crypto.randomBytes(n).toString('base64url');
 

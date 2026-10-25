@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { lanAddresses, hostOk, deviceName, cleanRemote } from './remote.js';
+import { lanAddresses, hostOk, deviceName, cleanRemote, fileOfUrl } from './remote.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NAME = JSON.parse(readFileSync(path.join(here, 'brand.json'), 'utf8')).name;
@@ -51,7 +51,7 @@ after(async () => {
   await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
-test('helpers: private addresses only, IP hosts only, device names, settings cleaned', () => {
+test('helpers: private addresses only, IP hosts only, device names, names of unnamed links, settings cleaned', () => {
   assert.deepEqual(lanAddresses({
     'vEthernet (WSL)': [{ family: 'IPv4', address: '172.20.0.1', internal: false }],
     'Wi-Fi': [{ family: 'IPv4', address: '192.168.1.23', internal: false }, { family: 'IPv6', address: 'fe80::1', internal: false }],
@@ -62,6 +62,8 @@ test('helpers: private addresses only, IP hosts only, device names, settings cle
   assert.ok(!hostOk('evil.example:9615', 9615) && !hostOk('192.168.1.23:80', 9615) && !hostOk(undefined, 9615));
   assert.equal(deviceName('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)'), 'iPhone');
   assert.equal(deviceName('Mozilla/5.0 (Linux; Android 14)'), 'Android phone');
+  assert.equal(fileOfUrl('https://x.example/a/my%20file.zip?t=1'), 'my file.zip');
+  assert.equal(fileOfUrl('https://www.youtube.com/watch?v=D0laZjrY_5c'), 'youtube.com/watch?v=D0laZjrY_5c');
   assert.deepEqual(cleanRemote({ enabled: 1, devices: [{ id: 'a', hash: 'x' }, { id: 'b', name: 'iPad', hash: 'f'.repeat(64) }] }).devices.map(d => d.id), ['b']);
 });
 
