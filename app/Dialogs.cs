@@ -668,8 +668,9 @@ namespace Arrow
 
                 // issue 08: Options, each page; Categories with a custom one selected
                 var opts = new Settings { Dir = settings.Dir, Connections = 8, MaxActive = 3, SpeedLimitKB = 500, SpeedLimitOn = true, Categories = true, Clipboard = true, Startup = true,
-                    ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } } };
-                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Categories, OptionsDialog.Queues })
+                    ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } },
+                    Sites = new List<Site> { new Site { Host = "files.example.com", Connections = 2 }, new Site { Host = "cdn.example.net", LimitKB = 800 } } };
+                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Sites, OptionsDialog.Categories, OptionsDialog.Queues })
                 {
                     var o = new OptionsDialog(null, opts, page);
                     if (page == OptionsDialog.Categories) o.SelectCategory("Courses");

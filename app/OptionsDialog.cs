@@ -11,7 +11,7 @@ namespace Arrow
 {
     public class OptionsDialog : Dialog
     {
-        public const string General = "general", Downloads = "downloads", Categories = "categories", Queues = "queues";
+        public const string General = "general", Downloads = "downloads", Sites = "sites", Categories = "categories", Queues = "queues";
         readonly Api api; // null in ARROW_SHOTS
         Settings settings; // the engine's, again after each category change
         readonly Dictionary<string, object> before; // General and Downloads as the dialog opened
@@ -33,6 +33,19 @@ namespace Arrow
         readonly FlatCheck sort = new FlatCheck("Sort into category folders"), limitOn = new FlatCheck("Limit all downloads to"), proxyOn = new FlatCheck("Use a proxy");
         readonly TextField proxy = new TextField('\0', "http://host:port");
         readonly Caption connHint = Hint("1–32"), activeHint = Hint("1–20"), kbs = Hint("KB/s");
+        // Sites: a row per site, at most MaxSites (the page keeps Categories' height)
+        const int MaxSites = 6;
+        class SiteRow { public TextField Host, Conn, Limit; public FlatButton Remove; }
+        readonly List<SiteRow> siteRows = new List<SiteRow>();
+        readonly Caption sitesNote = new Caption(Theme.Small, () => Theme.Muted)
+        {
+            MaxLines = 3,
+            Text = "Downloads from a site, and from its subdomains, use its own connections and speed limit. 0 keeps the usual setting.",
+        };
+        readonly Caption siteHead = Label("Site"), connHead = Label("Connections"), limitHead = Label("Limit (KB/s)");
+        readonly FlatButton addSite = new FlatButton("Add site", Glyph.Add, ButtonKind.Secondary);
+        string sitesBefore;
+
         // Categories
         readonly CategoryTable table = new CategoryTable();
         readonly FlatButton add = new FlatButton("Add", Glyph.Add, ButtonKind.Secondary), edit = new FlatButton("Edit…", '\0', ButtonKind.Secondary),
@@ -99,10 +112,15 @@ namespace Arrow
             Add(nav);
             nav.Add(General, "General", '\0', null);
             nav.Add(Downloads, "Downloads", '\0', null);
+            nav.Add(Sites, "Sites", '\0', null);
             nav.Add(Categories, "Categories", '\0', null);
             nav.Add(Queues, "Queues", '\0', null);
             Page(General, startup, clipboard, showComplete, dupLabel, duplicates, themeLabel, theme);
             Page(Downloads, dirLabel, dir, browse, sort, connLabel, conn, connHint, activeLabel, active, activeHint, limitOn, limit, kbs, proxyOn, proxy);
+            Page(Sites, sitesNote, siteHead, connHead, limitHead, addSite);
+            foreach (var x in s.Sites.Take(MaxSites)) AddSiteRow(x);
+            sitesBefore = Json.Serialize(SitesBody());
+            addSite.Click += (o, e) => { AddSiteRow(new Site { Host = "" }); siteRows.Last().Host.Box.Focus(); };
             Page(Categories, table, add, edit, remove, note);
             Page(Queues, queuesText, openScheduler);
             Add(error);
@@ -126,6 +144,48 @@ namespace Arrow
         }
 
         void Page(string page, params Control[] cs) { foreach (var c in cs) { pageOf[c] = page; Add(c); } }
+
+        // ---- Sites
+
+        void AddSiteRow(Site x)
+        {
+            if (siteRows.Count >= MaxSites) return;
+            var r = new SiteRow
+            {
+                Host = new TextField('\0', "example.com") { Text = x.Host },
+                Conn = new TextField('\0', "0") { Text = x.Connections > 0 ? x.Connections.ToString() : "" },
+                Limit = new TextField('\0', "0") { Text = x.LimitKB > 0 ? x.LimitKB.ToString() : "" },
+                Remove = new FlatButton("", Glyph.Delete, ButtonKind.Ghost) { Svg = "delete", AccessibleName = "Remove this site" },
+            };
+            r.Host.Box.AccessibleName = "Site";
+            r.Conn.Box.AccessibleName = "Connections for this site, 1 to 32, 0 for the usual";
+            r.Limit.Box.AccessibleName = "Speed limit for this site in KB/s, 0 for none";
+            foreach (var f in new[] { r.Host, r.Conn, r.Limit }) f.Box.TextChanged += (o, e) => Check(false);
+            r.Remove.Click += (o, e) =>
+            {
+                siteRows.Remove(r);
+                foreach (var c in new Control[] { r.Host, r.Conn, r.Limit, r.Remove }) { pageOf.Remove(c); Body.Controls.Remove(c); c.Dispose(); }
+                addSite.Enabled = !busy;
+                Check(false);
+                Relayout();
+            };
+            siteRows.Add(r);
+            Page(Sites, r.Host, r.Conn, r.Limit, r.Remove);
+            foreach (var c in new Control[] { r.Host, r.Conn, r.Limit, r.Remove }) c.Visible = nav.Selected == Sites;
+            addSite.Enabled = siteRows.Count < MaxSites && !busy;
+            Relayout();
+        }
+
+        // POST /api/settings' sites: the rows with a host, empty numbers as 0
+        List<object> SitesBody()
+        {
+            return siteRows.Where(r => r.Host.Text.Trim() != "").Select(r => (object)new Dictionary<string, object>
+            {
+                { "host", r.Host.Text.Trim() },
+                { "connections", Core.WholeNumber(r.Conn.Text.Trim() == "" ? "0" : r.Conn.Text, 0, 32) ?? 0 },
+                { "limitKB", Core.WholeNumber(r.Limit.Text.Trim() == "" ? "0" : r.Limit.Text, 0, 10000000) ?? 0 },
+            }).ToList();
+        }
 
         void ShowPage(string page)
         {
@@ -168,6 +228,13 @@ namespace Arrow
             check(active, Core.WholeNumber(active.Text, 1, 20) != null, "Downloads at the same time must be a whole number from 1 to 20.");
             check(limit, !limitOn.Checked || Core.WholeNumber(limit.Text, 1, 10000000) != null, "The speed limit must be a whole number of KB/s from 1 to 10 000 000.");
             check(proxy, !proxyOn.Checked || Core.IsProxy(proxy.Text), "The proxy must look like http://host:port (or https://, with user:password@ if it needs one).");
+            foreach (var r in siteRows)
+            {
+                var empty = r.Host.Text.Trim() == "" && r.Conn.Text.Trim() == "" && r.Limit.Text.Trim() == "";
+                check(r.Host, empty || Core.IsSiteHost(r.Host.Text), "A site is a host name, like example.com or dl.example.com.");
+                check(r.Conn, r.Conn.Text.Trim() == "" || Core.WholeNumber(r.Conn.Text, 0, 32) != null, "A site's connections must be a whole number from 0 to 32.");
+                check(r.Limit, r.Limit.Text.Trim() == "" || Core.WholeNumber(r.Limit.Text, 0, 10000000) != null, "A site's speed limit must be a whole number of KB/s from 0 to 10 000 000.");
+            }
             if (all || problems.Count == 0 || error.Text != "") ShowError(problems.FirstOrDefault());
             return problems.Count == 0;
         }
@@ -192,10 +259,12 @@ namespace Arrow
             if (!Check(true))
             {
                 SchedulerWanted = false;
-                nav.Selected = Downloads; // every field that can be wrong is there
+                // the page of the first field that is wrong
+                nav.Selected = siteRows.Any(r => r.Host.Invalid || r.Conn.Invalid || r.Limit.Invalid) && !new[] { dir, conn, active, limit, proxy }.Any(f => f.Invalid) ? Sites : Downloads;
                 return;
             }
             var body = Core.Changed(before, Values());
+            if (Json.Serialize(SitesBody()) != sitesBefore) body["sites"] = SitesBody();
             if (api == null) return;
             if (body.Count == 0) { DialogResult = DialogResult.OK; return; }
             var a = api;
@@ -219,7 +288,7 @@ namespace Arrow
         void Lock(bool on)
         {
             busy = on;
-            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, proxyOn, proxy, add, edit, remove, openScheduler, save }) c.Enabled = !on;
+            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, proxyOn, proxy, add, edit, remove, openScheduler, save, addSite }.Concat(siteRows.SelectMany(r => new Control[] { r.Host, r.Conn, r.Limit, r.Remove }))) c.Enabled = !on;
             if (!on) Enable();
         }
 
@@ -324,6 +393,26 @@ namespace Arrow
                 proxyOn.Location = new Point(x, y + (row - proxyOn.Height) / 2);
                 proxy.Bounds = new Rectangle(proxyOn.Right + gap, y, Math.Min(Theme.Px(260), x + w - proxyOn.Right - gap), row);
                 y += row;
+            }
+            else if (page == Sites)
+            {
+                sitesNote.Bounds = new Rectangle(x, y, w, sitesNote.HeightFor(w));
+                y = sitesNote.Bottom + Theme.Px(12);
+                int cw = Theme.Px(96), lw = Theme.Px(110), bw = Theme.Px(32), hw = w - cw - lw - bw - 3 * gap;
+                siteHead.Bounds = new Rectangle(x, y, hw, siteHead.Height);
+                connHead.Bounds = new Rectangle(x + hw + gap, y, cw, connHead.Height);
+                limitHead.Bounds = new Rectangle(x + hw + cw + 2 * gap, y, lw, limitHead.Height);
+                y += siteHead.Height + Theme.Px(6);
+                foreach (var r in siteRows)
+                {
+                    r.Host.Bounds = new Rectangle(x, y, hw, row);
+                    r.Conn.Bounds = new Rectangle(x + hw + gap, y, cw, row);
+                    r.Limit.Bounds = new Rectangle(x + hw + cw + 2 * gap, y, lw, row);
+                    r.Remove.Bounds = new Rectangle(x + w - bw, y, bw, row);
+                    y += row + gap;
+                }
+                addSite.Bounds = new Rectangle(x, y + Theme.Px(4), Math.Max(Theme.Px(96), addSite.PreferredWidth), row);
+                y = addSite.Bottom;
             }
             else if (page == Categories) y = CategoriesLayout(x, w);
             else

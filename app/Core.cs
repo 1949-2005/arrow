@@ -103,6 +103,7 @@ namespace Arrow
         public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
         public Dictionary<string, List<string>> Types = new Dictionary<string, List<string>>(); // category → file types, in sidebar order
         public List<Queue> Queues = new List<Queue>();
+        public List<Site> Sites = new List<Site>(); // per-site connections and speed limit (engine.js cleanSites)
 
         public static Settings From(IDictionary<string, object> o)
         {
@@ -125,8 +126,17 @@ namespace Arrow
                 Folders = f == null ? new Dictionary<string, string>() : f.Keys.Where(k => !string.IsNullOrEmpty(f[k] as string)).ToDictionary(k => k, k => (string)f[k]),
                 Types = t == null ? new Dictionary<string, List<string>>() : t.Keys.ToDictionary(k => k, k => t.Strings(k)),
                 Queues = queues,
+                Sites = (o.List("sites") ?? new List<object>()).OfType<IDictionary<string, object>>()
+                    .Select(x => new Site { Host = x.Str("host") ?? "", Connections = x.Int("connections") ?? 0, LimitKB = x.Int("limitKB") ?? 0 }).ToList(),
             };
         }
+    }
+
+    // A site's own settings: Connections and LimitKB, 0 for the usual ones
+    public class Site
+    {
+        public string Host;
+        public int Connections, LimitKB;
     }
 
     // A download queue (settings.queues; /api/state's queues add Running and the counts)
@@ -704,6 +714,9 @@ namespace Arrow
         }
 
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
+        // engine.js cleanSites' rule: a host name (example.com, dl.example.com); a scheme, path or port is dropped there, refused here
+        public static bool IsSiteHost(string s) { return Regex.IsMatch((s ?? "").Trim(), @"^(\*\.)?([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}$") && (s ?? "").Trim().Length <= 253; }
+
         // engine.js cleanProxy's rule: http(s)://[user:pass@]host:port, nothing after the port
         public static bool IsProxy(string s) { return Regex.IsMatch((s ?? "").Trim(), @"^https?://([^@/\s]+@)?[^:/@\s]+:\d{1,5}/?$", RegexOptions.IgnoreCase); }
 

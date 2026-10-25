@@ -552,6 +552,10 @@ namespace Arrow
             Eq(Core.SetupArgs(true, false), "--quiet --quit-arrow --start --no-startup", "setup args keep the shortcuts as they are");
             Ok(Core.IsProxy("http://10.0.0.1:8080") && Core.IsProxy(" https://u:p@proxy.example.com:3128/ "), "proxy addresses");
             Ok(!Core.IsProxy("proxy:8080") && !Core.IsProxy("socks5://h:1080") && !Core.IsProxy("http://h") && !Core.IsProxy("http://h:80/path"), "not proxy addresses");
+            Ok(Core.IsSiteHost("example.com") && Core.IsSiteHost(" dl.Example.com ") && Core.IsSiteHost("*.cdn.net") && Core.IsSiteHost("localhost"), "site hosts");
+            Ok(!Core.IsSiteHost("https://example.com") && !Core.IsSiteHost("example.com/x") && !Core.IsSiteHost("bad host") && !Core.IsSiteHost(""), "not site hosts");
+            var sites = Settings.From(Json.Parse("{\"sites\":[{\"host\":\"a.com\",\"connections\":2,\"limitKB\":300}]}") as IDictionary<string, object>).Sites;
+            Eq(sites.Count + " " + sites[0].Host + " " + sites[0].Connections + " " + sites[0].LimitKB, "1 a.com 2 300", "settings.sites");
 
             // log.txt
             var logFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arrow-log-" + Guid.NewGuid().ToString("N") + ".txt");

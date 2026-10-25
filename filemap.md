@@ -33,7 +33,7 @@
   - `Updater.cs` — updates from GitHub Releases (brand.json's `repo`): the latest release's ArrowSetup.exe checked against its .sha256 and run `--quiet --quit-arrow --start`, off the UI thread; `ARROW_UPDATES_URL` (tests); `--check-update` prints the result
   - `TrayButton.cs` — the progress window's Minimize to tray button: a small owned layered window over the title bar, left of minimize (DWMWA_CAPTION_BUTTON_BOUNDS), drawn like the caption glyphs with per-pixel alpha; follows its owner, hides while it is hidden or minimized
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
-  - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Categories, Queues); General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
+  - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Sites, Categories, Queues); Sites: a row per site (host, connections, limit), up to six; General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, the list's columns, sorting and status texts, the IDM-parity helpers, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), the SVG icon parser (`ParseSvg`), plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest), `compileSetup()` (the installer) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
@@ -46,6 +46,7 @@
   - `popup.html`, `popup.js` — media found on the current tab, Download this video on YouTube pages (both through the Download File Info window), takeover and video-button switches, Open (`POST /api/open`)
 - `engine.test.js` — engine tests against a local test server, including pending downloads: probe, confirm, numbering, expiry; per-download fields and limit, duplicates, the countdown, queues and their scheduler (a test clock), categories; HLS with a separate sound track, made and checked with the real ffmpeg (skipped without it)
 - `extension.test.js` — extension logic (background.js, `pickMedia`, `playerData`/`optionsFromPlayer` against `formatOptions`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
+- `sites.test.js` — per-site settings: hosts cleaned, matched with their subdomains (the longest entry wins), saved, and a new download taking its site's limit
 - `proxy.test.js` — the proxy setting's rule, the variables the engine needs for it, yt-dlp's `--proxy`, and a real engine restarting with the proxy when it changes
 - `log.test.js` — log line format, trimming, an unwritable file, and a real engine crash (`FASTDL_CRASH`) landing in `log.txt`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp

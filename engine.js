@@ -27,6 +27,23 @@ const describe = t => String(t ?? '').replace(/\p{Cc}/gu, '').trim().slice(0, 30
 const DUPLICATES = ['ask', 'number', 'replace', 'resume'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAIN = 'main', MAIN_NAME = 'Main download queue';
+// settings.sites: per host (its subdomains too) its own connections (0: the global setting) and speed limit (0: none)
+export function cleanSites(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).flatMap(s => {
+    const host = String(s?.host ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^\*?\./, '');
+    if (!/^(?=.{1,253}$)([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}$/.test(host) || seen.has(host)) return [];
+    seen.add(host);
+    return [{ host, connections: clamp(s.connections, 0, 32), limitKB: clamp(s.limitKB, 0, 1e7) }];
+  });
+}
+
+// The sites entry for a host: the longest one it equals or ends with ('.' + host)
+export function siteFor(sites, hostname) {
+  const h = String(hostname ?? '').toLowerCase();
+  return (sites ?? []).filter(s => h === s.host || h.endsWith('.' + s.host)).sort((a, b) => b.host.length - a.host.length)[0] ?? null;
+}
+
 const cleanName = n => typeof n === 'string' ? n.replace(/\p{Cc}/gu, '').trim() : '';
 // A queue's fields: s over q, checked like the other settings (anything wrong falls back to the default)
 const queueFields = (q, s = {}) => {
@@ -116,7 +133,7 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, proxy: '', folders: {}, types: structuredClone(CATEGORIES), duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, proxy: '', sites: [], folders: {}, types: structuredClone(CATEGORIES), duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
   list = [];
   running = new Map();
   // Running queues, never saved: id → {tries: download id → retries used this run, waiting: download id → retry time, worked}
@@ -179,6 +196,7 @@ export class Manager {
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
     if (s.proxy != null) { const p = cleanProxy(s.proxy); if (p == null) throw new Error('The proxy must look like http://host:port'); t.proxy = p; }
     t.proxy = cleanProxy(t.proxy) ?? ''; // a loaded state.json
+    t.sites = cleanSites(s.sites ?? t.sites);
     // A rename is a custom name replaced by a new one at the same place in the order: its remembered folder follows.
     const before = isObject(t.types) ? t.types : {}, was = Object.keys(before);
     t.types = cleanTypes(s.types, before);
@@ -240,6 +258,8 @@ export class Manager {
       added: Date.now(),
       description: describe(description),
     };
+    const site = siteFor(this.settings.sites, u.hostname);
+    if (site?.limitKB) d.limitKB = site.limitKB; // its own limit, which the progress window shows and can change
     // Without a window to ask (Add links, batches) only 'replace' differs from numbering
     const x = !confirm && this.settings.duplicates === 'replace' && this.duplicate(d);
     if (x) {
@@ -683,7 +703,7 @@ export class Manager {
       if (first && d.size) await fh.truncate(d.size);
       await new Promise((resolve, reject) => {
         let err;
-        ctl.max = d.resumable ? this.settings.connections : 1;
+        ctl.max = d.resumable ? siteFor(this.settings.sites, d.cookieHost)?.connections || this.settings.connections : 1;
         ctl.live = new Map(); // piece → {at: when its connection last heard data, ac: cuts that connection alone}
         const launch = (s, res, stale = this.staleMs) => {
           ctl.live.set(s, { at: Date.now(), ac: new AbortController(), stale });
