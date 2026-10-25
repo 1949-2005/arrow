@@ -232,7 +232,7 @@ next start of a queue that is not running (Core.NextStart). Right: "When done:" 
 6: Do nothing, Sleep, Shut down) → POST /api/settings {whenDone}; it shows the engine's `whenDone`.
 
 ### Updates
-Strip (lowest priority, after the clipboard offer): the app's logo (20 px), "<name> 1.2.0 is available. You have 1.0.0.", Update and × (hides that
+Strip (lowest priority, after the clipboard offer): Download glyph, "<name> 1.2.0 is available. You have 1.0.0.", Update and × (hides that
 version: ui.json `skipVersion`). While the setup downloads: "Downloading <name> 1.2.0… 45%. <name> restarts when it's installed.", no
 buttons. Update asks first when downloads run (they stop while the setup replaces the app). Checks: 10 s after start, then
 every 24 h, when ui.json `updates` (⋯ › Check for updates automatically, default on); ⋯ › Check for updates says when it
