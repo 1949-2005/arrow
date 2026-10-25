@@ -571,7 +571,7 @@ namespace Glide
             Ok(logText.Length <= Log.Max / 2 + 100, "log trimmed to half");
             Ok(logText.StartsWith("old line ") && logText.EndsWith("[app] newest\n"), "log trimmed at a line start, newest kept");
             File.Delete(logFile);
-            Log.File = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "no-such-dir-arrow", "log.txt");
+            Log.File = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "no-such-dir-glide", "log.txt");
             Log.Write("app", "lost"); // must not throw
             Log.File = null;
             var was = new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 8 }, { "speedLimitOn", false }, { "duplicates", "ask" } };

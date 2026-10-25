@@ -37,7 +37,7 @@ test('log: past 1 MB the oldest half goes, at a line start', async () => {
 });
 
 test('log: an unwritable file is ignored', () => {
-  assert.doesNotThrow(() => log(path.join(os.tmpdir(), 'no-such-dir-arrow', 'x', 'log.txt'), 'engine', 'lost'));
+  assert.doesNotThrow(() => log(path.join(os.tmpdir(), 'no-such-dir-glide', 'x', 'log.txt'), 'engine', 'lost'));
 });
 
 test('engine: an uncaught exception lands in log.txt next to state.json, which is saved; exit code 1', async () => {

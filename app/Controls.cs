@@ -1054,7 +1054,7 @@ namespace Glide
             return new Rectangle(0, tops[i] + AutoScrollPosition.Y, ClientSize.Width, tops[i + 1] - tops[i]);
         }
 
-        public const string DragFormat = "ArrowDownloads"; // the dragged rows' ids, one per line (the sidebar's queues take them)
+        public const string DragFormat = "GlideDownloads"; // the dragged rows' ids, one per line (the sidebar's queues take them)
         Rectangle dragBox = Rectangle.Empty;
 
         protected override void OnMouseMove(MouseEventArgs e)
