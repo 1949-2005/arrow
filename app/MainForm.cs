@@ -263,6 +263,13 @@ namespace Arrow
                 ProgressDialog.AppTray = tray; // a download's tray icon goes right after this one
                 tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
                 tray.BalloonTipClicked += (s, e) => { ShowMain(); if (balloonId != null) Reveal(balloonId); };
+                // a notification's click comes on a WinRT thread: open the file, its folder, or the window with it selected
+                Toasts.Activated += (action, id) => Ui(() =>
+                {
+                    if (action == "open" && id != null) Ops(new[] { new[] { id, "open" } });
+                    else if (action == "folder" && id != null) Ops(new[] { new[] { id, "folder" } });
+                    else { ShowMain(); if (id != null) Reveal(id); }
+                });
             }
 
             poller = new Poller(api);
@@ -470,7 +477,9 @@ namespace Arrow
             foreach (var d in all)
             {
                 string prev;
-                if (statuses.TryGetValue(d.Id, out prev) && prev == "downloading" && d.Status == "done") Balloon("Download complete", Core.ShortName(d), d.Id);
+                if (statuses.TryGetValue(d.Id, out prev) && prev == "downloading" && d.Status == "done" && (shots != null
+                    || !Toasts.Show("Download complete", Core.ShortName(d), d.Id, new[] { "Open", "open" }, new[] { "Show in folder", "folder" })))
+                    Balloon("Download complete", Core.ShortName(d), d.Id);
                 next[d.Id] = d.Status;
             }
             statuses = next;

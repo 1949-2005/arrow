@@ -301,6 +301,10 @@ Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebo
 
 Arrow checks GitHub for a new version 10 seconds after it starts and then once a day. When there is one, a bar at the top says so: **Update** downloads the new setup, checks its SHA-256 checksum, installs it and starts Arrow again (running downloads stop; resume them after). **×** hides that version. **⋯ › Check for updates** checks now, and **⋯ › Check for updates automatically** turns the daily check off.
 
+## Notifications
+
+When a download finishes, Arrow shows a Windows notification with **Open** and **Show in folder**. Click the notification itself to see the download in Arrow. If notifications are turned off in Windows (Settings › System › Notifications), Arrow shows a balloon by its tray icon instead.
+
 ## When something goes wrong
 
 Arrow writes `log.txt` next to its `state.json` (in its install folder): when it started and stopped, and the details of any crash. Open it from **⋯ › Open log file** and attach it to a bug report.

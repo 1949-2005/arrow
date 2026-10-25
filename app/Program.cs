@@ -2,6 +2,7 @@
 //   --tray       start without showing the main window (Start with Windows)
 //   --no-engine  never start the engine (tests)
 //   --check      no UI: ping the engine, read /api/state, print the result, exit 0 or 1
+//   --check-notification  shows one Windows notification, checks the notification center has it, removes it
 //   --check-update  no UI: ask GitHub (or ARROW_UPDATES_URL) for a newer release, print it, exit 0 or 1
 // ARROW_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
 using System;
@@ -43,6 +44,7 @@ namespace Arrow
             var api = new Api();
             if (args.Contains("--check")) return Check(api, args.Contains("--no-engine"));
             if (args.Contains("--check-update")) return CheckUpdate();
+            if (args.Contains("--check-notification")) { var r = Toasts.Check(); Console.WriteLine(r); return r == "ok" ? 0 : 1; }
             Theme.Init(); // SystemEvents raises the theme switch on the thread that first touched it: this one
             var shots = Environment.GetEnvironmentVariable("ARROW_SHOTS");
             if (!string.IsNullOrEmpty(shots))
