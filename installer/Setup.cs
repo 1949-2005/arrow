@@ -3,7 +3,8 @@
 //   (no arguments)      the setup window (SetupForm)
 //   --uninstall         uninstall mode (also when the exe's name starts with "Uninstall")
 //   --quiet             no window: install (--no-desktop, --no-startup, --no-tools) or uninstall (--remove-data);
-//                       --quit-arrow quits a running Arrow first. Exit 0 ok, 1 error, 2 Arrow is running, 3 tools missing.
+//                       --quit-arrow quits a running Arrow first; --start opens it after installing (its own update).
+//                       Exit 0 ok, 1 error, 2 Arrow is running, 3 tools missing.
 // Test hooks, so nothing touches the real system: ARROW_SETUP_DIR (install folder), ARROW_SETUP_PROGRAMS / _DESKTOP /
 // _STARTUP (shortcut folders), ARROW_SETUP_REGKEY (HKCU key holding the Uninstall entry), ARROW_SETUP_WINGET (the winget
 // command), FASTDL_PORT (the engine to quit); ARROW_SETUP_SHOTS=<folder> saves PNGs of every page and exits.
@@ -57,6 +58,7 @@ namespace Arrow.Setup
                 var tools = args.Contains("--no-tools") || Installer.GetTools(null) == null;
                 Installer.Shortcuts(dir, !args.Contains("--no-desktop"), !args.Contains("--no-startup"));
                 Installer.Register(dir);
+                if (args.Contains("--start")) Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe")) { WorkingDirectory = dir }); // the app's own update
                 return tools ? 0 : 3;
             }
             catch (Exception e)

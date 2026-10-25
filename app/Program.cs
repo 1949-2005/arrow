@@ -2,6 +2,7 @@
 //   --tray       start without showing the main window (Start with Windows)
 //   --no-engine  never start the engine (tests)
 //   --check      no UI: ping the engine, read /api/state, print the result, exit 0 or 1
+//   --check-update  no UI: ask GitHub (or ARROW_UPDATES_URL) for a newer release, print it, exit 0 or 1
 // ARROW_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
 using System;
 using System.Collections.Generic;
@@ -22,6 +23,16 @@ namespace Arrow
         public static string Name { get { return Application.ProductName; } } // brand.json's name, set at build time
         public static string Folder { get { return Path.GetDirectoryName(Application.ExecutablePath); } }
 
+        // brand.json's "repo" (owner/name on GitHub): where updates come from; null when it names none
+        public static string Repo
+        {
+            get
+            {
+                try { return (Json.Parse(File.ReadAllText(Path.Combine(Folder, "brand.json"))) as IDictionary<string, object>).Str("repo"); }
+                catch (Exception) { return null; }
+            }
+        }
+
         [STAThread]
         public static int Main(string[] args)
         {
@@ -31,6 +42,7 @@ namespace Arrow
             Api.AppName = Name;
             var api = new Api();
             if (args.Contains("--check")) return Check(api, args.Contains("--no-engine"));
+            if (args.Contains("--check-update")) return CheckUpdate();
             Theme.Init(); // SystemEvents raises the theme switch on the thread that first touched it: this one
             var shots = Environment.GetEnvironmentVariable("ARROW_SHOTS");
             if (!string.IsNullOrEmpty(shots))
@@ -87,6 +99,21 @@ namespace Arrow
             }
             catch (Exception) { }
             Environment.Exit(1);
+        }
+
+        // --check-update: no UI, ask for the latest release and print "update <tag>" or "up to date"; exit 1 on errors
+        static int CheckUpdate()
+        {
+            var done = new ManualResetEvent(false);
+            var code = 0;
+            Updater.Check((found, error) =>
+            {
+                if (error != null) { Console.WriteLine(error); code = 1; }
+                else Console.WriteLine(found != null ? "update " + found.Tag : "up to date");
+                done.Set();
+            });
+            done.WaitOne();
+            return code;
         }
 
         static int Check(Api api, bool noEngine)

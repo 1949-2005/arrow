@@ -44,6 +44,13 @@ namespace Arrow
         readonly Poller poller;
         readonly string shots;
         bool visible, quitting, firstPoll = true, offline, counting, clipListening, trayHint;
+        // Updates: the newer release found (null: none), ui.json's switch and the version the user dismissed, the setup's
+        // download percent while it runs (-1: not updating)
+        Release update;
+        bool autoUpdates = true;
+        string skipVersion;
+        int updatePercent = -1;
+        readonly System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer { Interval = 10000 }; // the first check 10 s after start, then daily
         int openSeen, polls;
         State state;
         List<Download> all = new List<Download>();
@@ -220,7 +227,13 @@ namespace Arrow
             Controls.Add(root);
             HookDrop(root);
 
-            if (shots == null) { LoadUi(); Dialogs.UiChanged = SaveUi; }
+            if (shots == null)
+            {
+                LoadUi();
+                Dialogs.UiChanged = SaveUi;
+                updateTimer.Tick += (s, e) => { updateTimer.Interval = 24 * 60 * 60 * 1000; if (autoUpdates) CheckUpdates(false); };
+                updateTimer.Start();
+            }
             wantSection = section;
             sidebar.Selected = sidebar.Items.Any(i => i.Key == section) ? section : "all";
             section = sidebar.Selected;
@@ -551,7 +564,8 @@ namespace Arrow
 
         void UpdateStrip()
         {
-            var kind = offline ? "offline" : state != null && state.PowerIn != null ? "countdown" : offered != null && state != null && state.Settings.Clipboard ? "clipboard" : null;
+            var kind = offline ? "offline" : state != null && state.PowerIn != null ? "countdown" : offered != null && state != null && state.Settings.Clipboard ? "clipboard"
+                : updatePercent >= 0 ? "updating" : update != null && update.Version != skipVersion ? "update" : null;
             if (kind != stripKind)
             {
                 stripKind = kind;
@@ -581,11 +595,27 @@ namespace Arrow
                         Run(() => api.Post("/api/add", new Dictionary<string, object> { { "url", url }, { "confirm", true } }));
                     }), close);
                 }
+                else if (kind == "update")
+                {
+                    strip.Icon = Glyph.Download;
+                    strip.IconColor = () => Theme.Text;
+                    var close = IconButton(Glyph.Close, "Dismiss");
+                    close.Click += (s, e) => { skipVersion = update.Version; SaveUi(); UpdateStrip(); };
+                    strip.SetButtons(TextButton("Update", InstallUpdate), close);
+                }
+                else if (kind == "updating")
+                {
+                    strip.Icon = Glyph.Download;
+                    strip.IconColor = () => Theme.Text;
+                    strip.SetButtons();
+                }
                 strip.Visible = kind != null;
             }
             if (kind == "offline") strip.Text = Program.Name + "'s engine isn't running.";
             else if (kind == "countdown") strip.Text = (state.PowerAll ? "All downloads finished. " : "") + Countdown(state);
             else if (kind == "clipboard") strip.Text = "From clipboard: " + offered;
+            else if (kind == "update") strip.Text = Program.Name + " " + update.Version + " is available. You have " + Application.ProductVersion + ".";
+            else if (kind == "updating") strip.Text = "Downloading " + Program.Name + " " + update.Version + "… " + updatePercent + "%. " + Program.Name + " restarts when it's installed.";
         }
 
         // The countdown names what it does (powerOp): the status bar's When done, a download's or a queue's own
@@ -976,6 +1006,10 @@ namespace Arrow
                 t.Click += (s, e) => { Theme.SetMode(mode); SaveUi(); };
                 sub.Items.Add(t);
             }
+            Item(m, "Check for updates", () => CheckUpdates(true), updatePercent < 0);
+            var auto = Item(m, "Check for updates automatically", () => { autoUpdates = !autoUpdates; SaveUi(); }, true);
+            auto.Checked = autoUpdates;
+            m.ShowCheckMargin = true;
             Item(m, "Open log file", () => Run(() => System.Diagnostics.Process.Start(Log.File)), Log.File != null && File.Exists(Log.File));
             Item(m, "About " + Program.Name, () => Dialogs.About(this), true);
             m.Items.Add(new ToolStripSeparator());
@@ -1068,6 +1102,41 @@ namespace Arrow
             list.Focus();
         }
 
+        // ---- updates (Updater)
+
+        // manual: More > Check for updates, which also says when there is nothing new or the check failed
+        void CheckUpdates(bool manual)
+        {
+            if (updatePercent >= 0) return;
+            Updater.Check((found, error) =>
+            {
+                if (found != null)
+                {
+                    update = found;
+                    if (manual) skipVersion = null; // asked for: offered again even if dismissed before
+                    UpdateStrip();
+                }
+                else if (manual && error != null) Dialogs.Error(this, error);
+                else if (manual) Balloon(Program.Name, Program.Name + " " + Application.ProductVersion + " is up to date.", null);
+            });
+        }
+
+        void InstallUpdate()
+        {
+            if (update == null || updatePercent >= 0) return;
+            var running = all.Count(d => d.Status == "downloading");
+            if (running > 0 && !Dialogs.Confirm(this, "Update " + Program.Name, "Updating closes " + Program.Name + " for a moment and stops " + running
+                + (running == 1 ? " running download" : " running downloads") + ". Resume them when it's back.", "Update", false)) return;
+            updatePercent = 0;
+            UpdateStrip();
+            Updater.Install(update, p => { updatePercent = p; UpdateStrip(); }, error =>
+            {
+                updatePercent = -1;
+                UpdateStrip();
+                Dialogs.Error(this, error);
+            });
+        }
+
         // ---- closing, window state
 
         static string UiFile { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.Name, "ui.json"); } }
@@ -1092,6 +1161,8 @@ namespace Arrow
             section = o.Str("section") ?? section;
             if (!Library.Contains(section) && !section.StartsWith("type:") && !section.StartsWith("queue:")) section = "type:" + section; // from before Types had a prefix
             trayHint = o.Bool("trayHint") ?? false;
+            autoUpdates = o.Bool("updates") ?? true;
+            skipVersion = o.Str("skipVersion");
             var sort = o.Str("sort");
             sortColumn = Core.Columns.Contains(sort) ? sort : null;
             sortDesc = sortColumn != null && o.Bool("desc") == true;
@@ -1123,6 +1194,7 @@ namespace Arrow
                 { "sort", sortColumn }, { "desc", sortDesc }, { "columns", list.Chosen }, { "details", details },
                 { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
                 { "theme", Theme.Mode },
+                { "updates", autoUpdates }, { "skipVersion", skipVersion },
             };
             try
             {
@@ -1154,6 +1226,7 @@ namespace Arrow
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             poller.Stop();
+            updateTimer.Dispose();
             Theme.Changed -= onTheme;
             Program.ShowRequested -= onShow;
             Listen(false);
@@ -1209,6 +1282,16 @@ namespace Arrow
             offered = "https://downloads.example.com/files/setup-2.4.1.zip";
             UpdateStrip();
             Shot("main-strip-clipboard");
+            offered = null;
+            update = new Release { Tag = "v1.2.0" };
+            UpdateStrip();
+            Shot("main-strip-update");
+            updatePercent = 45;
+            UpdateStrip();
+            Shot("main-strip-updating");
+            update = null;
+            updatePercent = -1;
+            offered = "https://downloads.example.com/files/setup-2.4.1.zip";
             state.PowerIn = 42;
             state.PowerAll = true;
             state.WhenDone = "shutdown";

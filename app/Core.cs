@@ -805,6 +805,55 @@ namespace Arrow
         public static readonly string[] ThemeNames = { "Use Windows setting", "Light", "Dark" };
         public static int ThemeIndex(string mode) { return Math.Max(0, Array.IndexOf(ThemeModes, mode)); } // unknown = Windows
 
+        // Updates (Updater): "v1.2.3" or "1.2.3" against the running version; anything unreadable is never newer
+        public static bool IsNewer(string tag, string current)
+        {
+            var a = VersionParts(tag);
+            var b = VersionParts(current);
+            if (a == null || b == null) return false;
+            for (var i = 0; i < 3; i++) if (a[i] != b[i]) return a[i] > b[i];
+            return false;
+        }
+
+        static int[] VersionParts(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return null;
+            var m = Regex.Match(v.Trim(), @"^v?(\d+)\.(\d+)(?:\.(\d+))?");
+            if (!m.Success) return null;
+            return new[] { int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0 };
+        }
+
+        // The latest release (GitHub's releases/latest JSON): its tag and the setup's and checksum's download links; null
+        // when either asset is missing
+        public static string[] ReleaseSetup(IDictionary<string, object> release, string setupName)
+        {
+            if (release == null) return null;
+            string setup = null, sum = null;
+            var assets = release.ContainsKey("assets") ? release["assets"] as System.Collections.IEnumerable : null;
+            if (assets != null)
+                foreach (var a in assets.OfType<IDictionary<string, object>>())
+                {
+                    var name = a.Str("name");
+                    if (name == setupName) setup = a.Str("browser_download_url");
+                    else if (name == setupName + ".sha256") sum = a.Str("browser_download_url");
+                }
+            var tag = release.Str("tag_name");
+            return tag == null || setup == null || sum == null ? null : new[] { tag, setup, sum };
+        }
+
+        // "<hex>  ArrowSetup.exe" (or just the hex): the hash, lower case; null when it isn't 64 hex digits
+        public static string Sha256Of(string sumFile)
+        {
+            var hex = (sumFile ?? "").Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            return Regex.IsMatch(hex, "^[0-9a-fA-F]{64}$") ? hex.ToLowerInvariant() : null;
+        }
+
+        // The setup's quiet update: quit the running app, reinstall, start it again; keep the shortcuts as they are
+        public static string SetupArgs(bool desktopLink, bool startupLink)
+        {
+            return "--quiet --quit-arrow --start" + (desktopLink ? "" : " --no-desktop") + (startupLink ? "" : " --no-startup");
+        }
+
         // A folder inside the download folder from that folder's own name on (Options › Categories: "Downloads\Video"); others as they are
         public static string ShortFolder(string dir, string folder)
         {

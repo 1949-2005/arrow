@@ -1,5 +1,6 @@
 state.json
 state.json.tmp
+log.txt
 node_modules/
 # built by install.js
 /*.exe

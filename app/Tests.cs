@@ -537,6 +537,17 @@ namespace Arrow
             Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
             Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
 
+            // updates
+            Ok(Core.IsNewer("v1.0.1", "1.0.0") && Core.IsNewer("1.1", "1.0.9") && Core.IsNewer("v2.0.0", "1.9.9"), "newer versions");
+            Ok(!Core.IsNewer("v1.0.0", "1.0.0") && !Core.IsNewer("v0.9.9", "1.0.0") && !Core.IsNewer("latest", "1.0.0") && !Core.IsNewer(null, "1.0.0"), "not newer");
+            var release = Json.Parse("{\"tag_name\":\"v1.2.0\",\"assets\":[{\"name\":\"ArrowSetup.exe\",\"browser_download_url\":\"https://x/s.exe\"},{\"name\":\"ArrowSetup.exe.sha256\",\"browser_download_url\":\"https://x/s.sha256\"}]}") as IDictionary<string, object>;
+            Eq(L(Core.ReleaseSetup(release, "ArrowSetup.exe")), "v1.2.0 | https://x/s.exe | https://x/s.sha256", "release setup and checksum");
+            Eq(Core.ReleaseSetup(Json.Parse("{\"tag_name\":\"v1.2.0\",\"assets\":[]}") as IDictionary<string, object>, "ArrowSetup.exe"), null, "release without the setup");
+            var hash = new string('A', 64);
+            Eq(Core.Sha256Of(hash + "  ArrowSetup.exe\n"), new string('a', 64), "checksum file");
+            Eq(Core.Sha256Of("nope  ArrowSetup.exe"), null, "bad checksum file");
+            Eq(Core.SetupArgs(true, false), "--quiet --quit-arrow --start --no-startup", "setup args keep the shortcuts as they are");
+
             // log.txt
             var logFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arrow-log-" + Guid.NewGuid().ToString("N") + ".txt");
             Log.File = logFile;

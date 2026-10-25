@@ -231,6 +231,13 @@ KB/s": click turns `speedLimitOn` on or off (no number yet: Options › Download
 next start of a queue that is not running (Core.NextStart). Right: "When done:" and a small picker (110 x 22, radius
 6: Do nothing, Sleep, Shut down) → POST /api/settings {whenDone}; it shows the engine's `whenDone`.
 
+### Updates
+Strip (lowest priority, after the clipboard offer): Download glyph, "<name> 1.2.0 is available. You have 1.0.0.", Update and × (hides that
+version: ui.json `skipVersion`). While the setup downloads: "Downloading <name> 1.2.0… 45%. <name> restarts when it's installed.", no
+buttons. Update asks first when downloads run (they stop while the setup replaces the app). Checks: 10 s after start, then
+every 24 h, when ui.json `updates` (⋯ › Check for updates automatically, default on); ⋯ › Check for updates says when it
+finds nothing (balloon) or fails (error dialog).
+
 ### Tray
 NotifyIcon with the brand icon, tooltip = the app name + " · 2 active" when something runs. Left click: show and
 activate the main window. Menu: Open <name> (bold, default), Pause all, Speed limit (checked when on; click toggles
