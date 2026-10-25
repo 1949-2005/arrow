@@ -573,6 +573,7 @@ namespace Arrow
     {
         public char Icon;
         public Func<Color> IconColor = () => Theme.Text;
+        public string Svg; // assets/icons/<Svg>.svg in its own color instead of Icon, when it draws
 
         public Strip() { Height = Theme.Px(36); AccessibleRole = AccessibleRole.Alert; }
 
@@ -613,7 +614,8 @@ namespace Arrow
         {
             var g = e.Graphics;
             var h = Height - 1;
-            Theme.DrawGlyph(g, Icon, new Rectangle(Theme.Px(16), 0, Theme.Px(16), h), IconColor(), 16);
+            var slot = new Rectangle(Theme.Px(16), 0, Theme.Px(16), h);
+            if (Svg == null || !FileIcons.DrawIcon(g, Svg, slot, 20)) Theme.DrawGlyph(g, Icon, slot, IconColor(), 16);
             var right = Controls.Count > 0 ? Controls.Cast<Control>().Min(c => c.Left) - Theme.Px(12) : Width - Theme.Px(16);
             var x = Theme.Px(16 + 16 + 8);
             Theme.DrawText(g, Text, Theme.Body, new Rectangle(x, 0, Math.Max(0, right - x), h), Theme.Text);

@@ -569,6 +569,7 @@ namespace Arrow
             if (kind != stripKind)
             {
                 stripKind = kind;
+                strip.Svg = kind == "update" || kind == "updating" ? "active" : null; // the user's download arrow
                 if (kind == "offline")
                 {
                     strip.Icon = Glyph.Error;
