@@ -145,10 +145,10 @@ function main() {
   };
   const h = (...a) => make(null, ...a);
   const s = (...a) => make('http://www.w3.org/2000/svg', ...a);
-  // The app icon's tile, as the toolbar and tray show it: assets/logo.svg at 16 px, with thicker strokes. Fixed colors in every state.
+  // The app icon's tile, as the toolbar and tray show it: assets/logo.svg (render-logo.ps1's small sizes), with thicker strokes. Fixed colors in every state.
   const logo = () => s('svg', { class: 'logo', viewBox: '0 0 256 256', 'aria-hidden': 'true' },
     s('rect', { width: 256, height: 256, rx: 58, fill: '#FFFFFF' }),
-    s('g', { transform: 'translate(19.9 7.92) scale(0.47)', fill: 'none', stroke: '#3B3C3D', 'stroke-width': 52, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' },
+    s('g', { transform: 'translate(-3.25 0.25) scale(0.5)', fill: 'none', stroke: '#3B3C3D', 'stroke-width': 46, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' },
       s('path', { d: 'M71.5 87.5 L437.5 255.5 L71.5 423.5 Z' }), s('path', { d: 'M71.5 87.5 L183.5 255.5' }),
       s('path', { d: 'M183.5 255.5 L437.5 255.5 L71.5 423.5 Z', fill: '#3B3C3D' })));
   const icon = (...paths) => s('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5', 'stroke-linecap': 'round',

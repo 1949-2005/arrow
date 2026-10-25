@@ -81,7 +81,7 @@ namespace Arrow
   'whenDone': '', 'powerOp': 'shutdown', 'powerIn': 42, 'powerAll': false, 'open': 0
 }");
 
-        // args: every assets/types/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
+        // args: every assets/types/*.svg and assets/icons/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
         public static int Main(string[] args)
         {
             Thread.CurrentThread.CurrentCulture = Inv;
@@ -534,6 +534,8 @@ namespace Arrow
             // Options: the duplicates Picker ↔ settings.duplicates, and Save sending only what changed
             Eq(string.Join(",", new[] { "ask", "number", "replace", "resume", "odd", null }.Select(d => Core.DuplicateIndex(d))), "0,1,2,3,0,0", "duplicates → Picker, unknown = Ask me");
             Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
+            Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
+            Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
             var was = new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 8 }, { "speedLimitOn", false }, { "duplicates", "ask" } };
             Eq(sent(Core.Changed(was, new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 16 }, { "speedLimitOn", true }, { "duplicates", "ask" } })),
                 Q("{'connections':16,'speedLimitOn':true}"), "only the changed settings");

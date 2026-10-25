@@ -611,7 +611,8 @@ namespace Arrow
                 prog.Fill(running, cats, speeds);
                 Shot(folder, "progress-running", prog);
                 foreach (var px in new[] { 16, 32 }) // the icon a progress window leaves in the tray
-                    using (var bmp = ProgressDialog.TrayBitmap(px)) bmp.Save(Path.Combine(folder, "tray-download-" + px + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
+                    for (var f = -1; f < ProgressDialog.TrayFrames; f++)
+                        using (var bmp = ProgressDialog.TrayBitmap(px, f)) bmp.Save(Path.Combine(folder, "tray-download-" + px + "-" + (f < 0 ? "paused" : "frame" + (f + 1)) + ".png"), ImageFormat.Png);
 
                 var done = new Download
                 {

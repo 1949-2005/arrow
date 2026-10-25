@@ -59,9 +59,9 @@ namespace Arrow
         readonly ToolTip tips = new ToolTip();
         readonly Area root, top, commands, listPanel, statusBar;
         readonly Canvas logo, overlay;
-        readonly TextField paste = new TextField(Glyph.Link, "Paste a link or drop files");
-        readonly TextField search = new TextField(Glyph.Search, "Search downloads");
-        readonly FlatButton download = new FlatButton("Download", Glyph.Download, ButtonKind.Primary);
+        readonly TextField paste = new TextField(Glyph.Link, "Paste a link or drop files") { Svg = "link" };
+        readonly TextField search = new TextField(Glyph.Search, "Search downloads") { Svg = "search" };
+        readonly FlatButton download = new FlatButton("Download", Glyph.Download, ButtonKind.Primary) { Svg = "active", SvgPx = 20 };
         readonly FlatButton addLinks, options, more;
         // the command bar; labels keeps each one's text for when the bar shows glyphs only
         readonly FlatButton resume, pause, delete, pauseAll, deleteDone, startQueue, stopQueue, scheduler, speedLimit, sortButton, viewButton;
@@ -97,8 +97,14 @@ namespace Arrow
             logoBig = Logo(64);
 
             addLinks = IconButton(Glyph.List, "Add several links");
+            addLinks.Svg = "mainqueue";
+            addLinks.SvgPx = 24;
             options = IconButton(Glyph.Options, "Options");
+            options.Svg = "settings";
+            options.SvgPx = 20;
             more = IconButton(Glyph.More, "More");
+            more.Svg = "more";
+            more.SvgPx = 20;
             download.Height = Theme.Px(34);
             download.Width = download.PreferredWidth;
             logo = new Canvas((g, r) => { if (logoSmall != null) { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(logoSmall, r); } }) { AccessibleName = Program.Name };
@@ -122,8 +128,14 @@ namespace Arrow
             startQueue = Command("Start queue", Glyph.Play, () => QueueCommand(true));
             stopQueue = Command("Stop queue", Glyph.Stop, () => QueueCommand(false));
             scheduler = Command("Scheduler", Glyph.Clock, () => OpenScheduler(null));
+            scheduler.Svg = "scheduler";
+            resume.Svg = startQueue.Svg = "play";
+            pause.Svg = pauseAll.Svg = "pause";
+            delete.Svg = deleteDone.Svg = "delete";
+            stopQueue.Svg = "stop";
             speedLimit = Command("Speed limit: Off", Glyph.SpeedLimit, SpeedMenu);
             speedLimit.Chevron = true;
+            speedLimit.Svg = "speed";
             commands = new Area(() => Theme.Top) { Dock = DockStyle.Top, Height = Theme.Px(44), LineBottom = true };
             commands.Controls.AddRange(new Control[] { resume, pause, delete, pauseAll, deleteDone, startQueue, stopQueue, scheduler, speedLimit });
             commands.Layout += (s, e) => LayoutCommands();
@@ -142,7 +154,9 @@ namespace Arrow
             search.Box.TextChanged += (s, e) => RefreshList();
             search.Box.KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; search.Text = ""; } };
             sortButton = Command("Sort", Glyph.Sort, () => SortMenu().Show(sortButton, new Point(0, sortButton.Height + Theme.Px(2))));
+            sortButton.Svg = "sort";
             viewButton = Command("View", Glyph.View, () => ViewMenu().Show(viewButton, new Point(0, viewButton.Height + Theme.Px(2))));
+            viewButton.Svg = "view";
             foreach (var b in new[] { sortButton, viewButton }) { b.Chevron = true; b.Width = b.PreferredWidth; }
             list.CategoryOf = Cat;
             list.Logo = logoBig;
@@ -274,7 +288,7 @@ namespace Arrow
         FlatButton Command(string text, char glyph, Action click)
         {
             // padding 8: the labelled bar fits the default window (1180, client 1164) with "Speed limit: 500 KB/s"
-            var b = new FlatButton(text, glyph, ButtonKind.Ghost) { MutedGlyph = true, Radius = Theme.Px(6), AccessibleName = text, Height = Theme.Px(32), Pad = Theme.Px(8) };
+            var b = new FlatButton(text, glyph, ButtonKind.Ghost) { MutedGlyph = true, Radius = Theme.Px(6), AccessibleName = text, Height = Theme.Px(32), Pad = Theme.Px(8), SvgPx = 20 };
             b.Width = b.PreferredWidth;
             tips.SetToolTip(b, text);
             b.Click += (s, e) => click();
@@ -390,11 +404,11 @@ namespace Arrow
             sidebarKey = key;
             sidebar.Clear();
             sidebar.Heading("Library");
-            sidebar.Add("all", "All", Glyph.All, null);
-            sidebar.Add("active", "Active", Glyph.Active, null);
-            sidebar.Add("finished", "Finished", Glyph.Finished, null);
-            sidebar.Add("failed", "Failed", Glyph.Failed, null);
-            sidebar.Add("scheduled", "Scheduled", Glyph.Scheduled, null);
+            sidebar.Add("all", "All", Glyph.All, null, "all");
+            sidebar.Add("active", "Active", Glyph.Active, null, "active");
+            sidebar.Add("finished", "Finished", Glyph.Finished, null, "finished");
+            sidebar.Add("failed", "Failed", Glyph.Failed, null, "failed");
+            sidebar.Add("scheduled", "Scheduled", Glyph.Scheduled, null, "scheduler");
             sidebar.Heading("Types");
             foreach (var c in types.Where(c => c != "Other").Concat(new[] { "Other" }))
             {
@@ -402,7 +416,11 @@ namespace Arrow
                 sidebar.Add("type:" + c, c, Glyph.Of(icon), icon);
             }
             if (Queues.Count > 0) sidebar.Heading("Queues");
-            foreach (var q in Queues) sidebar.Add("queue:" + q.Id, Core.QueueName(q), Glyph.List, null);
+            foreach (var q in Queues)
+            {
+                sidebar.Add("queue:" + q.Id, Core.QueueName(q), Glyph.List, null, "mainqueue");
+                sidebar.Items.Last().SvgPx = 24;
+            }
             var want = wantSection ?? section;
             if (state != null) wantSection = null;
             sidebar.Selected = sidebar.Items.Any(i => i.Key == want) ? want : "all";
@@ -944,6 +962,20 @@ namespace Arrow
         ContextMenuStrip MoreMenu()
         {
             var m = Menu();
+            // Theme ▸ the same three choices as Options › General, applied and saved at once
+            var theme = Item(m, "Theme", () => { }, true);
+            var sub = (ToolStripDropDownMenu)theme.DropDown;
+            sub.Renderer = Theme.Menus;
+            sub.ShowImageMargin = false;
+            sub.ShowCheckMargin = true;
+            sub.Font = Theme.Body;
+            for (var i = 0; i < Core.ThemeModes.Length; i++)
+            {
+                var mode = Core.ThemeModes[i];
+                var t = new ToolStripMenuItem(Core.ThemeNames[i]) { Checked = Theme.Mode == mode, Padding = theme.Padding };
+                t.Click += (s, e) => { Theme.SetMode(mode); SaveUi(); };
+                sub.Items.Add(t);
+            }
             Item(m, "About " + Program.Name, () => Dialogs.About(this), true);
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Quit " + Program.Name, Quit, true);
@@ -1037,7 +1069,18 @@ namespace Arrow
 
         // ---- closing, window state
 
-        string UiFile { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.Name, "ui.json"); } }
+        static string UiFile { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.Name, "ui.json"); } }
+
+        // ui.json's theme, before the window is built (Program): its colors are read as it is made
+        public static void LoadTheme()
+        {
+            try
+            {
+                var o = Json.Parse(File.ReadAllText(UiFile)) as IDictionary<string, object>;
+                if (o != null) Theme.SetMode(o.Str("theme"));
+            }
+            catch (Exception) { } // first start, or unreadable: follow Windows
+        }
 
         void LoadUi()
         {
@@ -1078,6 +1121,7 @@ namespace Arrow
                 { "section", section }, { "trayHint", trayHint },
                 { "sort", sortColumn }, { "desc", sortDesc }, { "columns", list.Chosen }, { "details", details },
                 { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
+                { "theme", Theme.Mode },
             };
             try
             {

@@ -67,6 +67,8 @@ namespace Arrow
     {
         public ButtonKind Kind;
         public char Icon;
+        public string Svg; // assets/icons/<Svg>.svg in Icon's slot and color; Icon when it is missing or unreadable
+        public int SvgPx = 16; // the SVG's size, centered on the 16 px slot
         public bool Destructive; // err text on Secondary and Ghost
         public bool MutedGlyph; // the glyph in muted next to its text (command bar)
         public bool Chevron; // a 10 px chevron after the content: the button opens a menu
@@ -163,7 +165,14 @@ namespace Arrow
             var chevron = Chevron ? Theme.Px(4 + 10) : 0;
             var x = (r.Width - (icon + gap + textW + chevron)) / 2;
             if (Kind == ButtonKind.Ghost && !iconOnly && x < Pad) x = Pad;
-            if (icon > 0) Theme.DrawGlyph(g, Icon, new Rectangle(x, 0, icon, r.Height), MutedGlyph && Enabled ? Theme.Muted : fore, 16);
+            if (icon > 0)
+            {
+                var slot = new Rectangle(x, 0, icon, r.Height);
+                var tint = MutedGlyph && Enabled ? Theme.Muted : fore;
+                // the user's icons always in their own color, even disabled; the glyph keeps the muted look
+                if (Svg == null || !FileIcons.DrawIcon(g, Svg, slot, SvgPx, Kind == ButtonKind.Primary))
+                    Theme.DrawGlyph(g, Icon, slot, tint, 16);
+            }
             if (textW > 0) Theme.DrawText(g, Text, Font, new Rectangle(x + icon + gap, 0, Math.Min(textW + 1, r.Width - x - icon - gap), r.Height), fore);
             if (Chevron) Theme.DrawGlyph(g, Glyph.ChevronDown, new Rectangle(x + icon + gap + textW + Theme.Px(4), 0, Theme.Px(10), r.Height), Enabled ? Theme.Muted : Theme.Faint, 10);
             if (Focused && ShowFocusCues) Theme.FocusRing(g, r, Radius);
@@ -249,6 +258,7 @@ namespace Arrow
     {
         public readonly TextBox Box = new TextBox { BorderStyle = BorderStyle.None };
         public char Icon;
+        public string Svg; // assets/icons/<Svg>.svg in Icon's slot and color; Icon when it is missing or unreadable
         string cue;
         bool invalid;
 
@@ -298,7 +308,11 @@ namespace Arrow
             var r = ClientRectangle;
             Theme.Fill(g, r, Theme.Px(8), Theme.Field);
             Theme.Border(g, r, Theme.Px(8), invalid ? Theme.Err : Box.Focused ? Theme.Accent : Theme.Line, invalid ? Theme.Px(1.5) : 1);
-            if (Icon != '\0') Theme.DrawGlyph(g, Icon, new Rectangle(Theme.Px(12), Box.Multiline ? Theme.Px(8) : 0, Theme.Px(16), Box.Multiline ? Theme.Px(18) : r.Height), Theme.Faint, 16);
+            if (Icon != '\0')
+            {
+                var slot = new Rectangle(Theme.Px(12), Box.Multiline ? Theme.Px(8) : 0, Theme.Px(16), Box.Multiline ? Theme.Px(18) : r.Height);
+                if (Svg == null || !FileIcons.DrawIcon(g, Svg, slot, 16)) Theme.DrawGlyph(g, Icon, slot, Theme.Faint, 16);
+            }
         }
     }
 
@@ -658,6 +672,8 @@ namespace Arrow
             public string Key, Label;
             public char Icon;
             public string Type; // a category's icon (its SVG, else its glyph in its color); null: the glyph in muted
+            public string Svg; // Library and queues: assets/icons/<Svg>.svg in its own color, else the glyph
+            public int SvgPx = 28; // its size in the 28 px slot (the queues' list icon: 24, half its 48 view box, so its dots sit on whole pixels)
             public bool Dot; // a done-color dot before the count: a running queue
             public int Count;
         }
@@ -679,6 +695,7 @@ namespace Arrow
 
         public void Heading(string text) { headings[Items.Count] = text; }
         public void Add(string key, string label, char icon, string type) { Items.Add(new Item { Key = key, Label = label, Icon = icon, Type = type }); }
+        public void Add(string key, string label, char icon, string type, string svg) { Items.Add(new Item { Key = key, Label = label, Icon = icon, Type = type, Svg = svg }); }
         // Before building the items again; the selection stays when its key comes back
         public void Clear() { Items.Clear(); headings.Clear(); hover = -1; }
 
@@ -781,11 +798,13 @@ namespace Arrow
                     Theme.DrawText(g, head, Theme.Small, new Rectangle(r.X + Theme.Px(8), r.Y - Theme.Px(24), r.Width, Theme.Px(20)), Theme.Muted);
                 var sel = it.Key == selected;
                 if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
-                // Types: the user's SVG icon at 28 px; Library: its glyph at 18 px, centered in the same 28 px slot
+                // Types and Library: the user's SVG icon at 28 px; else the glyph (Library's at 18 px) centered in the same 28 px slot
                 var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(28), r.Height);
                 var textOnly = it.Icon == '\0' && it.Type == null; // Options' pages
-                if (!textOnly && (it.Type == null || !FileIcons.DrawType(g, it.Type, slot, 28)))
-                    Theme.DrawGlyph(g, it.Icon, slot, it.Type != null ? Theme.Category(it.Type) : sel ? Theme.Text : Theme.Muted, it.Type != null ? 16 : 18);
+                var plain = sel ? Theme.Text : Theme.Muted;
+                var drawn = it.Type != null ? FileIcons.DrawType(g, it.Type, slot, 28) : it.Svg != null && FileIcons.DrawIcon(g, it.Svg, slot, it.SvgPx);
+                if (!textOnly && !drawn)
+                    Theme.DrawGlyph(g, it.Icon, slot, it.Type != null ? Theme.Category(it.Type) : plain, it.Type != null ? 16 : 18);
                 var count = it.Count.ToString();
                 var cw = Counts ? Theme.Measure(count, Theme.Body).Width : -Theme.Px(10); // no count: the dot moves to the right edge
                 if (Counts) Theme.DrawText(g, count, Theme.Body, new Rectangle(r.Right - Theme.Px(8) - cw, r.Y, cw, r.Height), Theme.Muted, Theme.Line1Right);

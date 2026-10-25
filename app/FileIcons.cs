@@ -1,6 +1,7 @@
 // The icon Windows shows for a file type (File Explorer, IDM), from the extension alone: SHGFI_USEFILEATTRIBUTES never
 // touches the disk. Cached per extension and size; callers draw their glyph when Draw returns false. The sidebar's Types
-// get the user's SVG icons instead (DrawType), filled in the text color.
+// get the user's SVG icons instead (DrawType), filled in the text color; the main window's other icons too (DrawIcon),
+// in their own files' colors.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -32,11 +33,48 @@ namespace Arrow
         // assets/types/<category>.svg in a px square centered in r, in color (default the text color); false when it is missing or unreadable (Other has none)
         public static bool DrawType(Graphics g, string category, Rectangle r, int px, Color? color = null)
         {
+            return DrawSvg(g, Path.Combine("types", category.ToLowerInvariant() + ".svg"), r, px, color);
+        }
+
+        // assets/icons/<name>.svg on dark, <name>_black.svg on light (onAccent: the other one, the accent button being the
+        // opposite shade), in the file's own fill color. A missing
+        // _black file: the white one in the text color. False: the caller draws its glyph
+        public static bool DrawIcon(Graphics g, string name, Rectangle r, int px, bool onAccent = false)
+        {
+            var white = Path.Combine("icons", name + ".svg");
+            var file = Theme.Dark != onAccent ? white : Path.Combine("icons", name + "_black.svg");
+            if (file != white && !File.Exists(Path.Combine(Program.Folder, "assets", file))) file = white;
+            var color = file == white && Theme.Dark == onAccent ? Theme.Text : Fill(file) ?? Theme.Text;
+            return DrawSvg(g, file, r, px, color);
+        }
+
+        static readonly Dictionary<string, Color?> fills = new Dictionary<string, Color?>();
+
+        // the root's fill="#rrggbb"; no fill: black, SVG's default; null when unreadable
+        static Color? Fill(string file)
+        {
+            lock (fills)
+            {
+                Color? c;
+                if (fills.TryGetValue(file, out c)) return c;
+                try
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(Path.Combine(Program.Folder, "assets", file)), "<svg\\b[^>]*?\\sfill=\"#([0-9A-Fa-f]{6})\"");
+                    c = m.Success ? Color.FromArgb(255, Color.FromArgb(Convert.ToInt32(m.Groups[1].Value, 16))) : Color.Black;
+                }
+                catch (Exception) { }
+                return fills[file] = c;
+            }
+        }
+
+        // file: a path under assets/
+        static bool DrawSvg(Graphics g, string file, Rectangle r, int px, Color? color)
+        {
             try
             {
                 GraphicsPath path;
                 lock (shapes)
-                    if (!shapes.TryGetValue(category, out path)) shapes[category] = path = Shape(category);
+                    if (!shapes.TryGetValue(file, out path)) shapes[file] = path = Shape(file);
                 if (path == null) return false;
                 var size = Theme.Px(px);
                 var state = g.Save();
@@ -44,7 +82,7 @@ namespace Arrow
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
                     g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                    g.TranslateTransform(r.X + (r.Width - size) / 2f, r.Y + (r.Height - size) / 2f);
+                    g.TranslateTransform(r.X + (r.Width - size) / 2, r.Y + (r.Height - size) / 2); // whole pixels: thin lines and dots stay crisp
                     g.ScaleTransform(size, size);
                     // the text color at paint time: the theme switches live
                     using (var brush = new SolidBrush(color ?? Theme.Text)) g.FillPath(brush, path);
@@ -55,11 +93,11 @@ namespace Arrow
             catch (Exception) { return false; }
         }
 
-        static GraphicsPath Shape(string category)
+        static GraphicsPath Shape(string file)
         {
             try
             {
-                var svg = Core.ParseSvg(File.ReadAllText(Path.Combine(Program.Folder, "assets", "types", category.ToLowerInvariant() + ".svg")));
+                var svg = Core.ParseSvg(File.ReadAllText(Path.Combine(Program.Folder, "assets", file)));
                 if (svg == null) return null;
                 // the file's own fill rule: even-odd is Alternate, SVG's default nonzero is Winding
                 var path = new GraphicsPath(svg.EvenOdd ? FillMode.Alternate : FillMode.Winding);

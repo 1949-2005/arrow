@@ -48,6 +48,7 @@ namespace Arrow
                     show.Set();
                     return 0;
                 }
+                MainForm.LoadTheme();
                 var error = args.Contains("--no-engine") ? null : StartEngine(api);
                 if (error != null)
                 {
@@ -141,6 +142,20 @@ namespace Arrow
             var big = Load(SystemInformation.IconSize.Width);
             if (small != null) SendMessage(form.Handle, WM_SETICON, (IntPtr)ICON_SMALL, small.Handle);
             if (big != null) SendMessage(form.Handle, WM_SETICON, (IntPtr)ICON_BIG, big.Handle);
+        }
+
+        // Windows' taskbar shade (it can differ from the apps' light or dark)
+        public static bool TaskbarLight()
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                {
+                    var v = k == null ? null : k.GetValue("SystemUsesLightTheme");
+                    return v is int && (int)v == 1;
+                }
+            }
+            catch (Exception) { return false; } // Windows' default taskbar is dark
         }
     }
 }

@@ -25,7 +25,11 @@ after(async () => {
 test('the ported helpers pass Tests.cs', win, async () => {
   const exe = path.join(await temp(), 'Tests.exe');
   await compileTests(exe);
-  const r = spawnSync(exe, readdirSync(path.join(repo, 'assets', 'types')).filter(f => f.endsWith('.svg')).sort().map(f => path.join(repo, 'assets', 'types', f)), { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const svgs = ['types', 'icons'].flatMap(d => {
+    const dir = path.join(repo, 'assets', d);
+    return existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.svg')).sort().map(f => path.join(dir, f)) : [];
+  });
+  const r = spawnSync(exe, svgs, { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 

@@ -175,7 +175,7 @@ Prefer clicking?
   - **Connections** lists each connection: how much it downloaded, and "Receiving data…", "Done" or "Waiting".
   - **Options** has the speed limit and "When this download is done" for this download.
   - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Arrow remembers it.
-  - While it downloads, the title bar's minimize button (**—**, left of the close button) sends the window to the system tray instead of the taskbar. A green arrow next to the clock shows the download's progress. Click it to bring the window back. It comes back by itself when the download finishes or fails.
+  - While it downloads, the **Minimize to tray** button in the title bar (three small grey down arrows stepping down like stairs, left of **—**) sends the window to the system tray; **—** minimizes it to the taskbar as usual. Three running grey arrows appear next to the clock while it downloads (they stand still while it is paused). Hover it for the progress, click it to bring the window back. It comes back by itself when the download finishes or fails.
 - **Download complete**: when a download you started with Start Download finishes, this window opens once. Click **Open**, **Open with…**, **Open folder** or **Close**. Tick **Don't show this window again** to stop it (turn it back on in Options › General, "Show the Download complete window").
 
 ### With the browser extension

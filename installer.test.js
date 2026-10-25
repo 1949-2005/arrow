@@ -95,7 +95,7 @@ test('install: files, tools through winget, shortcuts, Settings > Apps; the engi
   const r = run(setup, ['--quiet']);
   assert.equal(r.status, 0, r.stderr);
   for (const f of ['Arrow.exe', 'Arrow Engine.exe', 'Uninstall Arrow.exe', ...engineFiles(), 'package.json', 'brand.json', 'assets/logo.ico',
-    'assets/types/video.svg', 'extension/manifest.json', 'extension/icons/icon-128.png', 'LICENSE', 'README.txt', 'licenses/node-LICENSE.txt'])
+    'assets/types/video.svg', 'assets/icons/active.svg', 'extension/manifest.json', 'extension/icons/icon-128.png', 'LICENSE', 'README.txt', 'licenses/node-LICENSE.txt'])
     assert.ok(existsSync(path.join(dir, f)), f);
   const all = readdirSync(dir, { recursive: true }).map(f => f.replaceAll('\\', '/'));
   assert.deepEqual(all.filter(f => /\.test\.js$|^app\/|^fixtures|^docs|^\.scratch|state\.json|installed\.json|\.cs$/.test(f)), []);

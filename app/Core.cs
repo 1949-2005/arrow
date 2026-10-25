@@ -800,6 +800,11 @@ namespace Arrow
         public static readonly string[] DuplicateSettings = { "ask", "number", "replace", "resume" };
         public static int DuplicateIndex(string duplicates) { return Math.Max(0, Array.IndexOf(DuplicateSettings, duplicates)); } // unknown = Ask me, as the engine
 
+        // The app's theme (ui.json "theme"): follow Windows, or always light or dark
+        public static readonly string[] ThemeModes = { "system", "light", "dark" };
+        public static readonly string[] ThemeNames = { "Use Windows setting", "Light", "Dark" };
+        public static int ThemeIndex(string mode) { return Math.Max(0, Array.IndexOf(ThemeModes, mode)); } // unknown = Windows
+
         // A folder inside the download folder from that folder's own name on (Options › Categories: "Downloads\Video"); others as they are
         public static string ShortFolder(string dir, string folder)
         {

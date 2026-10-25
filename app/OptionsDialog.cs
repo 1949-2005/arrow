@@ -23,6 +23,9 @@ namespace Arrow
         readonly FlatCheck startup = new FlatCheck("Start with Windows"), clipboard = new FlatCheck("Offer links I copy"), showComplete = new FlatCheck("Show the Download complete window");
         readonly Caption dupLabel = Label("When a link is already in the list");
         readonly Picker duplicates = new Picker();
+        readonly Caption themeLabel = Label("Theme");
+        readonly Picker theme = new Picker();
+        readonly string themeBefore = Theme.Mode; // Cancel goes back to it: picking previews at once
         // Downloads
         readonly Caption dirLabel = Label("Save to folder"), connLabel = Label("Connections per download"), activeLabel = Label("Downloads at the same time");
         readonly TextField dir = new TextField('\0', ""), conn = new TextField('\0', ""), active = new TextField('\0', ""), limit = new TextField('\0', "");
@@ -64,6 +67,11 @@ namespace Arrow
             duplicates.SelectedIndex = Core.DuplicateIndex(s.Duplicates);
             duplicates.Height = Theme.Px(32);
             duplicates.AccessibleName = "When a link is already in the list";
+            theme.Items.AddRange(Core.ThemeNames);
+            theme.SelectedIndex = Core.ThemeIndex(Theme.Mode);
+            theme.Height = Theme.Px(32);
+            theme.AccessibleName = "Theme";
+            theme.Picked += () => Theme.SetMode(Core.ThemeModes[theme.SelectedIndex]);
             dir.Text = s.Dir;
             sort.Checked = s.Categories;
             conn.Text = s.Connections.ToString();
@@ -86,7 +94,7 @@ namespace Arrow
             nav.Add(Downloads, "Downloads", '\0', null);
             nav.Add(Categories, "Categories", '\0', null);
             nav.Add(Queues, "Queues", '\0', null);
-            Page(General, startup, clipboard, showComplete, dupLabel, duplicates);
+            Page(General, startup, clipboard, showComplete, dupLabel, duplicates, themeLabel, theme);
             Page(Downloads, dirLabel, dir, browse, sort, connLabel, conn, connHint, activeLabel, active, activeHint, limitOn, limit, kbs);
             Page(Categories, table, add, edit, remove, note);
             Page(Queues, queuesText, openScheduler);
@@ -191,10 +199,18 @@ namespace Arrow
             });
         }
 
+        // The theme is the app's own (ui.json), not the engine's: Save keeps the one picked, Cancel or Esc restores it
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            if (DialogResult != DialogResult.OK) Theme.SetMode(themeBefore);
+            else if (Theme.Mode != themeBefore && Dialogs.UiChanged != null) Dialogs.UiChanged();
+            base.OnFormClosed(e);
+        }
+
         void Lock(bool on)
         {
             busy = on;
-            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, dir, browse, sort, conn, active, limitOn, limit, add, edit, remove, openScheduler, save }) c.Enabled = !on;
+            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, add, edit, remove, openScheduler, save }) c.Enabled = !on;
             if (!on) Enable();
         }
 
@@ -263,6 +279,10 @@ namespace Arrow
                 dupLabel.Bounds = new Rectangle(x, y, w, dupLabel.Height);
                 y += dupLabel.Height + Theme.Px(6);
                 duplicates.Bounds = new Rectangle(x, y, Math.Min(w, Theme.Px(320)), row);
+                y += row + Theme.Px(16);
+                themeLabel.Bounds = new Rectangle(x, y, w, themeLabel.Height);
+                y += themeLabel.Height + Theme.Px(6);
+                theme.Bounds = new Rectangle(x, y, Math.Min(w, Theme.Px(320)), row);
                 y += row;
             }
             else if (page == Downloads)

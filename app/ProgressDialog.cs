@@ -1,7 +1,7 @@
 // The progress window (docs/NATIVE_UI.md "Dialogs", the behavior of the old progress.html), styled like the inspector:
 // running (percent, segments, speed graph, facts, the Connections and Options disclosures, Pause/Resume and Cancel),
 // Download complete (Saved to, File size, Address, "Don't show this window again", Open with…, Open folder, Close, Open)
-// or removed. While it runs, the title bar's minimize button hides it behind its own tray icon (a green download arrow).
+// or removed. While it runs, a Minimize to tray button left of the title bar's minimize hides it behind its own tray icon (three running grey arrows).
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -41,7 +41,7 @@ namespace Arrow
         readonly FlatButton close = new FlatButton("Close", '\0', ButtonKind.Secondary);
         readonly FlatButton open = new FlatButton("Open", '\0', ButtonKind.Primary);
         NotifyIcon trayIcon; // this download's own icon while the window is in the tray
-        Icon trayImage;
+        TrayButton trayButton; // Minimize to tray, left of the title bar's minimize
         string trayTip;
         Download d;
         string mode;
@@ -53,7 +53,7 @@ namespace Arrow
             this.api = api;
             Id = id;
             ShowInTaskbar = !Offscreen;
-            MinimizeBox = true; // goes to the tray while the download runs (WndProc); maximize shows greyed, as in IDM
+            MinimizeBox = true; // to the taskbar; the tray has its own button left of it (TrayButton); maximize shows greyed, as in IDM
             for (var i = 0; i < 7; i++) facts.Add(new FactRow());
             facts[1].ValueColor = () => statusErr ? Theme.Err : Theme.Text;
             foreach (var c in new Control[] { tile, title, name, big, sub, bar, graph }) Add(c);
@@ -106,10 +106,12 @@ namespace Arrow
             if (disposing)
             {
                 apply.Dispose();
+                trayTimer.Dispose();
+                if (trayButton != null) trayButton.Dispose();
                 if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
             }
             Application.ApplicationExit -= HideTrayIcon;
-            if (trayImage != null) { DestroyIcon(trayImage.Handle); trayImage = null; }
+            if (trayImages != null) { foreach (var i in trayImages) DestroyIcon(i.Handle); trayImages = null; }
             base.Dispose(disposing);
         }
 
@@ -119,26 +121,40 @@ namespace Arrow
             base.OnFormClosed(e);
         }
 
-        // ---- Minimize to system tray (IDM's): the window hides and keeps updating; a green download arrow stands for it
+        // ---- Minimize to system tray (IDM's): the window hides and keeps updating; three running arrows stand for it
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         static extern bool DestroyIcon(IntPtr icon);
 
-        // A solid green download arrow on a transparent square of size px (pixels), unlike the app's own icon. Drawn as
-        // shapes, not the font glyph: its 1 px strokes vanished at the tray's 16 px.
-        public static Bitmap TrayBitmap(int px)
+        public const int TrayFrames = 3;
+
+        // IDM's running arrows: three chevrons down a px square (pixels), the frame's one lit (-1: none, paused). Grey in the taskbar's shade: light on a dark taskbar, dark on a light one.
+        // Chevrons drawn as shapes, not the font glyph: its 1 px strokes vanished at the tray's 16 px.
+        public static Bitmap TrayBitmap(int px, int frame)
         {
             var bmp = new Bitmap(px, px, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var s = px / 16f; // in 16 px units
             using (var g = Graphics.FromImage(bmp))
-            using (var b = new SolidBrush(Theme.Done))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                var s = px / 16f; // in 16 px units: the shaft, the head, the tray line under it
-                g.FillRectangle(b, 6 * s, 1 * s, 4 * s, 6 * s);
-                g.FillPolygon(b, new[] { new PointF(2 * s, 6 * s), new PointF(14 * s, 6 * s), new PointF(8 * s, 12 * s) });
-                g.FillRectangle(b, 2 * s, 13 * s, 12 * s, 2 * s);
+                var grey = AppIcon.TaskbarLight() ? Color.FromArgb(0x3B, 0x3C, 0x3D) : Color.FromArgb(0xD8, 0xD8, 0xDC);
+                TrayButton.Chevrons(g, new PointF(px / 2f, px / 2f), 1.3f * s, 3.6f, grey, frame); // chunky and touching, the square's height
             }
             return bmp;
+        }
+
+        // The frames, made when the window first goes to the tray; each tick shows the next while the download runs
+        Icon[] trayImages;
+        int trayFrame;
+        readonly Timer trayTimer = new Timer { Interval = 330 };
+
+        void TrayTick()
+        {
+            if (!InTray || trayImages == null) return;
+            var running = d != null && d.Status == "downloading";
+            trayFrame = running ? (trayFrame + 1) % TrayFrames : -1;
+            var icon = trayImages[trayFrame + 1]; // [0]: paused
+            if (trayIcon.Icon != icon) trayIcon.Icon = icon;
         }
 
         // Arrow's own tray icon (MainForm sets it). A download's icon takes its id: still a separate icon (its own hidden
@@ -161,8 +177,11 @@ namespace Arrow
             if (Offscreen || !trayable) return;
             if (trayIcon == null)
             {
-                using (var bmp = TrayBitmap(SystemInformation.SmallIconSize.Width)) trayImage = Icon.FromHandle(bmp.GetHicon());
-                trayIcon = new NotifyIcon { Icon = trayImage };
+                trayImages = new Icon[TrayFrames + 1];
+                for (var f = -1; f < TrayFrames; f++)
+                    using (var bmp = TrayBitmap(SystemInformation.SmallIconSize.Width, f)) trayImages[f + 1] = Icon.FromHandle(bmp.GetHicon());
+                trayIcon = new NotifyIcon { Icon = trayImages[0] };
+                trayTimer.Tick += (s, e) => TrayTick();
                 Twin(trayIcon); // before it is shown: Windows places it when it is added
                 trayIcon.MouseClick += (s, e) => FromTray();
                 trayIcon.MouseDoubleClick += (s, e) => FromTray();
@@ -171,6 +190,9 @@ namespace Arrow
             trayTip = null;
             TrayText();
             trayIcon.Visible = true;
+            trayFrame = -1;
+            TrayTick(); // the first frame at once, then a tick at a time
+            trayTimer.Start();
             Hide();
         }
 
@@ -181,6 +203,7 @@ namespace Arrow
         {
             if (!InTray) return;
             trayIcon.Visible = false;
+            trayTimer.Stop();
             Dialogs.Front(this);
         }
 
@@ -207,12 +230,14 @@ namespace Arrow
             trayTip = tip;
         }
 
-        // The title bar's minimize (and Alt+Space > Minimize): to the tray while the download runs, else the taskbar
-        protected override void WndProc(ref Message m)
+        // The title bar's Minimize to tray button, while the download runs; minimize itself goes to the taskbar
+        protected override void OnShown(EventArgs e)
         {
-            const int WM_SYSCOMMAND = 0x0112, SC_MINIMIZE = 0xF020;
-            if (m.Msg == WM_SYSCOMMAND && (m.WParam.ToInt64() & 0xFFF0) == SC_MINIMIZE && trayable && !Offscreen) { ToTray(); return; }
-            base.WndProc(ref m);
+            base.OnShown(e);
+            if (Offscreen) return;
+            trayButton = new TrayButton(this);
+            trayButton.Pressed += ToTray;
+            trayButton.Wanted = trayable;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -273,6 +298,7 @@ namespace Arrow
             FillView(download, categories, samples);
             var can = mode == "run" && !statusErr; // own flag: Visible reads false while the window is hidden
             trayable = can;
+            if (trayButton != null) trayButton.Wanted = can;
             if (!InTray) return;
             if (can) TrayText();
             else FromTray(); // Download complete, the error or "removed": shown again, as IDM pops up its complete window
