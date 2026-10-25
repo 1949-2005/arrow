@@ -103,7 +103,7 @@ test('install: files, tools through winget, shortcuts, Settings > Apps; the engi
   assert.equal(readFileSync(path.join(tmp, 'winget.log'), 'utf8'), 'yt-dlp.yt-dlp\n'); // it brings FFmpeg and Deno
   assert.deepEqual(links().map(shortcut), [`${dir}\\Arrow.exe|`, `${dir}\\Arrow.exe|`, `${dir}\\Arrow.exe|--tray`]);
   const reg = regQuery().stdout;
-  for (const v of ['DisplayName    REG_SZ    Arrow', 'DisplayVersion    REG_SZ    1.0.0', 'Publisher    REG_SZ    1949-2005', `InstallLocation    REG_SZ    ${dir}`,
+  for (const v of ['DisplayName    REG_SZ    Arrow', `DisplayVersion    REG_SZ    ${JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8')).version}`, 'Publisher    REG_SZ    1949-2005', `InstallLocation    REG_SZ    ${dir}`,
     `UninstallString    REG_SZ    "${dir}\\Uninstall Arrow.exe"`, `DisplayIcon    REG_SZ    ${dir}\\Arrow.exe`, 'NoModify    REG_DWORD    0x1', 'NoRepair    REG_DWORD    0x1'])
     assert.ok(reg.includes(v), v + '\n' + reg);
   assert.ok(Number(/EstimatedSize\s+REG_DWORD\s+(0x[0-9a-f]+)/.exec(reg)[1]) > 30000, 'EstimatedSize in KB');
