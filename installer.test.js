@@ -72,13 +72,15 @@ if (id === 'yt-dlp.yt-dlp') { put(w + '/Links/yt-dlp.exe'); put(w + '/Links/deno
 if (id === 'DenoLand.Deno') put(w + '/Links/deno.exe');
 console.log('Successfully installed');
 `);
+  await fs.mkdir(path.join(tmp, 'other-app'));
+  await fs.writeFile(path.join(tmp, 'other-app', 'yt-dlp.exe'), ''); // another app's old yt-dlp on PATH: winget's is still installed
   await fs.writeFile(path.join(tmp, 'winget.cmd'), `@"${process.execPath}" "%~dp0winget.mjs" %*\r\n`);
   env = {
     ...process.env, GLIDE_SETUP_DIR: dir, GLIDE_SETUP_PROGRAMS: path.join(tmp, 'start'), GLIDE_SETUP_DESKTOP: path.join(tmp, 'desktop'),
     GLIDE_SETUP_STARTUP: path.join(tmp, 'startup'), FASTDL_STARTUP: path.join(tmp, 'startup'), GLIDE_SETUP_REGKEY: key,
     GLIDE_SETUP_WINGET: path.join(tmp, 'winget.cmd'), FAKE_WINGET_LOG: path.join(tmp, 'winget.log'), FASTDL_PORT: String(await freePort()),
     LOCALAPPDATA: path.join(tmp, 'local'), // no tools found there, until the stand-in puts them
-    PATH: [path.join(process.env.SystemRoot, 'System32'), process.env.SystemRoot].join(';'), FASTDL_YTDLP: '', FASTDL_FFMPEG: '',
+    PATH: [path.join(process.env.SystemRoot, 'System32'), process.env.SystemRoot, path.join(tmp, 'other-app')].join(';'), FASTDL_YTDLP: '', FASTDL_FFMPEG: '',
   };
 });
 

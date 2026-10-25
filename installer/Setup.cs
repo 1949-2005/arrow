@@ -239,7 +239,8 @@ namespace Glide.Setup
             }
         }
 
-        // ---- yt-dlp, FFmpeg and Deno: found as ytdlp.js finds them (PATH, then WinGet's links and packages)
+        // ---- yt-dlp, FFmpeg and Deno: found as ytdlp.js finds them (WinGet's links and packages, PATH). A yt-dlp only on
+        // PATH doesn't count: other apps (Parabolic…) put an old one there, YouTube refuses it, and winget's copy comes first.
 
         static IEnumerable<string> OnPath(string exe)
         {
@@ -261,7 +262,7 @@ namespace Glide.Setup
             switch (tool)
             {
                 case "yt-dlp":
-                    places = new[] { Env("FASTDL_YTDLP") }.Concat(OnPath("yt-dlp.exe")).Concat(new[] { WinGet("Links", "yt-dlp.exe") })
+                    places = new[] { Env("FASTDL_YTDLP"), WinGet("Links", "yt-dlp.exe") }
                         .Concat(Subdirs(WinGet("Packages"), "yt-dlp.yt-dlp_").Select(p => Path.Combine(p, "yt-dlp.exe")));
                     break;
                 case "FFmpeg":
