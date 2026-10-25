@@ -12,6 +12,7 @@ import { Remote } from './remote.js';
 const stateFile = process.env.FASTDL_STATE || path.join(here, 'state.json');
 const logFile = path.join(path.dirname(stateFile), 'log.txt'); // the native app writes to the same file
 const mgr = new Manager(stateFile);
+mgr.log = m => log(logFile, 'engine', m);
 catchCrashes(logFile, () => mgr.saveSync());
 await mgr.load();
 const remote = new Remote(mgr, { log: m => log(logFile, 'engine', m), name: brand.name });
@@ -99,10 +100,10 @@ const server = http.createServer(async (req, res) => {
     // Options > iPhone: phone access on or off, a new pairing QR code, a device removed (the token hashes never leave)
     if (url === '/api/remote') {
       if (body.enabled != null) await remote.set(!!body.enabled);
-      return send(res, 200, remote.info());
+      return send(res, 200, await remote.info());
     }
     if (url === '/api/remote/pair') return send(res, 200, remote.startPairing(body.address));
-    if (url === '/api/remote/remove') { remote.removeDevice(String(body.id ?? '')); return send(res, 200, remote.info()); }
+    if (url === '/api/remote/remove') { remote.removeDevice(String(body.id ?? '')); return send(res, 200, await remote.info()); }
     if (url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);

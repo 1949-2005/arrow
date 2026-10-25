@@ -17,6 +17,7 @@ const run = promisify(execFile);
 const HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'];
 const HINT = ' (if YouTube changed something: winget upgrade yt-dlp.yt-dlp)';
 const LIVE = 'Live streams are not supported';
+const UPDATE_MS = 24 * 3600000;
 const errorText = line => line.replace(/^ERROR:\s*(\[[^\]]+\]\s*([\w-]+:\s*)?)?/, '');
 
 // The file extension of a format key, or of a legacy quality.
@@ -123,7 +124,7 @@ export async function listFormats(mgr, url) {
   return list;
 }
 
-async function readFormats(mgr, page, youtube) {
+async function readFormats(mgr, page, youtube, retried = false) {
   const cmd = mgr.ytdlp ?? [findYtdlp()];
   let out;
   try {
@@ -133,6 +134,7 @@ async function readFormats(mgr, page, youtube) {
       { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }));
   } catch (e) {
     const line = /^ERROR:.*$/m.exec(e.stderr ?? '')?.[0];
+    if (line && !retried && await updateYtdlp(mgr)) return readFormats(mgr, page, youtube, true);
     throw new Error(line ? errorText(line) : e.killed ? 'yt-dlp took too long to answer' : e.message);
   }
   const info = JSON.parse(out);
@@ -195,8 +197,25 @@ export async function removeTmp(d) {
 
 const num = s => /^\d+(\.\d+)?$/.test(s) ? Math.round(Number(s)) : null; // yt-dlp prints NA when unknown
 
+// yt-dlp failed: YouTube may have changed, and this yt-dlp be too old for it. WinGet updates it, once a day at most
+// (callers failing meanwhile share the run); true when it did, and the caller tries once more. Tests set mgr.winget, so
+// the real winget never runs beside the fake yt-dlp. Its exit code isn't 0 when there's nothing newer or no winget.
+export function updateYtdlp(mgr) {
+  const cmd = mgr.winget ?? (mgr.ytdlp || process.platform !== 'win32' ? null : ['winget']);
+  const u = mgr.ytdlpUpdate;
+  if (!cmd) return Promise.resolve(false);
+  if (u?.pending) return u.done;
+  if (u && Date.now() - u.at < UPDATE_MS) return Promise.resolve(false);
+  const next = mgr.ytdlpUpdate = { at: Date.now(), pending: true };
+  next.done = run(cmd[0], [...cmd.slice(1), 'upgrade', '--id', 'yt-dlp.yt-dlp', '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements',
+    '--disable-interactivity'], { windowsHide: true, timeout: 5 * 60000 })
+    .then(() => { mgr.log?.('yt-dlp updated by winget'); return true; }, () => false)
+    .finally(() => { next.pending = false; });
+  return next.done;
+}
+
 // One yt-dlp run per attempt; resume re-runs it and yt-dlp continues its .part files in d.tmpDir.
-export async function downloadVideo(d, ctl, mgr) {
+export async function downloadVideo(d, ctl, mgr, retried = false) {
   const signal = ctl.ac.signal;
   const cmd = mgr.ytdlp ?? [findYtdlp()];
   const ffmpeg = mgr.ffmpeg ?? findFfmpeg();
@@ -266,6 +285,13 @@ export async function downloadVideo(d, ctl, mgr) {
   }
   if (signal.aborted) return;
   if (live || /live event/i.test(error ?? '')) throw new Error(LIVE);
+  if ((error || code !== 0 || !file) && !retried) {
+    d.phase = 'updating';
+    const updated = await updateYtdlp(mgr);
+    d.phase = null;
+    if (signal.aborted) return;
+    if (updated) return downloadVideo(d, ctl, mgr, true);
+  }
   if (error) throw new Error(error + HINT);
   if (code !== 0) throw new Error(`yt-dlp stopped with exit code ${code}${HINT}`);
   if (!file) throw new Error(`yt-dlp did not produce a file${HINT}`);

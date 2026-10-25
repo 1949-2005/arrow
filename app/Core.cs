@@ -144,6 +144,7 @@ namespace Glide
         public bool Enabled, Listening;
         public int Port;
         public List<string> Addresses = new List<string>();
+        public string PublicNetwork; // the network's name when Windows calls it Public (its firewall then blocks the phone)
         public List<RemoteDevice> Devices = new List<RemoteDevice>();
 
         public static RemoteInfo From(IDictionary<string, object> o)
@@ -154,6 +155,7 @@ namespace Glide
             r.Listening = o.Bool("listening") ?? false;
             r.Port = o.Int("port") ?? 0;
             r.Addresses = o.Strings("addresses") ?? new List<string>();
+            r.PublicNetwork = o.Str("publicNetwork");
             r.Devices = (o.List("devices") ?? new List<object>()).OfType<IDictionary<string, object>>()
                 .Select(d => new RemoteDevice { Id = d.Str("id") ?? "", Name = d.Str("name") ?? "Phone", Added = d.Long("added") ?? 0, Seen = d.Long("seen") ?? 0 }).ToList();
             return r;
@@ -302,7 +304,7 @@ namespace Glide
     public static class Core
     {
         static readonly Dictionary<string, string> Label = new Dictionary<string, string> { { "queued", "Queued" }, { "downloading", "Downloading" }, { "paused", "Paused" }, { "done", "Complete" }, { "scheduled", "Scheduled" }, { "removed", "Removing" } };
-        static readonly Dictionary<string, string> PhaseText = new Dictionary<string, string> { { "video", "Downloading video" }, { "audio", "Downloading audio" }, { "merging", "Merging" }, { "converting", "Converting to MP3" } };
+        static readonly Dictionary<string, string> PhaseText = new Dictionary<string, string> { { "video", "Downloading video" }, { "audio", "Downloading audio" }, { "merging", "Merging" }, { "converting", "Converting to MP3" }, { "updating", "Updating yt-dlp" } };
         static readonly Dictionary<string, string> HeadingText = new Dictionary<string, string> { { "queued", "Queued" }, { "scheduled", "Scheduled" }, { "error", "Error" }, { "done", "Download complete" }, { "pending", "Waiting" }, { "removed", "Removing" } };
         // [A-Za-z0-9_] and [0-9]: .NET's \w and \d also match non-ASCII letters and digits, JavaScript's do not
         static readonly Regex Ext = new Regex(@"\.([A-Za-z0-9_]+)$");

@@ -341,7 +341,7 @@ errors show inline or in an Error dialog.
   once, merged per queue and in order (POST /api/queues update); polls skip a focused or invalid field, and the form
   for 1 s after a send. Footer: Start now (left), Stop (for the selected queue), Close (primary).
 - Options (700 wide): a left navigation 170 wide (sidebar token, items 32): General, Downloads, Sites, iPhone, Categories, Queues;
-  iPhone: "Let my iPhone use <name> on this Wi-Fi" (applied at once, POST /api/remote), its state under it (Off / On, at http://ip:port / the port is taken, in err), a note on what it allows and the firewall, Pair an iPhone… (primary; PhoneDialog: the QR code 232 px on white with its quiet zone, three steps, "Waiting for your iPhone…", the link small; it closes itself 1.4 s after "<phone> is paired ✓"), Paired phones (name · paired <date>, a delete button asking first).
+  iPhone: "Let my iPhone use <name> on this Wi-Fi" (applied at once, POST /api/remote), its state under it (Off / On, at http://ip:port / the port is taken, in err / the network is Public and how to make it Private, in err), a note on what it allows and the firewall, Pair an iPhone… (primary; PhoneDialog: the QR code 232 px on white with its quiet zone, three steps, "Waiting for your iPhone…", the link small; it closes itself 1.4 s after "<phone> is paired ✓"), Paired phones (name · paired <date>, a delete button asking first).
   the page at the right; footer Cancel / Save (primary; validates and sends only what changed, POST /api/settings;
   with an invalid field Save shows the Downloads page, where every field that can be wrong is).
   - General: Start with Windows; Offer links I copy; Show the Download complete window; "When a link is already in

@@ -541,9 +541,11 @@ namespace Glide
             Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
 
             // phone access
-            var remote = RemoteInfo.From(Json.Parse("{\"enabled\":true,\"listening\":true,\"port\":9615,\"addresses\":[\"192.168.1.23\"],\"devices\":[{\"id\":\"a\",\"name\":\"iPhone\",\"added\":1700000000000,\"seen\":1700000600000}]}") as IDictionary<string, object>);
+            var remote = RemoteInfo.From(Json.Parse("{\"enabled\":true,\"listening\":true,\"port\":9615,\"addresses\":[\"192.168.1.23\"],\"publicNetwork\":\"Ethernet\",\"devices\":[{\"id\":\"a\",\"name\":\"iPhone\",\"added\":1700000000000,\"seen\":1700000600000}]}") as IDictionary<string, object>);
             Eq(remote.Enabled + " " + remote.Port + " " + L(remote.Addresses) + " " + remote.Devices[0].Name + " " + remote.Devices[0].Added, "True 9615 192.168.1.23 iPhone 1700000000000", "remote info");
+            Eq(remote.PublicNetwork, "Ethernet", "remote info: a public network");
             Eq(RemoteInfo.From(null).Devices.Count, 0, "remote info: none");
+            Eq(RemoteInfo.From(null).PublicNetwork, null, "remote info: no public network");
             var grid = RemoteInfo.Grid(Json.Parse("[" + string.Join(",", Enumerable.Repeat("[" + string.Join(",", Enumerable.Repeat("true", 21)) + "]", 21)) + "]"));
             Ok(grid != null && grid.Length == 21 && grid[20][20], "qr grid");
             Eq(RemoteInfo.Grid(Json.Parse("[[true]]")), null, "qr grid too small");

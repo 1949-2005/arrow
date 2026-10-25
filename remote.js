@@ -7,6 +7,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { encodeQr } from './qr.js';
@@ -34,15 +35,34 @@ export function cleanRemote(r) {
   return { enabled: !!r?.enabled, devices };
 }
 
-// This PC's addresses on private networks (home Wi-Fi or Ethernet), the likeliest first
-export function lanAddresses(ifaces = os.networkInterfaces()) {
+// This PC's interfaces on private networks (home Wi-Fi or Ethernet), the likeliest first: { name, address }
+export function lanInterfaces(ifaces = os.networkInterfaces()) {
   const all = [];
   for (const [name, list] of Object.entries(ifaces))
     for (const a of list ?? [])
       if ((a.family === 'IPv4' || a.family === 4) && !a.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address))
         all.push({ name, address: a.address });
   const rank = x => /vEthernet|VirtualBox|VMware|Hyper-V|WSL|Docker|vpn|tailscale/i.test(x.name) ? 2 : /^192\.168\./.test(x.address) ? 0 : 1;
-  return all.sort((a, b) => rank(a) - rank(b)).map(x => x.address);
+  return all.sort((a, b) => rank(a) - rank(b));
+}
+export const lanAddresses = ifaces => lanInterfaces(ifaces).map(x => x.address);
+
+// Get-NetConnectionProfile's "alias|category" lines → { alias: category }
+export function parseProfiles(text) {
+  const r = {};
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    const m = /^(.+)\|(Public|Private|DomainAuthenticated)$/.exec(line.trim());
+    if (m) r[m[1]] = m[2];
+  }
+  return r;
+}
+
+// Windows' category for each connected network (no admin needed); {} elsewhere or when PowerShell fails
+function profiles() {
+  if (process.platform !== 'win32') return Promise.resolve({});
+  return new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    "Get-NetConnectionProfile | ForEach-Object { $_.InterfaceAlias + '|' + $_.NetworkCategory }"],
+  { windowsHide: true, timeout: 15000 }, (e, out) => resolve(e ? {} : parseProfiles(out))));
 }
 
 // A Host header that is an IP address and our port (no names: DNS rebinding)
@@ -64,6 +84,8 @@ export class Remote {
     this.tickets = new Map(); // one-time file links: ticket → { id, expires }
     this.failures = []; // times of wrong pairing secrets (10 a minute at most)
     this.server = null;
+    this.profiles = profiles; // tests replace it
+    this.profileCache = null; // { at, value }: PowerShell takes about a second, and the pairing window asks every 1.5 s
   }
 
   get settings() { return (this.mgr.settings.remote = cleanRemote(this.mgr.settings.remote)); }
@@ -91,10 +113,16 @@ export class Remote {
     }
   }
 
-  // What Options > iPhone shows: on/off, the addresses, the devices (never their hashes), and an error if it can't listen
-  info() {
-    const r = this.settings;
-    return { enabled: r.enabled, listening: !!this.server, port: this.port, addresses: lanAddresses(), devices: r.devices.map(({ hash, ...d }) => d) };
+  // What Options > iPhone shows: on/off, the addresses, the devices (never their hashes), an error if it can't listen,
+  // and publicNetwork: the network's name when Windows calls it Public, since its firewall then blocks the phone
+  async info() {
+    const r = this.settings, lan = lanInterfaces();
+    let publicNetwork = null;
+    if (r.enabled && lan.length) {
+      if (!this.profileCache || Date.now() - this.profileCache.at > 15000) this.profileCache = { at: Date.now(), value: await this.profiles() };
+      publicNetwork = this.profileCache.value[lan[0].name] === 'Public' ? lan[0].name : null;
+    }
+    return { enabled: r.enabled, listening: !!this.server, port: this.port, addresses: lan.map(x => x.address), publicNetwork, devices: r.devices.map(({ hash, ...d }) => d) };
   }
 
   // A new QR code: its link and its module grid. The secret is valid 10 minutes, once.

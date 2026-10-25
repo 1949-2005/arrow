@@ -311,6 +311,47 @@ test('an ERROR line becomes the error message, without the prefix', async () => 
   await mgr.act(d.id, 'remove'); // its temp folder too
 });
 
+test('a failing yt-dlp is updated by winget once a day, and the download or list tried again once', async () => {
+  const marker = process.env.FAKE_YTDLP_UPDATED = path.join(dir, 'updated');
+  const wlog = path.join(dir, 'winget.log');
+  // fake winget: logs its arguments; exit 0 and a newer yt-dlp (the marker), or FAKE_WINGET_EXIT (nothing newer)
+  const fake = path.join(dir, 'winget.mjs');
+  await fs.writeFile(fake, `import fs from 'node:fs';
+fs.appendFileSync(${JSON.stringify(wlog)}, process.argv.slice(2).join(' ') + '\\n');
+if (process.env.FAKE_WINGET_EXIT) process.exit(Number(process.env.FAKE_WINGET_EXIT));
+fs.writeFileSync(${JSON.stringify(marker)}, '');
+`);
+  const calls = async () => (await fs.readFile(wlog, 'utf8').catch(() => '')).split('\n').filter(Boolean);
+  try {
+    mgr.winget = [process.execPath, fake];
+    mgr.ytdlpUpdate = null;
+    const d = mgr.add({ url: 'https://youtu.be/staleVideo1' });
+    await settled(d);
+    assert.equal(d.status, 'done', d.error);
+    assert.deepEqual(await calls(), ['upgrade --id yt-dlp.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements --disable-interactivity']);
+    await fs.rm(marker); // YouTube changes again the same day: no second update, the error stays
+    const e = mgr.add({ url: 'https://youtu.be/staleVideo2' });
+    await settled(e);
+    assert.match(e.error, /^The page needs to be reloaded\. \(if YouTube changed something/);
+    assert.equal((await calls()).length, 1);
+
+    mgr.ytdlpUpdate = null; // a day later: the format list fails, winget updates, the list comes
+    assert.ok((await mgr.formats('https://youtu.be/oldListing1')).options.length);
+    assert.equal((await calls()).length, 2);
+
+    await fs.rm(marker);
+    mgr.ytdlpUpdate = null;
+    process.env.FAKE_WINGET_EXIT = '1'; // nothing newer: the error, after one winget run
+    await assert.rejects(mgr.formats('https://youtu.be/oldListing2'), { message: 'The page needs to be reloaded.' });
+    assert.equal((await calls()).length, 3);
+    for (const x of [d, e]) await mgr.act(x.id, 'remove');
+  } finally {
+    delete process.env.FAKE_YTDLP_UPDATED;
+    delete process.env.FAKE_WINGET_EXIT;
+    mgr.winget = undefined;
+  }
+});
+
 test('live streams are refused', async () => {
   const d = mgr.add({ url: 'https://youtu.be/liveStream1' });
   await settled(d);

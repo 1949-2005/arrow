@@ -49,7 +49,7 @@ namespace Glide
         // iPhone: phone access (remote.js), applied at once like Categories; the paired phones, at most MaxPhones listed
         const int MaxPhones = 6;
         readonly FlatCheck phoneOn = new FlatCheck("Let my iPhone use " + Program.Name + " on this Wi-Fi");
-        readonly Caption phoneState = new Caption(Theme.Body, () => Theme.Muted) { MaxLines = 3 };
+        readonly Caption phoneState = new Caption(Theme.Body, () => Theme.Muted) { MaxLines = 4 };
         readonly Caption phoneNote = new Caption(Theme.Small, () => Theme.Muted)
         {
             MaxLines = 6,
@@ -186,7 +186,7 @@ namespace Glide
             });
         }
 
-        void FillPhone(RemoteInfo info)
+        internal void FillPhone(RemoteInfo info)
         {
             phone = info;
             phoneFilling = true;
@@ -194,10 +194,12 @@ namespace Glide
             phoneFilling = false;
             phoneOn.Enabled = !busy;
             pairPhone.Enabled = !busy && info.Enabled && info.Listening;
-            phoneState.Fore = () => info.Enabled && !info.Listening ? Theme.Err : Theme.Muted;
+            phoneState.Fore = () => info.Enabled && (!info.Listening || info.PublicNetwork != null) ? Theme.Err : Theme.Muted;
             phoneState.Text = !info.Enabled ? "Off."
                 : !info.Listening ? Program.Name + " couldn't open port " + info.Port + ": another program uses it."
                 : info.Addresses.Count == 0 ? "On, but this PC isn't on a local network."
+                : info.PublicNetwork != null ? "Windows treats “" + info.PublicNetwork + "” as a public network, so its firewall blocks your iPhone. "
+                    + "Set it to Private: Settings › Network & internet › " + info.PublicNetwork + " › Network profile type › Private."
                 : "On, at http://" + info.Addresses[0] + ":" + info.Port;
             foreach (var row in phoneRows) foreach (var c in row) { pageOf.Remove(c); Body.Controls.Remove(c); c.Dispose(); }
             phoneRows.Clear();

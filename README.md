@@ -214,7 +214,7 @@ Prefer clicking?
 - If Glide can't read the format list, the window offers only "MP4 · best quality" and "MP3 · audio".
 - Glide prefers H.264 video. It plays everywhere. Very high resolutions (like 4K) may use VP9 or AV1. VLC plays them.
 - Pause and Resume work. One progress bar covers video and sound. "Merging" is the last step.
-- If YouTube downloads start to fail, run `winget upgrade yt-dlp.yt-dlp`.
+- When a YouTube download fails, Glide updates yt-dlp with winget (once a day at most) and tries again. If it still fails, run `winget upgrade yt-dlp.yt-dlp`.
 - Limits:
   - One video per link. No playlists or channels.
   - No live streams.
@@ -288,7 +288,7 @@ Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebo
 
 Your iPhone can send links to Glide, follow your downloads and save finished files, over your home Wi-Fi. The downloads run on the PC.
 
-1. On the PC: **Options › iPhone**, tick **Let my iPhone use Glide on this Wi-Fi**. If Windows asks about its firewall, allow Glide on private networks.
+1. On the PC: **Options › iPhone**, tick **Let my iPhone use Glide on this Wi-Fi**. If Windows asks about its firewall, allow Glide on private networks. If Glide says your network is public, set it to Private in Windows' Settings (Network & internet › your network › Network profile type).
 2. Click **Pair an iPhone…** and scan the QR code with the iPhone's camera. Tap the link that appears.
 3. On the iPhone, in Safari: **Share › Add to Home Screen**. Glide now opens like an app.
 

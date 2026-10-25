@@ -702,6 +702,9 @@ namespace Glide
                     if (page == OptionsDialog.Categories) o.SelectCategory("Courses");
                     Shot(folder, "options-" + page, o);
                 }
+                var pub = new OptionsDialog(null, opts, OptionsDialog.Phone); // the network is Public: Windows' firewall blocks the phone
+                pub.FillPhone(new RemoteInfo { Enabled = true, Listening = true, Port = 9615, Addresses = new List<string> { "192.168.1.23" }, PublicNetwork = "Ethernet" });
+                Shot(folder, "options-phone-public", pub);
 
                 // issue 07: the Scheduler, on a queue with every field set and three files waiting (a finished one is left out)
                 var nightQueue = new Queue { Id = "night", Name = "Night", MaxActive = 2, StartAt = "02:00", Days = new List<int> { 1, 2, 3, 4, 5 }, StopAt = "07:00", Retries = 2, WhenDone = "shutdown" };

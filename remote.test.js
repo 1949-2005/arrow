@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { lanAddresses, hostOk, deviceName, cleanRemote, fileOfUrl } from './remote.js';
+import { lanAddresses, lanInterfaces, parseProfiles, hostOk, deviceName, cleanRemote, fileOfUrl } from './remote.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NAME = JSON.parse(readFileSync(path.join(here, 'brand.json'), 'utf8')).name;
@@ -51,13 +51,15 @@ after(async () => {
   await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
-test('helpers: private addresses only, IP hosts only, device names, names of unnamed links, settings cleaned', () => {
+test('helpers: private addresses only, IP hosts only, device names, names of unnamed links, network categories, settings cleaned', () => {
   assert.deepEqual(lanAddresses({
     'vEthernet (WSL)': [{ family: 'IPv4', address: '172.20.0.1', internal: false }],
     'Wi-Fi': [{ family: 'IPv4', address: '192.168.1.23', internal: false }, { family: 'IPv6', address: 'fe80::1', internal: false }],
     lo: [{ family: 'IPv4', address: '127.0.0.1', internal: true }],
     public: [{ family: 'IPv4', address: '8.8.8.8', internal: false }],
   }), ['192.168.1.23', '172.20.0.1']);
+  assert.deepEqual(lanInterfaces({ Ethernet: [{ family: 'IPv4', address: '192.168.1.3', internal: false }] }), [{ name: 'Ethernet', address: '192.168.1.3' }]);
+  assert.deepEqual(parseProfiles('Ethernet|Public\r\nWi-Fi 2|Private\r\nnoise\r\n'), { Ethernet: 'Public', 'Wi-Fi 2': 'Private' });
   assert.ok(hostOk('192.168.1.23:9615', 9615) && hostOk('[::1]:9615', 9615));
   assert.ok(!hostOk('evil.example:9615', 9615) && !hostOk('192.168.1.23:80', 9615) && !hostOk(undefined, 9615));
   assert.equal(deviceName('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)'), 'iPhone');

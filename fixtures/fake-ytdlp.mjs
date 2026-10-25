@@ -1,6 +1,8 @@
 // Fake yt-dlp for ytdlp.test.js: no network. Prints the lines our --print/--progress-template
 // arguments make the real one print. The video ID picks the behaviour:
 //   err…  ERROR line, exit 1     live…  filtered out as live, exit 0
+//   old…  -J fails, stale… the download fails, as an outdated yt-dlp's do, until the file FAKE_YTDLP_UPDATED exists
+//         (the test's fake winget makes it)
 //   slow… slow, with a child process (like the PyInstaller launcher), continues its .part files.
 //         A fresh run waits 10 s at 50000 bytes, so a pause or remove always lands mid-stream.
 // -J prints fixtures/ytdlp-formats.json for the ID, its {{BASE}} links on FAKE_YTDLP_BASE (the test's range server).
@@ -17,6 +19,8 @@ const mp3 = args.includes('-x');
 const merge = args.includes('--merge-output-format') ? args[args.indexOf('--merge-output-format') + 1] : null;
 const slow = id.startsWith('slow');
 const out = s => process.stdout.write(s + '\n');
+const outdated = () => !(process.env.FAKE_YTDLP_UPDATED && fs.existsSync(process.env.FAKE_YTDLP_UPDATED));
+const reload = () => { process.stderr.write(`ERROR: [youtube] ${id}: The page needs to be reloaded.\n`); process.exitCode = 1; };
 const log = s => process.env.FAKE_YTDLP_LOG && fs.appendFileSync(process.env.FAKE_YTDLP_LOG, s + '\n');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const bytes = (seed, from, n) => Buffer.from(Array.from({ length: n }, (_, i) => (from + i + seed) % 251));
@@ -24,7 +28,8 @@ const bytes = (seed, from, n) => Buffer.from(Array.from({ length: n }, (_, i) =>
 if (args.includes('-J')) {
   log(`list ${id}`);
   await sleep(100); // long enough for two callers to overlap
-  if (id.startsWith('err')) {
+  if (id.startsWith('old') && outdated()) reload();
+  else if (id.startsWith('err')) {
     process.stderr.write(`ERROR: [youtube] ${id}: Private video. Sign in if you've been granted access to this video\n`);
     process.exitCode = 1;
   } else {
@@ -36,7 +41,8 @@ if (args.includes('-J')) {
 } else {
 log(`run ${process.pid}`);
 out(`[youtube] Extracting URL: ${url}`);
-if (id.startsWith('err')) {
+if (id.startsWith('stale') && outdated()) reload();
+else if (id.startsWith('err')) {
   process.stderr.write(`ERROR: [youtube] ${id}: Private video. Sign in if you've been granted access to this video\n`);
   process.exitCode = 1;
 } else if (id.startsWith('live')) {
