@@ -279,7 +279,6 @@ Options has four pages.
 - Clipboard monitoring only offers links that end in a file type of a category (Video, Music, Programs, Documents, Compressed, or your own).
 - Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
-- The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
 
 ## Other video sites
 

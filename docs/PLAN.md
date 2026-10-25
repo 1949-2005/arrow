@@ -16,7 +16,7 @@
 6. **IDM parity: IDM's features in Arrow's own look** — Careful. `.scratch/idm-parity/` (spec, mockups, issues 01–09). Engine: per-download description, speed limit and "when done", the speed-limit switch, last try, the Download complete flag, live connections in `segments`, duplicates (number / replace / resume, remembered), named queues with start and stop times, days, files at the same time, retries and "when done", editable categories. App: command bar, list columns with sorting and a column chooser, details panel hidden by default, queues in the sidebar, Connections and Options in the progress window, the Download complete window, Download File Info's + / Description / Add to queue, Link already in the list, Properties, the category editor, the Scheduler, Options pages. Status: done (`npm test`: 127 tests, 127 pass, 0 fail; ARROW_SHOTS pictures of every screen in light and dark)
 
 ## Known gaps (not planned)
-- popup.js has no automated test; the extension was never loaded in a real browser.
+- popup.js has no automated test. The extension's download takeover is tested in a real browser (extension.browser.test.js, headless Edge), but only while IDM is closed.
 - The real sleep and shutdown commands never run in tests (a recorder stands in for `Manager.power`). Only the countdown logic is tested, plus a manual check that the .NET sleep method resolves.
 - Clipboard monitoring depends on the browser's clipboard permission and on the window getting focus; it is not tested in Firefox.
 - The shortcuts point at the exe in the app folder: after moving the folder, uninstall and install again.

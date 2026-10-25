@@ -33,7 +33,6 @@ async function connect(port) {
   const waiting = new Map();
   ws.onmessage = m => {
     const msg = JSON.parse(m.data);
-    if (msg.method && process.env.ARROW_CDP_LOG) console.error('CDP', msg.method, JSON.stringify(msg.params).slice(0, 300));
     if (msg.id && waiting.has(msg.id)) { const { r, j } = waiting.get(msg.id); waiting.delete(msg.id); msg.error ? j(new Error(msg.error.message)) : r(msg.result); }
   };
   return {
@@ -97,8 +96,7 @@ async function clickDownload() {
     if (result.value) break;
     if (Date.now() - t > 10000) throw new Error('the test page did not load');
   }
-  if (process.env.ARROW_CDP_NAV) await cdp.send('Page.navigate', { url: siteUrl + '/files/report.zip' }, sessionId);
-  else await cdp.send('Runtime.evaluate', { expression: 'document.getElementById("dl").click()', userGesture: true }, sessionId);
+  await cdp.send('Runtime.evaluate', { expression: 'document.getElementById("dl").click()', userGesture: true }, sessionId);
 }
 
 test('the extension loads in Edge as a service worker', skip, async () => {
@@ -126,8 +124,15 @@ test('with the app closed, the browser keeps its download', skip, async () => {
   clearInterval(polling);
   await sleep(6000); // the engine counts the app as gone 5 s after its last poll
   await clickDownload(); // nothing reads /api/state now: the engine answers but says the app is gone (503)
-  const dir = path.join(tmp, 'browser-downloads');
-  let saved = false;
-  for (const t = Date.now(); !saved && Date.now() - t < 15000; await sleep(300)) saved = existsSync(dir) && readdirSync(dir).some(f => f === 'report.zip');
-  assert.ok(saved, 'the browser saved report.zip');
+  // the extension gives it back: a download of its own in the browser's list (Edge may then hold a plain-http one for a click)
+  const { targetInfos } = await cdp.send('Target.getTargets');
+  const worker = targetInfos.find(x => x.type === 'service_worker' && x.url.endsWith('/background.js'));
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: worker.targetId, flatten: true });
+  let mine = [];
+  for (const t = Date.now(); !mine.length && Date.now() - t < 15000; await sleep(300)) {
+    const { result } = await cdp.send('Runtime.evaluate', { expression: `chrome.downloads.search({ url: '${siteUrl}/files/report.zip' }).then(l => l.filter(d => d.byExtensionId === chrome.runtime.id).map(d => d.state))`, awaitPromise: true, returnByValue: true }, sessionId);
+    mine = result.value ?? [];
+  }
+  assert.ok(mine.length > 0, 'the browser downloads it again');
+  assert.equal((await state()).downloads.filter(d => d.url === siteUrl + '/files/report.zip').length, 1, 'Arrow did not take a second one');
 });
