@@ -141,7 +141,7 @@ namespace Glide
             Page(Phone, phoneOn, phoneState, phoneNote, pairPhone, phonesHead);
             phoneOn.CheckedChanged += (o, e) => { if (!phoneFilling) AskPhone("/api/remote", new Dictionary<string, object> { { "enabled", phoneOn.Checked } }); };
             pairPhone.Click += (o, e) => PairPhone();
-            if (api != null) AskPhone("/api/remote", null);
+            if (api != null) Load += (o, e) => AskPhone("/api/remote", null); // once the window exists: Dialogs.Call answers through it
             else FillPhone(new RemoteInfo // GLIDE_SHOTS
             {
                 Enabled = true, Listening = true, Port = 9615, Addresses = new List<string> { "192.168.1.23" },
