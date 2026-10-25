@@ -97,12 +97,13 @@ namespace Arrow
 
     public class Settings
     {
-        public string Dir, Duplicates;
+        public string Dir, Duplicates, Proxy;
         public int Connections, MaxActive, SpeedLimitKB;
         public bool Categories, Clipboard, Startup, SpeedLimitOn, ShowComplete;
         public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
         public Dictionary<string, List<string>> Types = new Dictionary<string, List<string>>(); // category → file types, in sidebar order
         public List<Queue> Queues = new List<Queue>();
+        public List<Site> Sites = new List<Site>(); // per-site connections and speed limit (engine.js cleanSites)
 
         public static Settings From(IDictionary<string, object> o)
         {
@@ -120,12 +121,22 @@ namespace Arrow
                 ShowComplete = o.Bool("showComplete") ?? true,
                 Categories = o.Bool("categories") ?? false,
                 Clipboard = o.Bool("clipboard") ?? false,
+                Proxy = o.Str("proxy") ?? "",
                 Startup = o.Bool("startup") ?? false,
                 Folders = f == null ? new Dictionary<string, string>() : f.Keys.Where(k => !string.IsNullOrEmpty(f[k] as string)).ToDictionary(k => k, k => (string)f[k]),
                 Types = t == null ? new Dictionary<string, List<string>>() : t.Keys.ToDictionary(k => k, k => t.Strings(k)),
                 Queues = queues,
+                Sites = (o.List("sites") ?? new List<object>()).OfType<IDictionary<string, object>>()
+                    .Select(x => new Site { Host = x.Str("host") ?? "", Connections = x.Int("connections") ?? 0, LimitKB = x.Int("limitKB") ?? 0 }).ToList(),
             };
         }
+    }
+
+    // A site's own settings: Connections and LimitKB, 0 for the usual ones
+    public class Site
+    {
+        public string Host;
+        public int Connections, LimitKB;
     }
 
     // A download queue (settings.queues; /api/state's queues add Running and the counts)
@@ -387,7 +398,7 @@ namespace Arrow
         public static string ShortName(Download d)
         {
             if (!string.IsNullOrEmpty(d.Name)) return d.Name;
-            if (d.Kind == "video") return "YouTube video";
+            if (d.Kind == "video") return IsYouTube(d.Url) ? "YouTube video" : "Video";
             var url = d.Url ?? "";
             var last = Uri.UnescapeDataString(url.Split('?')[0].Split('/').Last());
             return last != "" ? last : url;
@@ -560,6 +571,12 @@ namespace Arrow
         public static bool CanPause(Download d) { return CanStop(d); }
         public static bool IsYouTube(string url) { return url != null && YouTube.IsMatch(url); }
 
+        // ytdlp.js SITES: the other video sites yt-dlp downloads from (with www., m. and the like in front)
+        static readonly Regex VideoSite = new Regex(@"^https?://([^/?#]+\.)?(vimeo\.com|dailymotion\.com|x\.com|twitter\.com|tiktok\.com|instagram\.com|facebook\.com|fb\.watch|reddit\.com|twitch\.tv|soundcloud\.com|bilibili\.com|streamable\.com)([:/?#]|$)", RegexOptions.IgnoreCase);
+
+        // A link yt-dlp downloads: YouTube or one of the other video sites (Add links offers its Quality)
+        public static bool IsVideoLink(string url) { return url != null && (YouTube.IsMatch(url) || VideoSite.IsMatch(url)); }
+
         // Sidebar category: from the file extension, else Other. YouTube is Video, or Music for M4A/MP3; HLS is always Video.
         public static string Category(Download d, IDictionary<string, List<string>> categories)
         {
@@ -697,6 +714,12 @@ namespace Arrow
         }
 
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
+        // engine.js cleanSites' rule: a host name (example.com, dl.example.com); a scheme, path or port is dropped there, refused here
+        public static bool IsSiteHost(string s) { return Regex.IsMatch((s ?? "").Trim(), @"^(\*\.)?([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}$") && (s ?? "").Trim().Length <= 253; }
+
+        // engine.js cleanProxy's rule: http(s)://[user:pass@]host:port, nothing after the port
+        public static bool IsProxy(string s) { return Regex.IsMatch((s ?? "").Trim(), @"^https?://([^@/\s]+@)?[^:/@\s]+:\d{1,5}/?$", RegexOptions.IgnoreCase); }
+
         public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
 
         // ---- duplicates (spec "Duplicates"): what a pending download with probe.duplicate does
@@ -799,6 +822,75 @@ namespace Arrow
         // Options › General's "When a link is already in the list" Picker, in its order ↔ settings.duplicates
         public static readonly string[] DuplicateSettings = { "ask", "number", "replace", "resume" };
         public static int DuplicateIndex(string duplicates) { return Math.Max(0, Array.IndexOf(DuplicateSettings, duplicates)); } // unknown = Ask me, as the engine
+
+        // The main window's keyboard shortcuts (MainForm.ProcessCmdKey), as the Keyboard shortcuts window lists them
+        public static readonly string[][] Shortcuts =
+        {
+            new[] { "Ctrl+V", "Paste a link into the paste bar" },
+            new[] { "Ctrl+N", "Add several links" },
+            new[] { "Ctrl+F", "Search downloads" },
+            new[] { "Ctrl+A", "Select all downloads" },
+            new[] { "Ctrl+C", "Copy the selected downloads' links" },
+            new[] { "Delete", "Remove the selected downloads" },
+            new[] { "Enter", "Open the selected download" },
+            new[] { "Ctrl+,", "Options" },
+            new[] { "F1 or Ctrl+/", "This list" },
+            new[] { "Esc", "Clear the search, close a window" },
+        };
+
+        // The app's theme (ui.json "theme"): follow Windows, or always light or dark
+        public static readonly string[] ThemeModes = { "system", "light", "dark" };
+        public static readonly string[] ThemeNames = { "Use Windows setting", "Light", "Dark" };
+        public static int ThemeIndex(string mode) { return Math.Max(0, Array.IndexOf(ThemeModes, mode)); } // unknown = Windows
+
+        // Updates (Updater): "v1.2.3" or "1.2.3" against the running version; anything unreadable is never newer
+        public static bool IsNewer(string tag, string current)
+        {
+            var a = VersionParts(tag);
+            var b = VersionParts(current);
+            if (a == null || b == null) return false;
+            for (var i = 0; i < 3; i++) if (a[i] != b[i]) return a[i] > b[i];
+            return false;
+        }
+
+        static int[] VersionParts(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return null;
+            var m = Regex.Match(v.Trim(), @"^v?(\d+)\.(\d+)(?:\.(\d+))?");
+            if (!m.Success) return null;
+            return new[] { int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0 };
+        }
+
+        // The latest release (GitHub's releases/latest JSON): its tag and the setup's and checksum's download links; null
+        // when either asset is missing
+        public static string[] ReleaseSetup(IDictionary<string, object> release, string setupName)
+        {
+            if (release == null) return null;
+            string setup = null, sum = null;
+            var assets = release.ContainsKey("assets") ? release["assets"] as System.Collections.IEnumerable : null;
+            if (assets != null)
+                foreach (var a in assets.OfType<IDictionary<string, object>>())
+                {
+                    var name = a.Str("name");
+                    if (name == setupName) setup = a.Str("browser_download_url");
+                    else if (name == setupName + ".sha256") sum = a.Str("browser_download_url");
+                }
+            var tag = release.Str("tag_name");
+            return tag == null || setup == null || sum == null ? null : new[] { tag, setup, sum };
+        }
+
+        // "<hex>  ArrowSetup.exe" (or just the hex): the hash, lower case; null when it isn't 64 hex digits
+        public static string Sha256Of(string sumFile)
+        {
+            var hex = (sumFile ?? "").Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            return Regex.IsMatch(hex, "^[0-9a-fA-F]{64}$") ? hex.ToLowerInvariant() : null;
+        }
+
+        // The setup's quiet update: quit the running app, reinstall, start it again; keep the shortcuts as they are
+        public static string SetupArgs(bool desktopLink, bool startupLink)
+        {
+            return "--quiet --quit-arrow --start" + (desktopLink ? "" : " --no-desktop") + (startupLink ? "" : " --no-startup");
+        }
 
         // A folder inside the download folder from that folder's own name on (Options › Categories: "Downloads\Video"); others as they are
         public static string ShortFolder(string dir, string folder)
@@ -1005,5 +1097,33 @@ namespace Arrow
         static int Digits(string d, ref int i) { var start = i; while (i < d.Length && d[i] >= '0' && d[i] <= '9') i++; return i - start; }
         static int Skip(string d, int i) { while (i < d.Length && (char.IsWhiteSpace(d[i]) || d[i] == ',')) i++; return i; }
         static void Step(List<SvgStep> steps, char op, params double[] args) { steps.Add(new SvgStep { Op = op, Args = args }); }
+    }
+
+    // log.txt (log.js's format, the engine writes the same file): "<ISO time> [source] message", more lines indented;
+    // past 1 MB the oldest half goes. Never throws: a log that cannot be written must not stop the app.
+    public static class Log
+    {
+        public const int Max = 1 << 20;
+        public static string File; // set by Program: next to state.json
+
+        public static void Write(string source, string message)
+        {
+            var file = File;
+            if (string.IsNullOrEmpty(file)) return;
+            try
+            {
+                var line = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture) + " [" + source + "] "
+                    + (message ?? "").Replace("\r\n", "\n").Replace("\n", "\n    ") + "\n";
+                lock (typeof(Log))
+                {
+                    System.IO.File.AppendAllText(file, line, new System.Text.UTF8Encoding(false));
+                    if (new System.IO.FileInfo(file).Length <= Max) return;
+                    var text = System.IO.File.ReadAllText(file);
+                    var cut = text.IndexOf('\n', Math.Max(0, text.Length - Max / 2));
+                    System.IO.File.WriteAllText(file, cut < 0 ? "" : text.Substring(cut + 1), new System.Text.UTF8Encoding(false));
+                }
+            }
+            catch (Exception) { }
+        }
     }
 }

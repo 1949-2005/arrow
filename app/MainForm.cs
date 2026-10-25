@@ -44,6 +44,17 @@ namespace Arrow
         readonly Poller poller;
         readonly string shots;
         bool visible, quitting, firstPoll = true, offline, counting, clipListening, trayHint;
+        // Updates: the newer release found (null: none), ui.json's switch and the version the user dismissed, the setup's
+        // download percent while it runs (-1: not updating)
+        Release update;
+        bool autoUpdates = true;
+        string skipVersion;
+        int updatePercent = -1;
+        // IDM's drop target (DropTarget): ui.json's switch and place; null while hidden
+        DropTarget dropTarget;
+        bool dropShown;
+        Point? dropAt;
+        readonly System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer { Interval = 10000 }; // the first check 10 s after start, then daily
         int openSeen, polls;
         State state;
         List<Download> all = new List<Download>();
@@ -59,9 +70,9 @@ namespace Arrow
         readonly ToolTip tips = new ToolTip();
         readonly Area root, top, commands, listPanel, statusBar;
         readonly Canvas logo, overlay;
-        readonly TextField paste = new TextField(Glyph.Link, "Paste a link or drop files");
-        readonly TextField search = new TextField(Glyph.Search, "Search downloads");
-        readonly FlatButton download = new FlatButton("Download", Glyph.Download, ButtonKind.Primary);
+        readonly TextField paste = new TextField(Glyph.Link, "Paste a link or drop files") { Svg = "link" };
+        readonly TextField search = new TextField(Glyph.Search, "Search downloads") { Svg = "search" };
+        readonly FlatButton download = new FlatButton("Download", Glyph.Download, ButtonKind.Primary) { Svg = "active", SvgPx = 20 };
         readonly FlatButton addLinks, options, more;
         // the command bar; labels keeps each one's text for when the bar shows glyphs only
         readonly FlatButton resume, pause, delete, pauseAll, deleteDone, startQueue, stopQueue, scheduler, speedLimit, sortButton, viewButton;
@@ -97,8 +108,14 @@ namespace Arrow
             logoBig = Logo(64);
 
             addLinks = IconButton(Glyph.List, "Add several links");
+            addLinks.Svg = "mainqueue";
+            addLinks.SvgPx = 24;
             options = IconButton(Glyph.Options, "Options");
+            options.Svg = "settings";
+            options.SvgPx = 20;
             more = IconButton(Glyph.More, "More");
+            more.Svg = "more";
+            more.SvgPx = 20;
             download.Height = Theme.Px(34);
             download.Width = download.PreferredWidth;
             logo = new Canvas((g, r) => { if (logoSmall != null) { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(logoSmall, r); } }) { AccessibleName = Program.Name };
@@ -122,8 +139,14 @@ namespace Arrow
             startQueue = Command("Start queue", Glyph.Play, () => QueueCommand(true));
             stopQueue = Command("Stop queue", Glyph.Stop, () => QueueCommand(false));
             scheduler = Command("Scheduler", Glyph.Clock, () => OpenScheduler(null));
+            scheduler.Svg = "scheduler";
+            resume.Svg = startQueue.Svg = "play";
+            pause.Svg = pauseAll.Svg = "pause";
+            delete.Svg = deleteDone.Svg = "delete";
+            stopQueue.Svg = "stop";
             speedLimit = Command("Speed limit: Off", Glyph.SpeedLimit, SpeedMenu);
             speedLimit.Chevron = true;
+            speedLimit.Svg = "speed";
             commands = new Area(() => Theme.Top) { Dock = DockStyle.Top, Height = Theme.Px(44), LineBottom = true };
             commands.Controls.AddRange(new Control[] { resume, pause, delete, pauseAll, deleteDone, startQueue, stopQueue, scheduler, speedLimit });
             commands.Layout += (s, e) => LayoutCommands();
@@ -142,7 +165,9 @@ namespace Arrow
             search.Box.TextChanged += (s, e) => RefreshList();
             search.Box.KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; search.Text = ""; } };
             sortButton = Command("Sort", Glyph.Sort, () => SortMenu().Show(sortButton, new Point(0, sortButton.Height + Theme.Px(2))));
+            sortButton.Svg = "sort";
             viewButton = Command("View", Glyph.View, () => ViewMenu().Show(viewButton, new Point(0, viewButton.Height + Theme.Px(2))));
+            viewButton.Svg = "view";
             foreach (var b in new[] { sortButton, viewButton }) { b.Chevron = true; b.Width = b.PreferredWidth; }
             list.CategoryOf = Cat;
             list.Logo = logoBig;
@@ -206,11 +231,21 @@ namespace Arrow
             Controls.Add(root);
             HookDrop(root);
 
-            if (shots == null) { LoadUi(); Dialogs.UiChanged = SaveUi; }
+            if (shots == null)
+            {
+                LoadUi();
+                Dialogs.UiChanged = SaveUi;
+                ShowDropTarget(dropShown);
+                updateTimer.Tick += (s, e) => { updateTimer.Interval = 24 * 60 * 60 * 1000; if (autoUpdates) CheckUpdates(false); };
+                updateTimer.Start();
+            }
             wantSection = section;
             sidebar.Selected = sidebar.Items.Any(i => i.Key == section) ? section : "all";
             section = sidebar.Selected;
             sidebar.SelectedChanged += () => { section = sidebar.Selected; RefreshList(); };
+            // drag downloads from the list onto a queue: Add to queue (unfinished ones only)
+            sidebar.CanDrop = key => key.StartsWith("queue:");
+            sidebar.Dropped += (key, ids) => ToQueue(all.Where(d => ids.Contains(d.Id) && d.Status != "done").ToList(), key.Substring("queue:".Length));
             inspector.Visible = details;
             UpdateInspector();
             UpdateCommands();
@@ -228,6 +263,13 @@ namespace Arrow
                 ProgressDialog.AppTray = tray; // a download's tray icon goes right after this one
                 tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
                 tray.BalloonTipClicked += (s, e) => { ShowMain(); if (balloonId != null) Reveal(balloonId); };
+                // a notification's click comes on a WinRT thread: open the file, its folder, or the window with it selected
+                Toasts.Activated += (action, id) => Ui(() =>
+                {
+                    if (action == "open" && id != null) Ops(new[] { new[] { id, "open" } });
+                    else if (action == "folder" && id != null) Ops(new[] { new[] { id, "folder" } });
+                    else { ShowMain(); if (id != null) Reveal(id); }
+                });
             }
 
             poller = new Poller(api);
@@ -274,7 +316,7 @@ namespace Arrow
         FlatButton Command(string text, char glyph, Action click)
         {
             // padding 8: the labelled bar fits the default window (1180, client 1164) with "Speed limit: 500 KB/s"
-            var b = new FlatButton(text, glyph, ButtonKind.Ghost) { MutedGlyph = true, Radius = Theme.Px(6), AccessibleName = text, Height = Theme.Px(32), Pad = Theme.Px(8) };
+            var b = new FlatButton(text, glyph, ButtonKind.Ghost) { MutedGlyph = true, Radius = Theme.Px(6), AccessibleName = text, Height = Theme.Px(32), Pad = Theme.Px(8), SvgPx = 20 };
             b.Width = b.PreferredWidth;
             tips.SetToolTip(b, text);
             b.Click += (s, e) => click();
@@ -390,11 +432,11 @@ namespace Arrow
             sidebarKey = key;
             sidebar.Clear();
             sidebar.Heading("Library");
-            sidebar.Add("all", "All", Glyph.All, null);
-            sidebar.Add("active", "Active", Glyph.Active, null);
-            sidebar.Add("finished", "Finished", Glyph.Finished, null);
-            sidebar.Add("failed", "Failed", Glyph.Failed, null);
-            sidebar.Add("scheduled", "Scheduled", Glyph.Scheduled, null);
+            sidebar.Add("all", "All", Glyph.All, null, "all");
+            sidebar.Add("active", "Active", Glyph.Active, null, "active");
+            sidebar.Add("finished", "Finished", Glyph.Finished, null, "finished");
+            sidebar.Add("failed", "Failed", Glyph.Failed, null, "failed");
+            sidebar.Add("scheduled", "Scheduled", Glyph.Scheduled, null, "scheduler");
             sidebar.Heading("Types");
             foreach (var c in types.Where(c => c != "Other").Concat(new[] { "Other" }))
             {
@@ -402,7 +444,11 @@ namespace Arrow
                 sidebar.Add("type:" + c, c, Glyph.Of(icon), icon);
             }
             if (Queues.Count > 0) sidebar.Heading("Queues");
-            foreach (var q in Queues) sidebar.Add("queue:" + q.Id, Core.QueueName(q), Glyph.List, null);
+            foreach (var q in Queues)
+            {
+                sidebar.Add("queue:" + q.Id, Core.QueueName(q), Glyph.List, null, "mainqueue");
+                sidebar.Items.Last().SvgPx = 24;
+            }
             var want = wantSection ?? section;
             if (state != null) wantSection = null;
             sidebar.Selected = sidebar.Items.Any(i => i.Key == want) ? want : "all";
@@ -431,7 +477,9 @@ namespace Arrow
             foreach (var d in all)
             {
                 string prev;
-                if (statuses.TryGetValue(d.Id, out prev) && prev == "downloading" && d.Status == "done") Balloon("Download complete", Core.ShortName(d), d.Id);
+                if (statuses.TryGetValue(d.Id, out prev) && prev == "downloading" && d.Status == "done" && (shots != null
+                    || !Toasts.Show("Download complete", Core.ShortName(d), d.Id, new[] { "Open", "open" }, new[] { "Show in folder", "folder" })))
+                    Balloon("Download complete", Core.ShortName(d), d.Id);
                 next[d.Id] = d.Status;
             }
             statuses = next;
@@ -445,6 +493,7 @@ namespace Arrow
             }
             foreach (var id in speeds.Keys.Except(running.Select(d => d.Id)).ToList()) speeds.Remove(id);
             Push(totals, running.Sum(d => (double)d.Speed));
+            if (dropTarget != null) dropTarget.Speed = running.Count > 0 ? Core.Size(running.Sum(d => (double)d.Speed)) + "/s" : "";
 
             if (firstPoll) openSeen = s.Open;
             else if (s.Open > openSeen) { openSeen = s.Open; if (shots == null) ShowMain(); }
@@ -504,7 +553,7 @@ namespace Arrow
             Func<string, bool> has = t => t != null && t.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
             // a queue lists its downloads in its own order: the engine's list order
             var source = section.StartsWith("queue:") && state != null ? state.Downloads.Where(d => d.Status != "pending") : all;
-            var shown = source.Where(d => Matches(d, section) && (q == "" || has(Core.ShortName(d)) || has(d.Url))).ToList();
+            var shown = source.Where(d => Matches(d, section) && (q == "" || has(Core.ShortName(d)) || has(d.Url) || has(d.Description) || has(d.File))).ToList(); // the file: its folder too
             if (sortColumn != null) shown = Core.Sort(shown, sortColumn, sortDesc, Queues);
             list.Queues = Queues;
             list.SortColumn = sortColumn;
@@ -533,10 +582,12 @@ namespace Arrow
 
         void UpdateStrip()
         {
-            var kind = offline ? "offline" : state != null && state.PowerIn != null ? "countdown" : offered != null && state != null && state.Settings.Clipboard ? "clipboard" : null;
+            var kind = offline ? "offline" : state != null && state.PowerIn != null ? "countdown" : offered != null && state != null && state.Settings.Clipboard ? "clipboard"
+                : updatePercent >= 0 ? "updating" : update != null && update.Version != skipVersion ? "update" : null;
             if (kind != stripKind)
             {
                 stripKind = kind;
+                strip.Svg = kind == "update" || kind == "updating" ? "active" : null; // the user's download arrow
                 if (kind == "offline")
                 {
                     strip.Icon = Glyph.Error;
@@ -563,11 +614,27 @@ namespace Arrow
                         Run(() => api.Post("/api/add", new Dictionary<string, object> { { "url", url }, { "confirm", true } }));
                     }), close);
                 }
+                else if (kind == "update")
+                {
+                    strip.Icon = Glyph.Download;
+                    strip.IconColor = () => Theme.Text;
+                    var close = IconButton(Glyph.Close, "Dismiss");
+                    close.Click += (s, e) => { skipVersion = update.Version; SaveUi(); UpdateStrip(); };
+                    strip.SetButtons(TextButton("Update", InstallUpdate), close);
+                }
+                else if (kind == "updating")
+                {
+                    strip.Icon = Glyph.Download;
+                    strip.IconColor = () => Theme.Text;
+                    strip.SetButtons();
+                }
                 strip.Visible = kind != null;
             }
             if (kind == "offline") strip.Text = Program.Name + "'s engine isn't running.";
             else if (kind == "countdown") strip.Text = (state.PowerAll ? "All downloads finished. " : "") + Countdown(state);
             else if (kind == "clipboard") strip.Text = "From clipboard: " + offered;
+            else if (kind == "update") strip.Text = Program.Name + " " + update.Version + " is available. You have " + Application.ProductVersion + ".";
+            else if (kind == "updating") strip.Text = "Downloading " + Program.Name + " " + update.Version + "… " + updatePercent + "%. " + Program.Name + " restarts when it's installed.";
         }
 
         // The countdown names what it does (powerOp): the status bar's When done, a download's or a queue's own
@@ -917,6 +984,8 @@ namespace Arrow
                 case Keys.Control | Keys.N: Dialogs.AddLinks(api, this, ""); return true;
                 case Keys.Control | Keys.F: search.Box.Focus(); search.Box.SelectAll(); return true;
                 case Keys.Control | Keys.Oemcomma: OpenOptions(OptionsDialog.General); return true;
+                case Keys.F1:
+                case Keys.Control | Keys.OemQuestion: Dialogs.Shortcuts(this); return true;
                 case Keys.Delete: if (inText) break; Remove(list.Selected); return true;
                 case Keys.Control | Keys.A: if (inText) break; list.SelectAll(); return true;
                 case Keys.Control | Keys.C: if (inText) break; CopyLinks(); return true;
@@ -944,6 +1013,29 @@ namespace Arrow
         ContextMenuStrip MoreMenu()
         {
             var m = Menu();
+            // Theme ▸ the same three choices as Options › General, applied and saved at once
+            var theme = Item(m, "Theme", () => { }, true);
+            var sub = (ToolStripDropDownMenu)theme.DropDown;
+            sub.Renderer = Theme.Menus;
+            sub.ShowImageMargin = false;
+            sub.ShowCheckMargin = true;
+            sub.Font = Theme.Body;
+            for (var i = 0; i < Core.ThemeModes.Length; i++)
+            {
+                var mode = Core.ThemeModes[i];
+                var t = new ToolStripMenuItem(Core.ThemeNames[i]) { Checked = Theme.Mode == mode, Padding = theme.Padding };
+                t.Click += (s, e) => { Theme.SetMode(mode); SaveUi(); };
+                sub.Items.Add(t);
+            }
+            Item(m, "Open downloads folder", OpenDownloadsFolder, state != null);
+            var drop = Item(m, "Show drop target", () => { ShowDropTarget(!dropShown); SaveUi(); }, true);
+            drop.Checked = dropShown;
+            Item(m, "Check for updates", () => CheckUpdates(true), updatePercent < 0);
+            var auto = Item(m, "Check for updates automatically", () => { autoUpdates = !autoUpdates; SaveUi(); }, true);
+            auto.Checked = autoUpdates;
+            m.ShowCheckMargin = true;
+            Item(m, "Keyboard shortcuts", () => Dialogs.Shortcuts(this), true);
+            Item(m, "Open log file", () => Run(() => System.Diagnostics.Process.Start(Log.File)), Log.File != null && File.Exists(Log.File));
             Item(m, "About " + Program.Name, () => Dialogs.About(this), true);
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Quit " + Program.Name, Quit, true);
@@ -956,6 +1048,7 @@ namespace Arrow
             var open = Item(m, "Open " + Program.Name, ShowMain, true);
             open.Font = Theme.Bold;
             Item(m, "Pause all", () => Run(() => api.Post("/api/pause-all", null)), true);
+            Item(m, "Open downloads folder", OpenDownloadsFolder, true);
             m.ShowCheckMargin = true;
             var limit = Item(m, "Speed limit", ToggleLimit, true);
             m.Opening += (s, e) => limit.Checked = state != null && Core.LimitOn(state.Settings);
@@ -1035,9 +1128,86 @@ namespace Arrow
             list.Focus();
         }
 
+        // The drop target on or off; it comes back where it was, if that place is still on a screen
+        void ShowDropTarget(bool on)
+        {
+            dropShown = on;
+            if (!on)
+            {
+                if (dropTarget != null) { dropTarget.Close(); dropTarget.Dispose(); dropTarget = null; }
+                return;
+            }
+            if (dropTarget != null) return;
+            dropTarget = new DropTarget(DropText, text => { if (Regex.Split(text.Trim(), @"\s+").Count(w => LinkRx.IsMatch(w)) > 1) ShowMain(); Drop(text); });
+            if (dropAt.HasValue && Screen.AllScreens.Any(s => s.WorkingArea.Contains(new Rectangle(dropAt.Value, dropTarget.Size)))) dropTarget.Location = dropAt.Value;
+            dropTarget.Opened += ShowMain;
+            dropTarget.Hidden += () => { ShowDropTarget(false); SaveUi(); };
+            dropTarget.Moved += () => { dropAt = dropTarget.Location; SaveUi(); };
+            dropTarget.Show();
+        }
+
+        // Options' Save to folder in Explorer (made first if it isn't there yet)
+        void OpenDownloadsFolder()
+        {
+            var dir = state != null ? state.Settings.Dir : null;
+            if (string.IsNullOrEmpty(dir)) return;
+            try
+            {
+                Directory.CreateDirectory(dir);
+                System.Diagnostics.Process.Start("explorer.exe", "\"" + dir + "\"");
+            }
+            catch (Exception e) { Dialogs.Error(this, "Couldn't open " + dir + ": " + e.Message); }
+        }
+
+        // ---- updates (Updater)
+
+        // manual: More > Check for updates, which also says when there is nothing new or the check failed
+        void CheckUpdates(bool manual)
+        {
+            if (updatePercent >= 0) return;
+            Updater.Check((found, error) =>
+            {
+                if (found != null)
+                {
+                    update = found;
+                    if (manual) skipVersion = null; // asked for: offered again even if dismissed before
+                    UpdateStrip();
+                }
+                else if (manual && error != null) Dialogs.Error(this, error);
+                else if (manual) Balloon(Program.Name, Program.Name + " " + Application.ProductVersion + " is up to date.", null);
+            });
+        }
+
+        void InstallUpdate()
+        {
+            if (update == null || updatePercent >= 0) return;
+            var running = all.Count(d => d.Status == "downloading");
+            if (running > 0 && !Dialogs.Confirm(this, "Update " + Program.Name, "Updating closes " + Program.Name + " for a moment and stops " + running
+                + (running == 1 ? " running download" : " running downloads") + ". Resume them when it's back.", "Update", false)) return;
+            updatePercent = 0;
+            UpdateStrip();
+            Updater.Install(update, p => { updatePercent = p; UpdateStrip(); }, error =>
+            {
+                updatePercent = -1;
+                UpdateStrip();
+                Dialogs.Error(this, error);
+            });
+        }
+
         // ---- closing, window state
 
-        string UiFile { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.Name, "ui.json"); } }
+        static string UiFile { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Program.Name, "ui.json"); } }
+
+        // ui.json's theme, before the window is built (Program): its colors are read as it is made
+        public static void LoadTheme()
+        {
+            try
+            {
+                var o = Json.Parse(File.ReadAllText(UiFile)) as IDictionary<string, object>;
+                if (o != null) Theme.SetMode(o.Str("theme"));
+            }
+            catch (Exception) { } // first start, or unreadable: follow Windows
+        }
 
         void LoadUi()
         {
@@ -1048,6 +1218,11 @@ namespace Arrow
             section = o.Str("section") ?? section;
             if (!Library.Contains(section) && !section.StartsWith("type:") && !section.StartsWith("queue:")) section = "type:" + section; // from before Types had a prefix
             trayHint = o.Bool("trayHint") ?? false;
+            autoUpdates = o.Bool("updates") ?? true;
+            dropShown = o.Bool("dropTarget") ?? false;
+            int? dx = o.Int("dropX"), dy = o.Int("dropY");
+            if (dx != null && dy != null) dropAt = new Point(dx.Value, dy.Value);
+            skipVersion = o.Str("skipVersion");
             var sort = o.Str("sort");
             sortColumn = Core.Columns.Contains(sort) ? sort : null;
             sortDesc = sortColumn != null && o.Bool("desc") == true;
@@ -1078,6 +1253,9 @@ namespace Arrow
                 { "section", section }, { "trayHint", trayHint },
                 { "sort", sortColumn }, { "desc", sortDesc }, { "columns", list.Chosen }, { "details", details },
                 { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
+                { "theme", Theme.Mode },
+                { "updates", autoUpdates }, { "skipVersion", skipVersion },
+                { "dropTarget", dropShown }, { "dropX", dropAt.HasValue ? (object)dropAt.Value.X : null }, { "dropY", dropAt.HasValue ? (object)dropAt.Value.Y : null },
             };
             try
             {
@@ -1109,6 +1287,8 @@ namespace Arrow
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             poller.Stop();
+            updateTimer.Dispose();
+            if (dropTarget != null) dropTarget.Dispose();
             Theme.Changed -= onTheme;
             Program.ShowRequested -= onShow;
             Listen(false);
@@ -1164,6 +1344,23 @@ namespace Arrow
             offered = "https://downloads.example.com/files/setup-2.4.1.zip";
             UpdateStrip();
             Shot("main-strip-clipboard");
+            offered = null;
+            update = new Release { Tag = "v1.2.0" };
+            UpdateStrip();
+            Shot("main-strip-update");
+            updatePercent = 45;
+            UpdateStrip();
+            Shot("main-strip-updating");
+            foreach (var sp in new[] { "", "2.4 MB/s" }) // the drop target, idle and while downloading
+                using (var dt = new DropTarget(DropText, t => { }) { Speed = sp })
+                using (var bmp = new Bitmap(dt.Width, dt.Height))
+                {
+                    dt.DrawToBitmap(bmp, new Rectangle(Point.Empty, dt.Size));
+                    bmp.Save(Path.Combine(shots, "drop-target" + (sp == "" ? "" : "-running") + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
+                }
+            update = null;
+            updatePercent = -1;
+            offered = "https://downloads.example.com/files/setup-2.4.1.zip";
             state.PowerIn = 42;
             state.PowerAll = true;
             state.WhenDone = "shutdown";

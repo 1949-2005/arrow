@@ -527,6 +527,28 @@ namespace Arrow
 
         public static void About(IWin32Window owner) { Modal(AboutDialog(), owner); }
 
+        // Keyboard shortcuts (F1, Ctrl+/, More > Keyboard shortcuts): Core.Shortcuts, keys at the left
+        static Dialog ShortcutsDialog()
+        {
+            var f = new Dialog("Keyboard shortcuts", 460);
+            var y = Dialog.Pad;
+            foreach (var k in Core.Shortcuts)
+            {
+                var row = new FactRow();
+                row.Set(k[0], k[1]);
+                row.Bounds = new Rectangle(Dialog.Pad, y, f.ClientSize.Width - 2 * Dialog.Pad, row.Height);
+                f.Add(row);
+                y += row.Height + Theme.Px(4);
+            }
+            f.BodyHeight(y + Dialog.Pad - Theme.Px(4));
+            var close = Dialog.Button("Close", ButtonKind.Primary, DialogResult.OK);
+            f.Buttons(new FlatButton[0], new[] { close });
+            f.AcceptButton = f.CancelButton = close;
+            return f;
+        }
+
+        public static void Shortcuts(IWin32Window owner) { Modal(ShortcutsDialog(), owner); }
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct OpenAsInfo { public string File, Class; public int Flags; }
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
@@ -611,7 +633,8 @@ namespace Arrow
                 prog.Fill(running, cats, speeds);
                 Shot(folder, "progress-running", prog);
                 foreach (var px in new[] { 16, 32 }) // the icon a progress window leaves in the tray
-                    using (var bmp = ProgressDialog.TrayBitmap(px)) bmp.Save(Path.Combine(folder, "tray-download-" + px + (Theme.Dark ? "-dark" : "-light") + ".png"), ImageFormat.Png);
+                    for (var f = -1; f < ProgressDialog.TrayFrames; f++)
+                        using (var bmp = ProgressDialog.TrayBitmap(px, f)) bmp.Save(Path.Combine(folder, "tray-download-" + px + "-" + (f < 0 ? "paused" : "frame" + (f + 1)) + ".png"), ImageFormat.Png);
 
                 var done = new Download
                 {
@@ -637,6 +660,7 @@ namespace Arrow
                 TextField field;
                 Shot(folder, "newqueue", TextDialog("New queue", "Name of the new queue", "Weekend", 40, "Add", out field));
                 Shot(folder, "about", AboutDialog());
+                Shot(folder, "shortcuts", ShortcutsDialog());
                 Shot(folder, "error", ErrorDialog("Couldn't reach the server: the connection was reset. Check the link, then try again."));
 
                 // issue 06: Download Later's popover, Link already in the list, Properties, the category editor
@@ -667,8 +691,9 @@ namespace Arrow
 
                 // issue 08: Options, each page; Categories with a custom one selected
                 var opts = new Settings { Dir = settings.Dir, Connections = 8, MaxActive = 3, SpeedLimitKB = 500, SpeedLimitOn = true, Categories = true, Clipboard = true, Startup = true,
-                    ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } } };
-                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Categories, OptionsDialog.Queues })
+                    ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } },
+                    Sites = new List<Site> { new Site { Host = "files.example.com", Connections = 2 }, new Site { Host = "cdn.example.net", LimitKB = 800 } } };
+                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Sites, OptionsDialog.Categories, OptionsDialog.Queues })
                 {
                     var o = new OptionsDialog(null, opts, page);
                     if (page == OptionsDialog.Categories) o.SelectCategory("Courses");

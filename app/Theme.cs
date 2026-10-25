@@ -66,14 +66,25 @@ namespace Arrow
             var env = (Environment.GetEnvironmentVariable("ARROW_THEME") ?? "").ToLowerInvariant();
             forced = env == "light" || env == "dark";
             Dark = forced ? env == "dark" : SystemDark();
-            if (!forced) SystemEvents.UserPreferenceChanged += (s, e) =>
-            {
-                var d = SystemDark();
-                if (d == Dark) return;
-                Dark = d;
-                var h = Changed;
-                if (h != null) h();
-            };
+            if (!forced) SystemEvents.UserPreferenceChanged += (s, e) => { if (mode == "system") Apply(SystemDark()); };
+        }
+
+        static string mode = "system";
+        // "system" follows Windows, live; "light" and "dark" stay put (ui.json "theme"). ARROW_THEME wins over all three
+        public static string Mode { get { return mode; } }
+
+        public static void SetMode(string m)
+        {
+            mode = Core.ThemeModes[Core.ThemeIndex(m)];
+            if (!forced) Apply(mode == "system" ? SystemDark() : mode == "dark");
+        }
+
+        static void Apply(bool dark)
+        {
+            if (dark == Dark) return;
+            Dark = dark;
+            var h = Changed;
+            if (h != null) h();
         }
 
         static bool SystemDark()

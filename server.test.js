@@ -56,7 +56,7 @@ test('extensions may only ping, add, list YouTube formats and show the window', 
   assert.equal((await call('/api/add', { origin, body: scheduled })).status, 200);
   assert.equal((await call('/api/open', { origin, body: {} })).status, 200);
   // /api/formats is open to them, for YouTube single-video links only (a real one would run yt-dlp: not here)
-  for (const [url, error] of [['https://example.com/v.mp4', /Only YouTube video links/], ['https://www.youtube.com/@channel', /not a channel or playlist/], ['nope', /Invalid URL/]]) {
+  for (const [url, error] of [['https://example.com/v.mp4', /Only video links from YouTube and the other supported sites/], ['https://www.youtube.com/@channel', /not a channel or playlist/], ['nope', /Invalid URL/]]) {
     const res = await call('/api/formats', { origin, body: { url } });
     assert.equal(res.status, 400, url);
     assert.match((await res.json()).error, error);

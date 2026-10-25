@@ -10,7 +10,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { here, readBrand } from './desktop.js';
+import { here, readBrand, powershell } from './desktop.js';
 import { build } from './install.js';
 import { compileApp, compileSetup } from './app/build.js';
 
@@ -85,19 +85,58 @@ your downloaded files are never removed.
 ${name} is open source (MIT license, LICENSE). It carries Node.js (licenses\\node-LICENSE.txt).
 `;
 
+// Node.js's license for the node.exe the engine is built from: its own folder's LICENSE, else the copy for this
+// version in licenses/ (some installs leave LICENSE out; --fetch-node-license gets it)
+export const nodeLicenseCopy = (v = process.version) => path.join(here, 'licenses', `node-${v}-LICENSE.txt`);
+export function nodeLicense() {
+  const f = [path.join(path.dirname(process.execPath), 'LICENSE'), nodeLicenseCopy()].find(existsSync);
+  if (!f) throw new Error(`Node.js's license is missing (no LICENSE next to ${process.execPath} and no ${path.relative(here, nodeLicenseCopy())}): the engine carries Node.js, so it must ship with it. Run: node build-installer.js --fetch-node-license`);
+  return f;
+}
+
+async function fetchNodeLicense() {
+  const url = `https://raw.githubusercontent.com/nodejs/node/${process.version}/LICENSE`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const text = await res.text();
+  if (!text.startsWith('Node.js is licensed')) throw new Error(`${url} is not Node.js's license`);
+  await fs.mkdir(path.dirname(nodeLicenseCopy()), { recursive: true });
+  await fs.writeFile(nodeLicenseCopy(), text);
+  return nodeLicenseCopy();
+}
+
+// Code signing, when ARROW_SIGN_PFX names a code-signing certificate (.pfx; its password in ARROW_SIGN_PASSWORD):
+// Windows' own Set-AuthenticodeSignature, SHA-256, timestamped (ARROW_SIGN_TIMESTAMP, default DigiCert's) so the
+// signature outlives the certificate. Without ARROW_SIGN_PFX nothing is signed. Returns whether it signed.
+export async function sign(files) {
+  const pfx = process.env.ARROW_SIGN_PFX;
+  if (!pfx) return false;
+  if (!existsSync(pfx)) throw new Error(`ARROW_SIGN_PFX: ${pfx} does not exist`);
+  for (const f of files) {
+    const { stdout } = await powershell(
+      '$c = New-Object Security.Cryptography.X509Certificates.X509Certificate2($env:FDL_PFX, $env:FDL_PW); ' +
+      '$s = Set-AuthenticodeSignature -FilePath $env:FDL_FILE -Certificate $c -HashAlgorithm SHA256 -TimestampServer $env:FDL_TS; ' +
+      'if (-not $s.SignerCertificate) { throw "not signed: $($s.StatusMessage)" }; $s.Status',
+      { FDL_PFX: pfx, FDL_PW: process.env.ARROW_SIGN_PASSWORD ?? '', FDL_FILE: f, FDL_TS: process.env.ARROW_SIGN_TIMESTAMP || 'http://timestamp.digicert.com' });
+    console.log(`Signed ${path.basename(f)} (${stdout.trim()})`);
+  }
+  return true;
+}
+
 // The folder the setup installs, in staging (empty)
 export async function stage(staging) {
   const { name, icon } = readBrand(here);
   const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
-  const copy = (from, to = from) => fs.cp(path.join(here, from), path.join(staging, to), { recursive: true });
+  // the logo's render script is for building, not for the installed app
+  const copy = (from, to = from) => fs.cp(path.join(here, from), path.join(staging, to), { recursive: true, filter: f => !f.endsWith('.ps1') });
   for (const f of [...engineFiles(), 'package.json', 'brand.json', 'LICENSE', 'assets', 'extension']) await copy(f); // package.json: "type": "module"
-  const nodeLicense = path.join(path.dirname(process.execPath), 'LICENSE');
-  if (!existsSync(nodeLicense)) throw new Error(`Node.js's license is missing (${nodeLicense}): the engine carries Node.js, so it must ship with it`);
+  const license = nodeLicense();
   await fs.mkdir(path.join(staging, 'licenses'));
-  await fs.copyFile(nodeLicense, path.join(staging, 'licenses', 'node-LICENSE.txt'));
+  await fs.copyFile(license, path.join(staging, 'licenses', 'node-LICENSE.txt'));
   await fs.writeFile(path.join(staging, 'README.txt'), README(name).replace(/\n/g, '\r\n'));
   await compileApp({ out: path.join(staging, name + '.exe'), name, version, icon: path.join(staging, icon) });
   await build(staging); // <name> Engine.exe: node.exe whose embedded app loads desktop.js from its folder
+  await sign([path.join(staging, name + '.exe'), path.join(staging, name + ' Engine.exe')]);
   return { name, version, icon };
 }
 
@@ -111,6 +150,7 @@ export async function buildSetup(dist = path.join(here, 'dist')) {
     await fs.mkdir(dist, { recursive: true });
     const file = name.replace(/[^\w.-]/g, '') + 'Setup.exe', out = path.join(dist, file);
     await compileSetup({ out, name, version, icon: path.join(here, icon), payload: path.join(tmp, 'payload.zip'), logo: path.join(here, 'assets', 'logo.png') });
+    await sign([out]); // before the hash: the checksum is of the signed file
     const hash = crypto.createHash('sha256').update(readFileSync(out)).digest('hex');
     writeFileSync(out + '.sha256', `${hash}  ${file}`); // as limewheel's: lower case, two spaces, no newline
     return { out, hash, size: statSync(out).size };
@@ -121,6 +161,10 @@ export async function buildSetup(dist = path.join(here, 'dist')) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    if (process.argv.includes('--fetch-node-license')) {
+      console.log('Saved ' + await fetchNodeLicense());
+      process.exit(0);
+    }
     if (process.platform !== 'win32') throw new Error('the setup needs Windows.');
     console.log('Building the setup. This takes about 15 seconds...');
     const { out, hash, size } = await buildSetup();

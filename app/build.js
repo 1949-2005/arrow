@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const run = promisify(execFile);
 export const CSC = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
-const REFS = ['System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Web.Extensions.dll'];
+const REFS = ['System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Web.Extensions.dll',
+  // WinRT for Windows notifications (Toasts.cs): Windows' own metadata and .NET's bridges to it, no SDK
+  ...['Windows.UI', 'Windows.Data', 'Windows.Foundation'].map(n => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WinMetadata', n + '.winmd')),
+  ...['System.Runtime', 'System.Runtime.WindowsRuntime', 'System.Runtime.InteropServices.WindowsRuntime'].map(n => path.join(path.dirname(CSC), n + '.dll'))];
 const src = f => path.join(here, f);
 
 async function csc(args) {

@@ -85,7 +85,7 @@ Prefer clicking?
   - by status: All, Active, Finished, Failed, Scheduled;
   - by type: Video, Music, Programs, Documents, Compressed, your own categories, and Other;
   - by queue: Main queue and your own queues. A green dot shows that a queue runs. Right-click a queue to open the Scheduler.
-- The search field filters by name or link.
+- The search field filters by name, link, description or folder. Press **F1** (or **Ctrl+/**, or **⋯ › Keyboard shortcuts**) for the keyboard shortcuts. **⋯ › Open downloads folder** (also in the tray menu) opens your Save to folder.
 - The list has columns: Name, Size, Status, Time left, Speed, Last try and Description. Save to and Added are there too, but hidden.
   - Click a column title to sort by it. Click again to reverse the order. Click a third time to go back to the normal order.
   - **Sort** (at the right of the search field) does the same from a menu.
@@ -101,7 +101,7 @@ Prefer clicking?
 - A queue is a list of downloads that start together, at a time you choose. Arrow always has the **Main queue**. You can add your own.
 - To put downloads into a queue:
   - In the Download File Info window, click **Download Later**. Choose the queue (or click **+** for a new one). Tick **Start the queue now** if you want. Click **Add to queue**.
-  - Or right-click downloads in the list and choose **Add to queue**.
+  - Or right-click downloads in the list and choose **Add to queue**, or drag them onto a queue in the sidebar.
   - A download that waits in a queue shows "In Main queue" (or the queue's name).
 - Click **Scheduler** to set up the queues. Click a queue on the left. Each change is saved at once.
   - **Name**: the Main queue keeps its name.
@@ -175,7 +175,7 @@ Prefer clicking?
   - **Connections** lists each connection: how much it downloaded, and "Receiving data…", "Done" or "Waiting".
   - **Options** has the speed limit and "When this download is done" for this download.
   - Pause, Resume or Cancel the download there. Click a title (Connections, Options) to close or open that part. Arrow remembers it.
-  - While it downloads, the title bar's minimize button (**—**, left of the close button) sends the window to the system tray instead of the taskbar. A green arrow next to the clock shows the download's progress. Click it to bring the window back. It comes back by itself when the download finishes or fails.
+  - While it downloads, the **Minimize to tray** button in the title bar (three small grey down arrows stepping down like stairs, left of **—**) sends the window to the system tray; **—** minimizes it to the taskbar as usual. Three running grey arrows appear next to the clock while it downloads (they stand still while it is paused). Hover it for the progress, click it to bring the window back. It comes back by itself when the download finishes or fails.
 - **Download complete**: when a download you started with Start Download finishes, this window opens once. Click **Open**, **Open with…**, **Open folder** or **Close**. Tick **Don't show this window again** to stop it (turn it back on in Options › General, "Show the Download complete window").
 
 ### With the browser extension
@@ -270,16 +270,44 @@ Options has four pages.
 
 ## Limits
 
-- No sites other than YouTube that send audio and video separately (DASH).
+- Video pages: YouTube, Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili and Streamable go through yt-dlp. Other sites' pages are not; their direct video and HLS links still work.
 - No DRM-protected video.
 - No torrents and no FTP.
-- No proxy settings.
+- Proxies: HTTP and HTTPS proxies only (no SOCKS).
 - `Arrow.exe` and `Arrow Engine.exe` are not signed. If Windows Smart App Control is on, it may block Arrow.
 - If Arrow stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
 - Clipboard monitoring only offers links that end in a file type of a category (Video, Music, Programs, Documents, Compressed, or your own).
 - Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
+
+## Other video sites
+
+Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Arrow downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Arrow never passes your browser's cookies to yt-dlp).
+
+## Drop target
+
+**⋯ › Show drop target** puts a small Arrow tile on top of every window, like IDM's. Drag a link (or several) from your browser onto it to download them. It shows the total speed while something downloads. Drag it anywhere: it stays there next time. Double-click it to open Arrow, right-click it to hide it.
+
+## Sites
+
+**Options › Sites** gives a site its own settings: the connections per download (for servers that block many at once) and a speed limit (in KB/s). They count for the site and its subdomains, so `example.com` covers `dl.example.com` too. 0 keeps the usual setting. A download's own limit, set in its progress window, still wins.
+
+## Proxy
+
+**Options › Downloads › Use a proxy**, then its address, like `http://proxy.example.com:8080` (or `https://`, with `user:password@` before the host if it needs one). Every download, YouTube included, goes through it. Saving restarts Arrow's engine for a moment to take the new setting; running downloads stop and you resume them.
+
+## Updates
+
+Arrow checks GitHub for a new version 10 seconds after it starts and then once a day. When there is one, a bar at the top says so: **Update** downloads the new setup, checks its SHA-256 checksum, installs it and starts Arrow again (running downloads stop; resume them after). **×** hides that version. **⋯ › Check for updates** checks now, and **⋯ › Check for updates automatically** turns the daily check off.
+
+## Notifications
+
+When a download finishes, Arrow shows a Windows notification with **Open** and **Show in folder**. Click the notification itself to see the download in Arrow. If notifications are turned off in Windows (Settings › System › Notifications), Arrow shows a balloon by its tray icon instead.
+
+## When something goes wrong
+
+Arrow writes `log.txt` next to its `state.json` (in its install folder): when it started and stopped, and the details of any crash. Open it from **⋯ › Open log file** and attach it to a bug report.
 
 ## Privacy and safety
 
@@ -295,7 +323,8 @@ Options has four pages.
 ## Build from source
 
 - Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
-- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds.
+- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
+- To sign the exes (so SmartScreen and Smart App Control trust them), set `ARROW_SIGN_PFX` to your code-signing certificate (.pfx) and `ARROW_SIGN_PASSWORD` to its password before `node build-installer.js`. It signs Arrow.exe, Arrow Engine.exe and ArrowSetup.exe with SHA-256 and a timestamp (`ARROW_SIGN_TIMESTAMP` changes the timestamp server). The certificate has to come from a certificate authority in your name: a self-made one signs, but Windows does not trust it.
 - Or run Arrow from this folder:
   - Double-click `install.cmd`. Wait about 15 seconds.
   - It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:

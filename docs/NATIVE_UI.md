@@ -70,6 +70,18 @@ path data (arcs and quadratics become cubics); a transform, another shape or fil
 path is cached per category and filled with the file's fill rule (nonzero unless evenodd), anti-aliased, in `Theme.Text` at paint
 time so it follows the theme. Other uses assets/types/other.svg like the others; a missing or unreadable file shows the category glyph in its color.
 Custom categories use Other's icon everywhere (sidebar, Options › Categories).
+The main window's other icons are the user's SVGs too, `assets/icons/<name>.svg`, read and drawn the same way
+(`FileIcons.DrawIcon`); one file can serve several places:
+- `all`, `active`, `finished`, `failed`: the sidebar's Library; `active` is also the Download button
+- `scheduler`: Scheduled (sidebar) and Scheduler (command bar)
+- `play`: Resume and Start queue; `pause`: Pause and Pause all; `delete`: Delete and Delete completed; `stop`: Stop queue
+- `mainqueue`: the sidebar's queues and the top bar's Add several links button
+- `link`: the paste bar; `search`: the search field; `sort`: Sort; `view`: View; `speed`: Speed limit; `settings`: Options; `more`: More
+
+Each icon has a white file `<name>.svg` for the dark theme and `<name>_black.svg` for the light one, drawn in the
+file's own fill color (no fill: black, SVG's default). The Download button sits on the accent, the opposite shade, so
+it takes the other file. A disabled button's icon keeps its full color (only its text greys). Sidebar items at 28 px,
+fields and the icon-only buttons at 16 px, the command bar, Sort and Download at 20 px. A missing `_black` file: the white one in `Theme.Text`; a missing or unreadable file: the glyph.
 
 ## Main window
 Default 1180 x 700, minimum 900 x 560; remembers bounds, maximized state, the selected section, the sort, the shown
@@ -219,6 +231,13 @@ KB/s": click turns `speedLimitOn` on or off (no number yet: Options › Download
 next start of a queue that is not running (Core.NextStart). Right: "When done:" and a small picker (110 x 22, radius
 6: Do nothing, Sleep, Shut down) → POST /api/settings {whenDone}; it shows the engine's `whenDone`.
 
+### Updates
+Strip (lowest priority, after the clipboard offer): Download glyph, "<name> 1.2.0 is available. You have 1.0.0.", Update and × (hides that
+version: ui.json `skipVersion`). While the setup downloads: "Downloading <name> 1.2.0… 45%. <name> restarts when it's installed.", no
+buttons. Update asks first when downloads run (they stop while the setup replaces the app). Checks: 10 s after start, then
+every 24 h, when ui.json `updates` (⋯ › Check for updates automatically, default on); ⋯ › Check for updates says when it
+finds nothing (balloon) or fails (error dialog).
+
 ### Tray
 NotifyIcon with the brand icon, tooltip = the app name + " · 2 active" when something runs. Left click: show and
 activate the main window. Menu: Open <name> (bold, default), Pause all, Speed limit (checked when on; click toggles
@@ -272,13 +291,17 @@ errors show inline or in an Error dialog.
     "When this download is done" + a Picker 180 wide: Nothing / Open the file / Sleep / Shut down → op 'whenDone'.
     Polls don't overwrite a change on its way.
   Footer: Pause/Resume and Cancel ("Cancel this download? The partial file is deleted."). Window title "45% · name".
-  - Minimize to system tray (IDM's caption button left of Close): the window's native minimize button (MinimizeBox
-    on; maximize shows greyed, as in IDM; its tooltip is Windows' own "Minimize"). WndProc catches WM_SYSCOMMAND /
-    SC_MINIMIZE, so Alt+Space > Minimize does the same. While the download runs (not failed, Download complete or
-    removed) the window goes to the tray; otherwise it minimizes to the taskbar as usual. To the tray: the window
+  - Minimize to system tray: its own button left of the title bar's minimize (`TrayButton`), the tray icon's three chevrons
+    side by side, apart and stepping down like stairs, in its grey and bold rounded strokes, still (the download may not have started yet); dimmer while the window
+    is inactive, Windows' hover and press tints; tooltip "Minimize to tray"). Windows has no API for an extra caption
+    button, so it is a small owned layered window (no activation, not in Alt+Tab) one caption button wide, placed from
+    DWMWA_CAPTION_BUTTON_BOUNDS and moved with the window. It shows only while the download runs (not failed,
+    Download complete or removed) and the window is shown and not minimized. Minimize (maximize shows greyed, as in
+    IDM) goes to the taskbar as usual. To the tray: the window
     hides (it keeps updating) and the download gets
-    its own tray icon: a solid download arrow in done green (drawn as shapes, so it reads at 16 px) on a transparent
-    square at the system's small-icon size, so it doesn't read as the app's icon. It takes the id of Arrow's own tray
+    its own tray icon, IDM's running arrows: three chevrons down the square, no logo (drawn as shapes, so they read at 16 px), in grey of the taskbar's shade (`SystemUsesLightTheme`:
+    #3B3C3D on a light taskbar, #D8D8DC on a dark one). While it downloads the lit chevron moves down every 330 ms;
+    paused or queued, all three stay dim. It takes the id of Arrow's own tray
     icon (still a separate icon, with its own window): Windows keys tray places by app and id, so it sits right after
     Arrow's icon instead of at the far left, where a new icon goes. Its tooltip is `Core.TrayTip`: "45% · 2.4 MB/s" (else the heading, e.g.
     "Paused · 45%"), then the name on a second line, within 127 characters (NotifyIcon's text field set by

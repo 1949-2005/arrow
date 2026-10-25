@@ -3,7 +3,8 @@
 //   (no arguments)      the setup window (SetupForm)
 //   --uninstall         uninstall mode (also when the exe's name starts with "Uninstall")
 //   --quiet             no window: install (--no-desktop, --no-startup, --no-tools) or uninstall (--remove-data);
-//                       --quit-arrow quits a running Arrow first. Exit 0 ok, 1 error, 2 Arrow is running, 3 tools missing.
+//                       --quit-arrow quits a running Arrow first; --start opens it after installing (its own update).
+//                       Exit 0 ok, 1 error, 2 Arrow is running, 3 tools missing.
 // Test hooks, so nothing touches the real system: ARROW_SETUP_DIR (install folder), ARROW_SETUP_PROGRAMS / _DESKTOP /
 // _STARTUP (shortcut folders), ARROW_SETUP_REGKEY (HKCU key holding the Uninstall entry), ARROW_SETUP_WINGET (the winget
 // command), FASTDL_PORT (the engine to quit); ARROW_SETUP_SHOTS=<folder> saves PNGs of every page and exits.
@@ -57,6 +58,9 @@ namespace Arrow.Setup
                 var tools = args.Contains("--no-tools") || Installer.GetTools(null) == null;
                 Installer.Shortcuts(dir, !args.Contains("--no-desktop"), !args.Contains("--no-startup"));
                 Installer.Register(dir);
+                // the app's own update; ARROW_SETUP_START_ARGS: tests start it with --check-update instead of its window
+                if (args.Contains("--start"))
+                    Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe"), Environment.GetEnvironmentVariable("ARROW_SETUP_START_ARGS") ?? "") { WorkingDirectory = dir, UseShellExecute = true }); // shell: inherits none of our handles
                 return tools ? 0 : 3;
             }
             catch (Exception e)
@@ -338,6 +342,7 @@ namespace Arrow.Setup
             if (!Directory.Exists(dir)) return;
             List<string> files;
             using (var zip = Payload()) files = zip.Entries.Select(e => e.FullName).ToList();
+            files.Add("log.txt"); // what the app and engine wrote: not the user's data
             if (data) files.AddRange(new[] { "state.json", "state.json.tmp" });
             for (var i = 0; i < files.Count; i++)
             {

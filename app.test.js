@@ -1,6 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import http from 'node:http';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
@@ -25,7 +26,11 @@ after(async () => {
 test('the ported helpers pass Tests.cs', win, async () => {
   const exe = path.join(await temp(), 'Tests.exe');
   await compileTests(exe);
-  const r = spawnSync(exe, readdirSync(path.join(repo, 'assets', 'types')).filter(f => f.endsWith('.svg')).sort().map(f => path.join(repo, 'assets', 'types', f)), { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const svgs = ['types', 'icons'].flatMap(d => {
+    const dir = path.join(repo, 'assets', d);
+    return existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.svg')).sort().map(f => path.join(dir, f)) : [];
+  });
+  const r = spawnSync(exe, svgs, { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
@@ -60,4 +65,39 @@ test('--check reads the state from a running engine', win, async () => {
   const r = check();
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /engine ok, 0 downloads/);
+});
+
+test('--check-update reads the latest release: newer, the same, or missing its setup', win, async () => {
+  const exe = path.join(await temp(), 'TestDL.exe');
+  if (!existsSync(exe)) await compileApp({ out: exe, name: 'TestDL', version: '1.0.0', icon: path.join(repo, 'assets', 'logo.ico') });
+  let release;
+  const server = http.createServer((req, res) => {
+    assert.match(req.headers['user-agent'], /^TestDL\/1\.0\.0$/); // GitHub refuses requests without one
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(release));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const env = { ...process.env, ARROW_UPDATES_URL: `http://127.0.0.1:${server.address().port}/releases/latest` };
+  // spawn, not spawnSync: the fake GitHub above answers from this process
+  const run = () => new Promise(resolve => {
+    const p = spawn(exe, ['--check-update'], { env, windowsHide: true });
+    let stdout = '';
+    p.stdout.on('data', d => stdout += d);
+    p.on('exit', status => resolve({ status, stdout }));
+  });
+  const assets = [{ name: 'ArrowSetup.exe', browser_download_url: 'http://x/s.exe' }, { name: 'ArrowSetup.exe.sha256', browser_download_url: 'http://x/s.sha256' }];
+  try {
+    release = { tag_name: 'v1.2.0', assets };
+    let r = await run();
+    assert.equal(r.status, 0, r.stdout);
+    assert.equal(r.stdout.trim(), 'update v1.2.0');
+    release = { tag_name: 'v1.0.0', assets };
+    r = await run();
+    assert.equal(r.stdout.trim(), 'up to date');
+    release = { tag_name: 'v9.0.0', assets: [] };
+    r = await run();
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /no ArrowSetup\.exe or no checksum/);
+  } finally {
+    server.close();
+  }
 });

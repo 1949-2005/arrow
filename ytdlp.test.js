@@ -194,7 +194,7 @@ test('format list: yt-dlp errors come back as messages and are not cached; only 
   await assert.rejects(mgr.formats('https://youtu.be/errListing1'));
   assert.equal(await lists('errListing1'), 2);
   await assert.rejects(mgr.formats('https://youtu.be/liveListin1'), { message: 'Live streams are not supported' });
-  await assert.rejects(mgr.formats('https://example.com/watch?v=okList00001'), /Only YouTube video links/);
+  await assert.rejects(mgr.formats('https://example.com/watch?v=okList00001'), /Only video links from YouTube and the other supported sites/);
   await assert.rejects(mgr.formats('https://www.youtube.com/playlist?list=PL1'), /not a channel or playlist/);
 });
 
@@ -361,4 +361,26 @@ test('missing yt-dlp or ffmpeg gives a clear error', async () => {
     for (const k of keys) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
     [mgr.ytdlp, mgr.ffmpeg] = tools;
   }
+});
+
+test('other video sites go through yt-dlp too: their page link kept, no headers, the same format list', async () => {
+  // the fake yt-dlp reads the video ID from ?v=
+  const page = 'https://www.vimeo.com/channels/x?v=okVimeo0001';
+  const d = mgr.add({ url: page, headers: { referer: 'https://vimeo.com/', cookie: 'secret' }, scheduled: true });
+  assert.equal(d.kind, 'video');
+  assert.equal(d.url, page);
+  assert.deepEqual(d.headers, {});
+  assert.equal(d.quality, 'best');
+  const list = await mgr.formats(page);
+  assert.ok(list.options.length > 0);
+  const added = [d];
+  for (const host of ['x.com', 'm.tiktok.com', 'www.instagram.com', 'player.twitch.tv', 'soundcloud.com']) {
+    const x = mgr.add({ url: `https://${host}/a?v=okSite00001`, scheduled: true });
+    added.push(x);
+    assert.equal(x.kind, 'video', host);
+  }
+  const other = mgr.add({ url: 'https://notvimeo.com/a.mp4', scheduled: true });
+  added.push(other);
+  assert.equal(other.kind, 'http');
+  for (const x of added) await mgr.act(x.id, 'remove');
 });

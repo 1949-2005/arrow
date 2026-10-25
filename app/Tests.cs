@@ -81,7 +81,7 @@ namespace Arrow
   'whenDone': '', 'powerOp': 'shutdown', 'powerIn': 42, 'powerAll': false, 'open': 0
 }");
 
-        // args: every assets/types/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
+        // args: every assets/types/*.svg and assets/icons/*.svg of the repo, passed by app.test.js since Tests.exe runs from a temp folder
         public static int Main(string[] args)
         {
             Thread.CurrentThread.CurrentCulture = Inv;
@@ -238,7 +238,7 @@ namespace Arrow
             Eq(Core.StatusText(err), "Error: HTTP 404", "status error");
             Eq(Core.Heading(with("done")), "Download complete", "heading done");
             Eq(Core.Fraction(with("done"), true), 1.0, "fraction done");
-            Func<string, Download> video = phase => new Download { Kind = "video", Status = "downloading", Size = 200, Got = 50, Phase = phase };
+            Func<string, Download> video = phase => new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=x", Status = "downloading", Size = 200, Got = 50, Phase = phase };
             Eq(Core.StatusText(video("audio")), "Downloading audio", "status video audio");
             Eq(Core.StatusText(video("converting")), "Converting to MP3", "status converting");
             Eq(Core.StatusText(video(null)), "Starting…", "status video starting");
@@ -249,6 +249,7 @@ namespace Arrow
             var held = with("paused"); held.Name = "file.zip";
             Eq(Core.TrayTip(held, 127), "Paused · 45%\nfile.zip", "tray tip paused");
             Eq(Core.TrayTip(video("merging"), 127), "Merging\nYouTube video", "tray tip merging");
+            Eq(Core.ShortName(new Download { Kind = "video", Url = "https://vimeo.com/1" }), "Video", "another sites video before its name is known");
             tray.Name = new string('a', 200);
             Eq(Core.TrayTip(tray, 127).Length, 127, "tray tip fits 127");
             Eq(Core.TrayTip(tray, 63), "45% · 2.4 MB/s\n" + new string('a', 47) + "…", "tray tip cut at 63");
@@ -289,6 +290,8 @@ namespace Arrow
             Eq(Core.ShortName(new Download { Kind = "http", Url = "https://x.com/" }), "https://x.com/", "shortName falls back to the URL");
             Eq(Core.ShortName(new Download { Kind = "video", Url = "https://www.youtube.com/watch?v=x" }), "YouTube video", "shortName video");
             Ok(Core.IsYouTube("https://music.youtube.com/watch?v=x") && Core.IsYouTube("HTTPS://youtu.be/x") && !Core.IsYouTube("https://notyoutube.com/"), "isYouTube");
+            Ok(Core.IsVideoLink("https://vimeo.com/1") && Core.IsVideoLink("https://www.tiktok.com/@a/video/1") && Core.IsVideoLink("https://x.com/a/status/1") && Core.IsVideoLink("https://youtu.be/x"), "video links");
+            Ok(!Core.IsVideoLink("https://notvimeo.com/1") && !Core.IsVideoLink("https://example.com/x.com") && !Core.IsVideoLink("https://vimeo.com.evil.net/"), "not video links");
             Ok(Core.CanResume(err) && !Core.CanResume(http()) && Core.CanStop(with("scheduled")) && !Core.CanStop(with("done")), "canResume / canStop");
 
             // emoji: drawn in color by DirectWrite, everything else stays on TextRenderer
@@ -534,6 +537,43 @@ namespace Arrow
             // Options: the duplicates Picker ↔ settings.duplicates, and Save sending only what changed
             Eq(string.Join(",", new[] { "ask", "number", "replace", "resume", "odd", null }.Select(d => Core.DuplicateIndex(d))), "0,1,2,3,0,0", "duplicates → Picker, unknown = Ask me");
             Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
+            Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
+            Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
+            Ok(Core.Shortcuts.Length > 0 && Core.Shortcuts.All(k => k.Length == 2 && k[0] != "" && k[1] != ""), "each shortcut has keys and what they do");
+
+            // updates
+            Ok(Core.IsNewer("v1.0.1", "1.0.0") && Core.IsNewer("1.1", "1.0.9") && Core.IsNewer("v2.0.0", "1.9.9"), "newer versions");
+            Ok(!Core.IsNewer("v1.0.0", "1.0.0") && !Core.IsNewer("v0.9.9", "1.0.0") && !Core.IsNewer("latest", "1.0.0") && !Core.IsNewer(null, "1.0.0"), "not newer");
+            var release = Json.Parse("{\"tag_name\":\"v1.2.0\",\"assets\":[{\"name\":\"ArrowSetup.exe\",\"browser_download_url\":\"https://x/s.exe\"},{\"name\":\"ArrowSetup.exe.sha256\",\"browser_download_url\":\"https://x/s.sha256\"}]}") as IDictionary<string, object>;
+            Eq(L(Core.ReleaseSetup(release, "ArrowSetup.exe")), "v1.2.0 | https://x/s.exe | https://x/s.sha256", "release setup and checksum");
+            Eq(Core.ReleaseSetup(Json.Parse("{\"tag_name\":\"v1.2.0\",\"assets\":[]}") as IDictionary<string, object>, "ArrowSetup.exe"), null, "release without the setup");
+            var hash = new string('A', 64);
+            Eq(Core.Sha256Of(hash + "  ArrowSetup.exe\n"), new string('a', 64), "checksum file");
+            Eq(Core.Sha256Of("nope  ArrowSetup.exe"), null, "bad checksum file");
+            Eq(Core.SetupArgs(true, false), "--quiet --quit-arrow --start --no-startup", "setup args keep the shortcuts as they are");
+            Ok(Core.IsProxy("http://10.0.0.1:8080") && Core.IsProxy(" https://u:p@proxy.example.com:3128/ "), "proxy addresses");
+            Ok(!Core.IsProxy("proxy:8080") && !Core.IsProxy("socks5://h:1080") && !Core.IsProxy("http://h") && !Core.IsProxy("http://h:80/path"), "not proxy addresses");
+            Ok(Core.IsSiteHost("example.com") && Core.IsSiteHost(" dl.Example.com ") && Core.IsSiteHost("*.cdn.net") && Core.IsSiteHost("localhost"), "site hosts");
+            Ok(!Core.IsSiteHost("https://example.com") && !Core.IsSiteHost("example.com/x") && !Core.IsSiteHost("bad host") && !Core.IsSiteHost(""), "not site hosts");
+            var sites = Settings.From(Json.Parse("{\"sites\":[{\"host\":\"a.com\",\"connections\":2,\"limitKB\":300}]}") as IDictionary<string, object>).Sites;
+            Eq(sites.Count + " " + sites[0].Host + " " + sites[0].Connections + " " + sites[0].LimitKB, "1 a.com 2 300", "settings.sites");
+
+            // log.txt
+            var logFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arrow-log-" + Guid.NewGuid().ToString("N") + ".txt");
+            Log.File = logFile;
+            Log.Write("app", "Error: boom\r\n   at x");
+            var logLines = File.ReadAllText(logFile).Split('\n');
+            Ok(System.Text.RegularExpressions.Regex.IsMatch(logLines[0], @"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z \[app\] Error: boom$"), "log line");
+            Eq(logLines[1], "       at x", "log: more lines indented");
+            File.WriteAllText(logFile, string.Join("\n", Enumerable.Range(0, 20000).Select(i => "old line " + i + " " + new string('x', 50))) + "\n");
+            Log.Write("app", "newest");
+            var logText = File.ReadAllText(logFile);
+            Ok(logText.Length <= Log.Max / 2 + 100, "log trimmed to half");
+            Ok(logText.StartsWith("old line ") && logText.EndsWith("[app] newest\n"), "log trimmed at a line start, newest kept");
+            File.Delete(logFile);
+            Log.File = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "no-such-dir-arrow", "log.txt");
+            Log.Write("app", "lost"); // must not throw
+            Log.File = null;
             var was = new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 8 }, { "speedLimitOn", false }, { "duplicates", "ask" } };
             Eq(sent(Core.Changed(was, new Dictionary<string, object> { { "dir", "C:\\D" }, { "connections", 16 }, { "speedLimitOn", true }, { "duplicates", "ask" } })),
                 Q("{'connections':16,'speedLimitOn':true}"), "only the changed settings");

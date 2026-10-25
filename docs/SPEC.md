@@ -3,7 +3,7 @@
 Personal download manager modelled on how Internet Download Manager works (from public knowledge; no reverse engineering, no license bypass).
 
 ## Non-goals
-DASH audio+video merging for sites other than YouTube, DRM, torrents, FTP, site grabber, proxy settings.
+DASH audio+video merging for sites other than YouTube, DRM, torrents, FTP, site grabber. (Proxy: HTTP and HTTPS proxies only, settings.proxy; SOCKS is out.)
 
 ## Download File Info flow (IDM's confirm window)
 - **Entry points.** Every Download click in the browser: the extension's video button, browser-download takeover, "Download with Arrow" context menu, and the popup's Download this video and media-list buttons. They call `sendConfirm()` (`common.js`), which sends `POST /api/add` with `confirm: true`. The engine answers `{id}` at once with the download in status `pending`, and starts a quick probe. The native app sees the new pending download in `/api/state` and shows its Download File Info dialog for it; the browser opens no window. The engine refuses `confirm: true` with 503 while the native app is not open (see HTTP API), and a refused taken-over download goes back to the browser. A link pasted in the native app goes the same way.

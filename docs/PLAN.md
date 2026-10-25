@@ -21,7 +21,6 @@
 - Clipboard monitoring depends on the browser's clipboard permission and on the window getting focus; it is not tested in Firefox.
 - The shortcuts point at the exe in the app folder: after moving the folder, uninstall and install again.
 - The tray menu was never clicked on screen (a test clicks its items without showing them), and the "older windows close" step was not tried in a real Brave window.
-- A crash after startup leaves no trace: the exe has no console and writes no log file.
 - HLS playlist bodies and `#EXT-X-MAP` byte ranges are not covered by the stall watchdog / byte-range refusal.
 - `Retry-After` as an HTTP date is ignored (default backoff).
 - Never tried by hand: saving Options and the Scheduler against a live engine (only the tests' engine and the ARROW_SHOTS pictures), a real queue starting at its time (tests use their own clock), and the real sleep or shutdown after a queue is done (the recorder stands in).

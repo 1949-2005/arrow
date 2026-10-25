@@ -5,9 +5,13 @@ import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Manager } from './engine.js';
-import { here, brand, exe, port as PORT, startupDir, powershell, shortcut } from './desktop.js';
+import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, proxyEnv, respawn } from './desktop.js';
+import { log, catchCrashes } from './log.js';
 
-const mgr = new Manager(process.env.FASTDL_STATE || path.join(here, 'state.json'));
+const stateFile = process.env.FASTDL_STATE || path.join(here, 'state.json');
+const logFile = path.join(path.dirname(stateFile), 'log.txt'); // the native app writes to the same file
+const mgr = new Manager(stateFile);
+catchCrashes(logFile, () => mgr.saveSync());
 await mgr.load();
 let opens = 0, appSeen = 0; // POST /api/open count, and when the native app last polled /api/state
 const startupLink = path.join(startupDir, brand.name + '.lnk');
@@ -70,7 +74,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/state') {
       if (!origin) appSeen = Date.now();
       const v = mgr.view();
-      return send(res, 200, { ...v, open: opens, settings: { ...v.settings, startup: existsSync(startupLink) } });
+      // proxyActive: this process runs with settings.proxy (it restarts to take a new one)
+      return send(res, 200, { ...v, open: opens, proxyActive: process.env.NODE_USE_ENV_PROXY === '1', settings: { ...v.settings, startup: existsSync(startupLink) } });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
@@ -90,7 +95,15 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
-      return send(res, 200, mgr.settings);
+      send(res, 200, mgr.settings);
+      // a new proxy needs a new process (Node reads it at start): this one stops listening, starts the next and ends
+      const env = body.proxy != null && proxyEnv(mgr.settings.proxy);
+      if (env) {
+        log(logFile, 'engine', 'restarting for the proxy setting');
+        server.close();
+        setTimeout(() => { respawn(env); quit(); }, 200);
+      }
+      return;
     }
     if (url === '/api/action' && body.op === 'folder') {
       const d = mgr.list.find(x => x.id === body.id);
@@ -112,15 +125,22 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('error', e => {
-  console.error(e.code === 'EADDRINUSE' ? `${brand.name} is already running on port ${PORT}` : e.message);
+  const why = e.code === 'EADDRINUSE' ? `${brand.name} is already running on port ${PORT}` : e.message;
+  console.error(why);
+  log(logFile, 'engine', 'could not start: ' + why);
   process.exit(1);
 });
-server.listen(PORT, '127.0.0.1', () => console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`));
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`${brand.name} running at http://127.0.0.1:${PORT}  (Ctrl+C to quit)`);
+  log(logFile, 'engine', `started on port ${PORT}, Node ${process.versions.node}`);
+  if (process.env.FASTDL_CRASH) setTimeout(() => { throw new Error('FASTDL_CRASH'); }); // tests: an uncaught exception
+});
 
 // Running yt-dlp processes end with this process (libuv puts child processes in a job object).
 function quit() {
   for (const id of mgr.held.keys()) mgr.release(id); // the Download File Info probes' open connections
   mgr.saveSync();
+  log(logFile, 'engine', 'quit');
   process.exit(0);
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, quit);

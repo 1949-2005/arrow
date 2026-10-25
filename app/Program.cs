@@ -2,6 +2,8 @@
 //   --tray       start without showing the main window (Start with Windows)
 //   --no-engine  never start the engine (tests)
 //   --check      no UI: ping the engine, read /api/state, print the result, exit 0 or 1
+//   --check-notification  shows one Windows notification, checks the notification center has it, removes it
+//   --check-update  no UI: ask GitHub (or ARROW_UPDATES_URL) for a newer release, print it, exit 0 or 1
 // ARROW_SHOTS=<folder>: no mutex, tray or engine start; saves PNGs of the main window there and exits (visual review)
 using System;
 using System.Collections.Generic;
@@ -22,14 +24,27 @@ namespace Arrow
         public static string Name { get { return Application.ProductName; } } // brand.json's name, set at build time
         public static string Folder { get { return Path.GetDirectoryName(Application.ExecutablePath); } }
 
+        // brand.json's "repo" (owner/name on GitHub): where updates come from; null when it names none
+        public static string Repo
+        {
+            get
+            {
+                try { return (Json.Parse(File.ReadAllText(Path.Combine(Folder, "brand.json"))) as IDictionary<string, object>).Str("repo"); }
+                catch (Exception) { return null; }
+            }
+        }
+
         [STAThread]
         public static int Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            CatchCrashes();
             Api.AppName = Name;
             var api = new Api();
             if (args.Contains("--check")) return Check(api, args.Contains("--no-engine"));
+            if (args.Contains("--check-update")) return CheckUpdate();
+            if (args.Contains("--check-notification")) { var r = Toasts.Check(); Console.WriteLine(r); return r == "ok" ? 0 : 1; }
             Theme.Init(); // SystemEvents raises the theme switch on the thread that first touched it: this one
             var shots = Environment.GetEnvironmentVariable("ARROW_SHOTS");
             if (!string.IsNullOrEmpty(shots))
@@ -48,6 +63,7 @@ namespace Arrow
                     show.Set();
                     return 0;
                 }
+                MainForm.LoadTheme();
                 var error = args.Contains("--no-engine") ? null : StartEngine(api);
                 if (error != null)
                 {
@@ -58,6 +74,48 @@ namespace Arrow
                 Application.Run(new MainForm(api, !args.Contains("--tray"), null));
                 return 0;
             }
+        }
+
+        // log.txt next to state.json (the engine writes the same file); an unhandled exception is logged, said, and ends
+        // the app (the engine and its downloads keep running)
+        static void CatchCrashes()
+        {
+            var state = Environment.GetEnvironmentVariable("FASTDL_STATE");
+            Log.File = Path.Combine(string.IsNullOrEmpty(state) ? Folder : Path.GetDirectoryName(Path.GetFullPath(state)), "log.txt");
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (s, e) => Crash(e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => Crash(e.ExceptionObject as Exception);
+        }
+
+        static int crashed;
+
+        static void Crash(Exception e)
+        {
+            if (Interlocked.Exchange(ref crashed, 1) == 1) return;
+            Log.Write("app", "crash: " + e);
+            try
+            {
+                if (Environment.GetEnvironmentVariable("ARROW_SHOTS") == null)
+                    MessageBox.Show(Name + " hit an error and has to close. Your downloads keep going in the background.\n\nDetails are in " + Log.File,
+                        Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception) { }
+            Environment.Exit(1);
+        }
+
+        // --check-update: no UI, ask for the latest release and print "update <tag>" or "up to date"; exit 1 on errors
+        static int CheckUpdate()
+        {
+            var done = new ManualResetEvent(false);
+            var code = 0;
+            Updater.Check((found, error) =>
+            {
+                if (error != null) { Console.WriteLine(error); code = 1; }
+                else Console.WriteLine(found != null ? "update " + found.Tag : "up to date");
+                done.Set();
+            });
+            done.WaitOne();
+            return code;
         }
 
         static int Check(Api api, bool noEngine)
@@ -141,6 +199,20 @@ namespace Arrow
             var big = Load(SystemInformation.IconSize.Width);
             if (small != null) SendMessage(form.Handle, WM_SETICON, (IntPtr)ICON_SMALL, small.Handle);
             if (big != null) SendMessage(form.Handle, WM_SETICON, (IntPtr)ICON_BIG, big.Handle);
+        }
+
+        // Windows' taskbar shade (it can differ from the apps' light or dark)
+        public static bool TaskbarLight()
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                {
+                    var v = k == null ? null : k.GetValue("SystemUsesLightTheme");
+                    return v is int && (int)v == 1;
+                }
+            }
+            catch (Exception) { return false; } // Windows' default taskbar is dark
         }
     }
 }
