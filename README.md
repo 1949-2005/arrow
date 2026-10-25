@@ -101,7 +101,7 @@ Prefer clicking?
 - A queue is a list of downloads that start together, at a time you choose. Arrow always has the **Main queue**. You can add your own.
 - To put downloads into a queue:
   - In the Download File Info window, click **Download Later**. Choose the queue (or click **+** for a new one). Tick **Start the queue now** if you want. Click **Add to queue**.
-  - Or right-click downloads in the list and choose **Add to queue**.
+  - Or right-click downloads in the list and choose **Add to queue**, or drag them onto a queue in the sidebar.
   - A download that waits in a queue shows "In Main queue" (or the queue's name).
 - Click **Scheduler** to set up the queues. Click a queue on the left. Each change is saved at once.
   - **Name**: the Main queue keeps its name.

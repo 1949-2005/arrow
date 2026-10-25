@@ -238,6 +238,9 @@ namespace Arrow
             sidebar.Selected = sidebar.Items.Any(i => i.Key == section) ? section : "all";
             section = sidebar.Selected;
             sidebar.SelectedChanged += () => { section = sidebar.Selected; RefreshList(); };
+            // drag downloads from the list onto a queue: Add to queue (unfinished ones only)
+            sidebar.CanDrop = key => key.StartsWith("queue:");
+            sidebar.Dropped += (key, ids) => ToQueue(all.Where(d => ids.Contains(d.Id) && d.Status != "done").ToList(), key.Substring("queue:".Length));
             inspector.Visible = details;
             UpdateInspector();
             UpdateCommands();

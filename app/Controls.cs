@@ -753,6 +753,37 @@ namespace Arrow
             base.OnMouseDown(e);
         }
 
+        public Func<string, bool> CanDrop; // which items take the list's rows (DownloadList.DragFormat)
+        public event Action<string, string[]> Dropped; // the item's key, the rows' ids
+        int dropAt = -1;
+
+        int DropIndex(DragEventArgs e)
+        {
+            if (CanDrop == null || !e.Data.GetDataPresent(DownloadList.DragFormat)) return -1;
+            var i = IndexAt(PointToClient(new Point(e.X, e.Y)));
+            return i >= 0 && CanDrop(Items[i].Key) ? i : -1;
+        }
+
+        protected override void OnDragOver(DragEventArgs e)
+        {
+            var i = DropIndex(e);
+            if (i >= 0 || e.Data.GetDataPresent(DownloadList.DragFormat)) e.Effect = i >= 0 ? DragDropEffects.Move : DragDropEffects.None;
+            if (i != dropAt) { dropAt = i; Invalidate(); }
+            base.OnDragOver(e);
+        }
+
+        protected override void OnDragLeave(EventArgs e) { if (dropAt >= 0) { dropAt = -1; Invalidate(); } base.OnDragLeave(e); }
+
+        protected override void OnDragDrop(DragEventArgs e)
+        {
+            var i = DropIndex(e);
+            dropAt = -1;
+            Invalidate();
+            var h = Dropped;
+            if (i >= 0 && h != null) h(Items[i].Key, ((string)e.Data.GetData(DownloadList.DragFormat)).Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries));
+            base.OnDragDrop(e);
+        }
+
         void ScrollTo(int y)
         {
             var max = Items.Count == 0 ? 0 : Math.Max(0, ItemRect(Items.Count - 1).Bottom + scroll + Theme.Px(8) - Height);
@@ -799,7 +830,8 @@ namespace Arrow
                 if (headings.TryGetValue(i, out head))
                     Theme.DrawText(g, head, Theme.Small, new Rectangle(r.X + Theme.Px(8), r.Y - Theme.Px(24), r.Width, Theme.Px(20)), Theme.Muted);
                 var sel = it.Key == selected;
-                if (sel || i == hover) Theme.Fill(g, r, Theme.Px(6), sel ? Theme.Soft : Theme.Hover);
+                if (sel || i == hover || i == dropAt) Theme.Fill(g, r, Theme.Px(6), sel || i == dropAt ? Theme.Soft : Theme.Hover);
+                if (i == dropAt) Theme.Border(g, r, Theme.Px(6), Theme.Text, 1); // where the dragged downloads go
                 // Types and Library: the user's SVG icon at 28 px; else the glyph (Library's at 18 px) centered in the same 28 px slot
                 var slot = new Rectangle(r.X + Theme.Px(8), r.Y, Theme.Px(28), r.Height);
                 var textOnly = it.Icon == '\0' && it.Type == null; // Options' pages
@@ -1022,12 +1054,24 @@ namespace Arrow
             return new Rectangle(0, tops[i] + AutoScrollPosition.Y, ClientSize.Width, tops[i + 1] - tops[i]);
         }
 
+        public const string DragFormat = "ArrowDownloads"; // the dragged rows' ids, one per line (the sidebar's queues take them)
+        Rectangle dragBox = Rectangle.Empty;
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             var i = IndexAt(e.Y);
             if (i != hover) { hover = i; Invalidate(); }
+            if (e.Button == MouseButtons.Left && dragBox != Rectangle.Empty && !dragBox.Contains(e.Location) && selected.Count > 0)
+            {
+                dragBox = Rectangle.Empty;
+                var data = new DataObject();
+                data.SetData(DragFormat, string.Join("\n", items.Where(d => selected.Contains(d.Id)).Select(d => d.Id)));
+                DoDragDrop(data, DragDropEffects.Move);
+            }
             base.OnMouseMove(e);
         }
+
+        protected override void OnMouseUp(MouseEventArgs e) { dragBox = Rectangle.Empty; base.OnMouseUp(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -1038,6 +1082,8 @@ namespace Arrow
             {
                 if (i < 0) ClearSelection();
                 else Pick(i, ModifierKeys.HasFlag(Keys.Shift) ? "range" : ModifierKeys.HasFlag(Keys.Control) ? "toggle" : "only");
+                var size = SystemInformation.DragSize;
+                dragBox = i < 0 ? Rectangle.Empty : new Rectangle(e.X - size.Width / 2, e.Y - size.Height / 2, size.Width, size.Height);
             }
             else if (e.Button == MouseButtons.Right && i >= 0)
             {
