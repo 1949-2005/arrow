@@ -10,6 +10,7 @@
 - `install.cmd`, `uninstall.cmd` — double-click wrappers for `node install.js [uninstall]`
 - `install.ps1`, `uninstall.ps1` — the README's one-line `irm … | iex` commands: download the latest release's ArrowSetup.exe, check its SHA-256 and run it `--quiet --quit-arrow` (install or update), or run the installed "Uninstall Arrow.exe" `--quiet`
 - `build-installer.js` — `node build-installer.js`: stages what runs (the two exes, the engine's modules, brand, assets, extension, licenses, README.txt), zips it (Node's zlib) and compiles `installer/` around it into `dist\<name>Setup.exe` + `.sha256`
+- `licenses/node-<version>-LICENSE.txt` — Node.js's license for the node.exe the engine is built from, used when that install has no LICENSE of its own (`node build-installer.js --fetch-node-license` gets it for a new version)
 - `installer/` — the setup (C# 5, compiled with the app's sources by `app/build.js` `compileSetup()`)
   - `Setup.cs` — entry (`--uninstall`, `--quiet`, `ARROW_SETUP_SHOTS`) and `Installer`: payload copy, running Arrow and its clean quit, tools found as `ytdlp.js` finds them, winget, shortcuts, Settings > Apps key, uninstall, browsers; test hooks `ARROW_SETUP_*`
   - `SetupForm.cs` — the window: options, progress steps, winget failure, Arrow running, done and the browser extension steps, uninstall pages, shots

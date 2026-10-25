@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import http from 'node:http';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
@@ -16,7 +17,7 @@ const win = { skip: process.platform !== 'win32' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 test('the engine files are desktop.js and what it imports, followed through', () => {
-  assert.deepEqual(engineFiles(), ['desktop.js', 'engine.js', 'hls.js', 'server.js', 'ytdlp.js']);
+  assert.deepEqual(engineFiles(), ['desktop.js', 'engine.js', 'hls.js', 'log.js', 'server.js', 'ytdlp.js']);
 });
 
 test('zipFolder writes a zip that unpacks to the same files', async () => {
@@ -136,6 +137,22 @@ test('tools: a failing or missing winget still installs Arrow (exit 3)', win, as
   assert.equal(run(setup, ['--quiet'], { FAKE_WINGET: 'fail' }).status, 3);
   assert.equal(run(setup, ['--quiet'], { ARROW_SETUP_WINGET: path.join(tmp, 'no-winget.exe') }).status, 3);
   assert.ok(existsSync(path.join(dir, 'Arrow.exe')));
+});
+
+test('--start opens the installed app once it is installed, as its own update does', win, async () => {
+  // the installed app runs --check-update against this stand-in for GitHub: its request proves it started
+  let seen;
+  const got = new Promise(r => { seen = r; });
+  const server = http.createServer((req, res) => { seen(req.headers['user-agent']); res.end(JSON.stringify({ tag_name: 'v0.0.1', assets: [] })); });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const r = run(setup, ['--quiet', '--no-tools', '--start'], { ARROW_SETUP_START_ARGS: '--check-update', ARROW_UPDATES_URL: `http://127.0.0.1:${server.address().port}/latest` });
+    assert.equal(r.status, 0, r.stderr);
+    const ua = await Promise.race([got, sleep(20000).then(() => null)]);
+    assert.match(ua ?? '', /^Arrow\//, 'the installed Arrow.exe started and checked for updates');
+  } finally {
+    server.close();
+  }
 });
 
 test('uninstall: shortcuts, files and the key go; state.json and downloads stay, unless asked', win, async () => {

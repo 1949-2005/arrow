@@ -85,16 +85,36 @@ your downloaded files are never removed.
 ${name} is open source (MIT license, LICENSE). It carries Node.js (licenses\\node-LICENSE.txt).
 `;
 
+// Node.js's license for the node.exe the engine is built from: its own folder's LICENSE, else the copy for this
+// version in licenses/ (some installs leave LICENSE out; --fetch-node-license gets it)
+export const nodeLicenseCopy = (v = process.version) => path.join(here, 'licenses', `node-${v}-LICENSE.txt`);
+export function nodeLicense() {
+  const f = [path.join(path.dirname(process.execPath), 'LICENSE'), nodeLicenseCopy()].find(existsSync);
+  if (!f) throw new Error(`Node.js's license is missing (no LICENSE next to ${process.execPath} and no ${path.relative(here, nodeLicenseCopy())}): the engine carries Node.js, so it must ship with it. Run: node build-installer.js --fetch-node-license`);
+  return f;
+}
+
+async function fetchNodeLicense() {
+  const url = `https://raw.githubusercontent.com/nodejs/node/${process.version}/LICENSE`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const text = await res.text();
+  if (!text.startsWith('Node.js is licensed')) throw new Error(`${url} is not Node.js's license`);
+  await fs.mkdir(path.dirname(nodeLicenseCopy()), { recursive: true });
+  await fs.writeFile(nodeLicenseCopy(), text);
+  return nodeLicenseCopy();
+}
+
 // The folder the setup installs, in staging (empty)
 export async function stage(staging) {
   const { name, icon } = readBrand(here);
   const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
-  const copy = (from, to = from) => fs.cp(path.join(here, from), path.join(staging, to), { recursive: true });
+  // the logo's render script is for building, not for the installed app
+  const copy = (from, to = from) => fs.cp(path.join(here, from), path.join(staging, to), { recursive: true, filter: f => !f.endsWith('.ps1') });
   for (const f of [...engineFiles(), 'package.json', 'brand.json', 'LICENSE', 'assets', 'extension']) await copy(f); // package.json: "type": "module"
-  const nodeLicense = path.join(path.dirname(process.execPath), 'LICENSE');
-  if (!existsSync(nodeLicense)) throw new Error(`Node.js's license is missing (${nodeLicense}): the engine carries Node.js, so it must ship with it`);
+  const license = nodeLicense();
   await fs.mkdir(path.join(staging, 'licenses'));
-  await fs.copyFile(nodeLicense, path.join(staging, 'licenses', 'node-LICENSE.txt'));
+  await fs.copyFile(license, path.join(staging, 'licenses', 'node-LICENSE.txt'));
   await fs.writeFile(path.join(staging, 'README.txt'), README(name).replace(/\n/g, '\r\n'));
   await compileApp({ out: path.join(staging, name + '.exe'), name, version, icon: path.join(staging, icon) });
   await build(staging); // <name> Engine.exe: node.exe whose embedded app loads desktop.js from its folder
@@ -121,6 +141,10 @@ export async function buildSetup(dist = path.join(here, 'dist')) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    if (process.argv.includes('--fetch-node-license')) {
+      console.log('Saved ' + await fetchNodeLicense());
+      process.exit(0);
+    }
     if (process.platform !== 'win32') throw new Error('the setup needs Windows.');
     console.log('Building the setup. This takes about 15 seconds...');
     const { out, hash, size } = await buildSetup();

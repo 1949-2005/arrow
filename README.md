@@ -319,7 +319,7 @@ Arrow writes `log.txt` next to its `state.json` (in its install folder): when it
 ## Build from source
 
 - Requirements: Windows 10 or 11 and Node.js 20.3 or newer (`node --version`).
-- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds.
+- `node build-installer.js` makes `dist\ArrowSetup.exe` and `dist\ArrowSetup.exe.sha256`, for a release. It takes about 15 seconds. If your Node.js has no LICENSE file next to node.exe, run `node build-installer.js --fetch-node-license` once (it saves the license for your Node version in `licenses/`).
 - Or run Arrow from this folder:
   - Double-click `install.cmd`. Wait about 15 seconds.
   - It makes two programs in this folder, puts Arrow in the Start menu and on the desktop, and starts Arrow:

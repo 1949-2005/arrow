@@ -58,7 +58,9 @@ namespace Arrow.Setup
                 var tools = args.Contains("--no-tools") || Installer.GetTools(null) == null;
                 Installer.Shortcuts(dir, !args.Contains("--no-desktop"), !args.Contains("--no-startup"));
                 Installer.Register(dir);
-                if (args.Contains("--start")) Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe")) { WorkingDirectory = dir }); // the app's own update
+                // the app's own update; ARROW_SETUP_START_ARGS: tests start it with --check-update instead of its window
+                if (args.Contains("--start"))
+                    Process.Start(new ProcessStartInfo(Path.Combine(dir, Installer.Name + ".exe"), Environment.GetEnvironmentVariable("ARROW_SETUP_START_ARGS") ?? "") { WorkingDirectory = dir, UseShellExecute = true }); // shell: inherits none of our handles
                 return tools ? 0 : 3;
             }
             catch (Exception e)
@@ -340,6 +342,7 @@ namespace Arrow.Setup
             if (!Directory.Exists(dir)) return;
             List<string> files;
             using (var zip = Payload()) files = zip.Entries.Select(e => e.FullName).ToList();
+            files.Add("log.txt"); // what the app and engine wrote: not the user's data
             if (data) files.AddRange(new[] { "state.json", "state.json.tmp" });
             for (var i = 0; i < files.Count; i++)
             {
