@@ -78,7 +78,7 @@ Master playlist → highest `BANDWIDTH`. **Separate sound** (X serves video and 
 - **Files.** yt-dlp writes into `<dir>\.fastdl\<id>` as `media.<ext>`. On success the file is moved to its final name (`assignName()` with the title, unique ` (n)` names, categories → Video/Music), the temp folder is removed (and `.fastdl` once empty), and Mark-of-the-Web is set.
 - **Progress.** Parsed from yt-dlp's stdout/stderr lines: `FDLINFO` (format ids, expected size, title), `FDLP` (per-stream bytes; `streams` keeps `{got,size}` per format so the bar does not restart), `FDLPP` (post-processor), `FDLFILE` (final path). `phase`: `video`, `audio`, `merging` (Merger), `converting` (ExtractAudio).
 - **Pause/resume.** Pause kills the whole process tree (`taskkill /T /F` on Windows, process group elsewhere: yt-dlp.exe is a launcher and ffmpeg may run). Resume re-runs yt-dlp, which continues its `.part` files.
-- **Tools.** yt-dlp: `FASTDL_YTDLP`, PATH, `%LOCALAPPDATA%\Microsoft\WinGet\Links`, WinGet `Packages\yt-dlp.yt-dlp_*`. ffmpeg: `FASTDL_FFMPEG`, PATH, WinGet `Packages\yt-dlp.FFmpeg_*\ffmpeg-*\bin`. Missing tool → error with the `winget install` command.
+- **Tools.** yt-dlp: `FASTDL_YTDLP`, `%LOCALAPPDATA%\Microsoft\WinGet\Links`, WinGet `Packages\yt-dlp.yt-dlp_*`, then PATH (other apps put old copies there, and YouTube refuses an old one). ffmpeg: `FASTDL_FFMPEG`, PATH, WinGet `Packages\yt-dlp.FFmpeg_*\ffmpeg-*\bin`. Missing tool → error with the `winget install` command.
 - **Errors.** First `ERROR:` line, non-zero exit or no file → error plus the hint `winget upgrade yt-dlp.yt-dlp`. Live streams → "Live streams are not supported". Cookies are never passed to yt-dlp.
 
 ## Data model
