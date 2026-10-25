@@ -101,7 +101,7 @@ async function clickDownload() {
 
 test('the extension loads in Edge as a service worker', skip, async () => {
   let worker;
-  for (const t = Date.now(); !worker && Date.now() - t < 10000; await sleep(200)) {
+  for (const t = Date.now(); !worker && Date.now() - t < 30000; await sleep(200)) { // Edge starts slower while other tests run
     const { targetInfos } = await cdp.send('Target.getTargets');
     worker = targetInfos.find(x => x.type === 'service_worker' && x.url.endsWith('/background.js'));
   }

@@ -7,12 +7,16 @@ import { promisify } from 'node:util';
 import { Manager } from './engine.js';
 import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, proxyEnv, respawn } from './desktop.js';
 import { log, catchCrashes } from './log.js';
+import { Remote } from './remote.js';
 
 const stateFile = process.env.FASTDL_STATE || path.join(here, 'state.json');
 const logFile = path.join(path.dirname(stateFile), 'log.txt'); // the native app writes to the same file
 const mgr = new Manager(stateFile);
 catchCrashes(logFile, () => mgr.saveSync());
 await mgr.load();
+const remote = new Remote(mgr, { log: m => log(logFile, 'engine', m), name: brand.name });
+// phone access, when on; a port another program holds is logged, not fatal
+await remote.apply().catch(e => log(logFile, 'engine', 'phone access could not start: ' + e.message));
 let opens = 0, appSeen = 0; // POST /api/open count, and when the native app last polled /api/state
 const startupLink = path.join(startupDir, brand.name + '.lnk');
 const run = promisify(execFile);
@@ -75,7 +79,7 @@ const server = http.createServer(async (req, res) => {
       if (!origin) appSeen = Date.now();
       const v = mgr.view();
       // proxyActive: this process runs with settings.proxy (it restarts to take a new one)
-      return send(res, 200, { ...v, open: opens, proxyActive: process.env.NODE_USE_ENV_PROXY === '1', settings: { ...v.settings, startup: existsSync(startupLink) } });
+      return send(res, 200, { ...v, open: opens, proxyActive: process.env.NODE_USE_ENV_PROXY === '1', settings: { ...v.settings, remote: undefined, startup: existsSync(startupLink) } });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
@@ -92,10 +96,17 @@ const server = http.createServer(async (req, res) => {
     // The Scheduler: add, update, remove, start and stop queues (not for extensions: a queue's whenDone can shut down)
     if (url === '/api/queues') return send(res, 200, mgr.queues(body));
     if (url === '/api/quit') { res.on('close', quit); return send(res, 200, { ok: true }); }
+    // Options > iPhone: phone access on or off, a new pairing QR code, a device removed (the token hashes never leave)
+    if (url === '/api/remote') {
+      if (body.enabled != null) await remote.set(!!body.enabled);
+      return send(res, 200, remote.info());
+    }
+    if (url === '/api/remote/pair') return send(res, 200, remote.startPairing(body.address));
+    if (url === '/api/remote/remove') { remote.removeDevice(String(body.id ?? '')); return send(res, 200, remote.info()); }
     if (url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
-      send(res, 200, mgr.settings);
+      send(res, 200, { ...mgr.settings, remote: undefined });
       // a new proxy needs a new process (Node reads it at start): this one stops listening, starts the next and ends
       const env = body.proxy != null && proxyEnv(mgr.settings.proxy);
       if (env) {

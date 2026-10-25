@@ -539,6 +539,14 @@ namespace Glide
             Eq(L(Core.DuplicateSettings), "ask | number | replace | resume", "Picker → duplicates");
             Eq(string.Join(",", new[] { "system", "light", "dark", "odd", null }.Select(m => Core.ThemeIndex(m))), "0,1,2,0,0", "theme → Picker, unknown = Windows");
             Eq(Core.ThemeNames.Length, Core.ThemeModes.Length, "a name per theme");
+
+            // phone access
+            var remote = RemoteInfo.From(Json.Parse("{\"enabled\":true,\"listening\":true,\"port\":9615,\"addresses\":[\"192.168.1.23\"],\"devices\":[{\"id\":\"a\",\"name\":\"iPhone\",\"added\":1700000000000,\"seen\":1700000600000}]}") as IDictionary<string, object>);
+            Eq(remote.Enabled + " " + remote.Port + " " + L(remote.Addresses) + " " + remote.Devices[0].Name + " " + remote.Devices[0].Added, "True 9615 192.168.1.23 iPhone 1700000000000", "remote info");
+            Eq(RemoteInfo.From(null).Devices.Count, 0, "remote info: none");
+            var grid = RemoteInfo.Grid(Json.Parse("[" + string.Join(",", Enumerable.Repeat("[" + string.Join(",", Enumerable.Repeat("true", 21)) + "]", 21)) + "]"));
+            Ok(grid != null && grid.Length == 21 && grid[20][20], "qr grid");
+            Eq(RemoteInfo.Grid(Json.Parse("[[true]]")), null, "qr grid too small");
             Ok(Core.Shortcuts.Length > 0 && Core.Shortcuts.All(k => k.Length == 2 && k[0] != "" && k[1] != ""), "each shortcut has keys and what they do");
 
             // updates

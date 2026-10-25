@@ -661,6 +661,9 @@ namespace Glide
                 Shot(folder, "newqueue", TextDialog("New queue", "Name of the new queue", "Weekend", 40, "Add", out field));
                 Shot(folder, "about", AboutDialog());
                 Shot(folder, "shortcuts", ShortcutsDialog());
+                // Pair an iPhone, with a stand-in grid (the engine draws the real code)
+                var fake = Enumerable.Range(0, 29).Select(y => Enumerable.Range(0, 29).Select(x => (x < 7 && y < 7) || (x > 21 && y < 7) || (x < 7 && y > 21) ? !(x % 6 == 1 || y % 6 == 1) || (x % 6 >= 2 && x % 6 <= 4 && y % 6 >= 2 && y % 6 <= 4) : (x * 7 + y * 13 + x * y) % 3 == 0).ToArray()).ToArray();
+                Shot(folder, "phone-pair", new PhoneDialog(null, 0, fake, "http://192.168.1.23:9615/#pair=Ab3dEf6hIj9kLm2nOp5qRs"));
                 Shot(folder, "error", ErrorDialog("Couldn't reach the server: the connection was reset. Check the link, then try again."));
 
                 // issue 06: Download Later's popover, Link already in the list, Properties, the category editor
@@ -693,7 +696,7 @@ namespace Glide
                 var opts = new Settings { Dir = settings.Dir, Connections = 8, MaxActive = 3, SpeedLimitKB = 500, SpeedLimitOn = true, Categories = true, Clipboard = true, Startup = true,
                     ShowComplete = true, Duplicates = "ask", Types = types, Folders = new Dictionary<string, string> { { "Documents", "D:\\Work\\Docs" }, { "Courses", "D:\\Courses" } },
                     Sites = new List<Site> { new Site { Host = "files.example.com", Connections = 2 }, new Site { Host = "cdn.example.net", LimitKB = 800 } } };
-                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Sites, OptionsDialog.Categories, OptionsDialog.Queues })
+                foreach (var page in new[] { OptionsDialog.General, OptionsDialog.Downloads, OptionsDialog.Sites, OptionsDialog.Phone, OptionsDialog.Categories, OptionsDialog.Queues })
                 {
                     var o = new OptionsDialog(null, opts, page);
                     if (page == OptionsDialog.Categories) o.SelectCategory("Courses");

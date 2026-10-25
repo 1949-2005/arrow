@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="__NAME__">
+<meta name="theme-color" content="#f6f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1e1e20" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="/icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>__NAME__</title>
+<style>
+  /* the native app's greys (docs/NATIVE_UI.md), light and dark */
+  :root { --bg: #f6f6f8; --card: #ffffff; --line: #dcdce0; --text: #1d1d1f; --muted: #6e6e73; --accent: #3b3c3d; --on-accent: #ffffff; --bar: #e2e2e6; --done: #30a14e; --err: #d70015; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1e1e20; --card: #252528; --line: #3a3a3e; --text: #f5f5f7; --muted: #a1a1a6; --accent: #ececee; --on-accent: #1d1d1f; --bar: #38383c; --done: #32d74b; --err: #ff453a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); -webkit-text-size-adjust: 100%; }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 0 10px; }
+  header img { width: 32px; height: 32px; border-radius: 8px; }
+  header h1 { font-size: 22px; margin: 0; flex: 1; }
+  header small { color: var(--muted); font-size: 13px; }
+  .add { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
+  input, select, button { font: inherit; color: inherit; }
+  input, select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button { border: 0; border-radius: 10px; padding: 11px 14px; background: var(--bar); font-weight: 600; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--on-accent); }
+  button:disabled { opacity: .5; }
+  .msg { color: var(--muted); font-size: 14px; min-height: 1.4em; margin: 0; }
+  .msg.err { color: var(--err); }
+  h2 { font-size: 15px; color: var(--muted); font-weight: 600; margin: 22px 4px 8px; }
+  .list { display: grid; gap: 10px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .meta.err { color: var(--err); }
+  .bar { height: 6px; border-radius: 3px; background: var(--bar); margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar.done i { background: var(--done); }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .actions button { flex: 1; padding: 9px 10px; font-size: 15px; }
+  .empty, .pair { color: var(--muted); text-align: center; padding: 30px 10px; }
+  .pair h1 { color: var(--text); font-size: 22px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 22px; }
+  summary { font-weight: 600; cursor: pointer; }
+  details ol { padding-left: 20px; }
+  details li { margin: 6px 0; }
+  code { font: 13px ui-monospace, Menlo, monospace; background: var(--bar); border-radius: 6px; padding: 2px 5px; overflow-wrap: anywhere; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 16px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+// __NAME__ on a phone: the download list of __NAME__ on the PC, links sent to it, files saved from it. The device token from
+// pairing (the QR code's #pair=) stays in this page's localStorage and goes with every request.
+const KEY = 'glide-token';
+const $ = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(k => k != null)); return e; };
+const app = document.getElementById('app');
+let token = localStorage.getItem(KEY), device = '', timer = null, busy = false;
+// the video pages __NAME__ downloads through yt-dlp (ytdlp.js SITES and YouTube): they get the Quality choice
+const VIDEO = /^https?:\/\/([^/?#]+\.)?(youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|x\.com|twitter\.com|tiktok\.com|instagram\.com|facebook\.com|fb\.watch|reddit\.com|twitch\.tv|soundcloud\.com|bilibili\.com|streamable\.com)([:/?#]|$)/i;
+
+async function api(path, body) {
+  const res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { authorization: 'Bearer ' + token, ...(body && { 'content-type': 'application/json' }) }, body: body && JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { localStorage.removeItem(KEY); token = null; showPairing(); throw new Error(data.error); }
+  if (!res.ok) throw new Error(data.error || '__NAME__ did not answer.');
+  return data;
+}
+
+function size(n) {
+  if (n == null) return '';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  for (; n >= 1024 && i < u.length - 1; i++) n /= 1024;
+  return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + ' ' + u[i];
+}
+
+const STATUS = { downloading: 'Downloading', queued: 'Waiting', paused: 'Paused', scheduled: 'In a queue', done: 'Done', error: 'Failed' };
+
+function showPairing(text) {
+  clearInterval(timer);
+  app.replaceChildren($('div', { className: 'pair' },
+    $('img', { src: '/icon.png', alt: '', width: 72, height: 72, style: 'border-radius:16px' }),
+    $('h1', { textContent: 'Pair with __NAME__' }),
+    $('p', { textContent: text || 'On your PC, open __NAME__, then Options › iPhone › Pair an iPhone, and scan the QR code with this phone\'s camera.' })));
+}
+
+async function pair(secret) {
+  history.replaceState(null, '', '/'); // the secret leaves the address bar
+  try {
+    const res = await fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return showPairing(data.error || 'Pairing failed. Show a new QR code in __NAME__ and scan it again.');
+    token = data.token;
+    localStorage.setItem(KEY, token);
+    start();
+  } catch { showPairing('__NAME__ did not answer. Is this phone on the same Wi-Fi as the PC?'); }
+}
+
+function start() {
+  const msg = $('p', { className: 'msg' });
+  const url = $('input', { type: 'url', placeholder: 'Paste a link', autocomplete: 'off', autocapitalize: 'off', spellcheck: false, inputMode: 'url' });
+  const quality = $('select', {}, ...[['best', 'Best quality'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['mp3', 'Audio (MP3)']].map(([v, t]) => $('option', { value: v, textContent: t })));
+  quality.hidden = true;
+  const go = $('button', { className: 'primary', textContent: 'Download', type: 'submit' });
+  const form = $('form', { className: 'add' }, url, $('div', { className: 'row' }, quality, go), msg);
+  url.addEventListener('input', () => { quality.hidden = !VIDEO.test(url.value.trim()); });
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const link = url.value.trim();
+    if (!/^https?:\/\//i.test(link)) { msg.className = 'msg err'; msg.textContent = 'Paste a link that starts with http:// or https://.'; return; }
+    go.disabled = true;
+    try {
+      await api('/api/add', { url: link, ...(VIDEO.test(link) && { quality: quality.value }) });
+      url.value = ''; quality.hidden = true;
+      msg.className = 'msg'; msg.textContent = 'Sent to __NAME__ ✓';
+      refresh();
+    } catch (err) { msg.className = 'msg err'; msg.textContent = err.message; }
+    go.disabled = false;
+  });
+  const list = $('div', { className: 'list' });
+  const head = $('header', {}, $('img', { src: '/icon.png', alt: '' }), $('h1', { textContent: '__NAME__' }), $('small', { id: 'device' }));
+  const share = $('details', {},
+    $('summary', { textContent: 'Send links from the Share button' }),
+    $('p', { textContent: 'Make a Shortcut once, and "Download with __NAME__" appears when you share a link from Safari, YouTube or any app:' }),
+    $('ol', {},
+      $('li', { textContent: 'Open the Shortcuts app, tap +, and name it "Download with __NAME__".' }),
+      $('li', {}, 'Add the action ', $('b', { textContent: 'Get Contents of URL' }), '. Set the URL to ', $('code', { textContent: location.origin + '/api/add' }), '.'),
+      $('li', {}, 'Tap Show More: Method ', $('b', { textContent: 'POST' }), '; add the header ', $('code', { textContent: 'Authorization' }), ' with this value: ', $('code', { textContent: 'Bearer ' + token }), ' ',
+        $('button', { type: 'button', textContent: 'Copy', onclick: e => copy('Bearer ' + token, e.target) })),
+      $('li', {}, 'Request Body: ', $('b', { textContent: 'JSON' }), ', add a Text field ', $('code', { textContent: 'url' }), ' set to ', $('b', { textContent: 'Shortcut Input' }), '.'),
+      $('li', { textContent: 'Tap the shortcut\'s name at the top, choose Details, turn on Show in Share Sheet, and keep only URLs as its input.' })),
+    $('p', { className: 'meta', textContent: 'Keep that header private: it lets a shortcut add downloads to __NAME__. Remove this phone in __NAME__ (Options › iPhone) to cancel it.' }));
+  const hint = navigator.standalone ? null : $('p', { className: 'hint', textContent: 'Tip: Share › Add to Home Screen puts __NAME__ next to your apps.' });
+  app.replaceChildren(head, form, $('h2', { textContent: 'Downloads' }), list, share, hint);
+  render.list = list;
+  refresh();
+  clearInterval(timer);
+  timer = setInterval(() => { if (!document.hidden) refresh(); }, 1500);
+}
+
+function copy(text, button) {
+  const t = $('textarea', { value: text, readOnly: true, style: 'position:fixed;opacity:0' });
+  document.body.append(t);
+  t.select(); t.setSelectionRange(0, text.length);
+  const ok = document.execCommand('copy'); // navigator.clipboard needs https
+  t.remove();
+  button.textContent = ok ? 'Copied ✓' : 'Select it and copy';
+}
+
+async function refresh() {
+  if (busy || !token) return;
+  busy = true;
+  try {
+    const s = await api('/api/state');
+    const d = document.getElementById('device');
+    if (d) d.textContent = s.device;
+    render(s.downloads);
+  } catch (e) {
+    if (token && render.list) render.list.replaceChildren($('p', { className: 'empty', textContent: '__NAME__ is not answering. Is the PC on and this phone on the same Wi-Fi?' }));
+  }
+  busy = false;
+}
+
+function render(downloads) {
+  const list = render.list;
+  if (!downloads.length) { list.replaceChildren($('p', { className: 'empty', textContent: 'No downloads yet. Paste a link above.' })); return; }
+  // running first, then waiting, then the rest; newest first within each
+  const order = { downloading: 0, queued: 1, scheduled: 2, paused: 3, error: 4, done: 5 };
+  downloads.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  list.replaceChildren(...downloads.map(d => {
+    const frac = d.status === 'done' ? 1 : d.size ? Math.min(1, d.got / d.size) : 0;
+    const bits = [STATUS[d.status] || d.status];
+    if (d.status === 'downloading' && d.speed) bits.push(size(d.speed) + '/s');
+    if (d.size) bits.push(d.status === 'done' ? size(d.size) : size(d.got) + ' of ' + size(d.size));
+    const act = (op, label, extra = '') => $('button', { type: 'button', textContent: label, className: extra, onclick: async e => {
+      if (op === 'remove' && !confirm('Remove "' + d.name + '" from __NAME__? A finished file stays on the PC.')) return;
+      e.target.disabled = true;
+      try { await api('/api/action', { id: d.id, op }); } catch (err) { alert(err.message); }
+      refresh();
+    } });
+    const save = $('button', { type: 'button', className: 'primary', textContent: 'Save to iPhone', onclick: async () => {
+      try { const t = await api('/api/ticket', { id: d.id }); location.href = t.url; } catch (err) { alert(err.message); }
+    } });
+    const buttons = d.status === 'done' ? [save, act('remove', 'Remove')]
+      : ['downloading', 'queued'].includes(d.status) ? [act('pause', 'Pause'), act('remove', 'Remove')]
+      : [act('resume', 'Resume'), act('remove', 'Remove')];
+    return $('div', { className: 'item' },
+      $('div', { className: 'name', textContent: d.name }),
+      $('div', { className: 'meta' + (d.status === 'error' ? ' err' : ''), textContent: d.status === 'error' && d.error ? d.error : bits.join(' · ') }),
+      $('div', { className: 'bar' + (d.status === 'done' ? ' done' : '') }, $('i', { style: 'width:' + (frac * 100).toFixed(1) + '%' })),
+      $('div', { className: 'actions' }, ...buttons));
+  }));
+}
+
+const secret = new URLSearchParams(location.hash.slice(1)).get('pair');
+if (secret) pair(secret);
+else if (token) start();
+else showPairing();
+</script>
+</body>
+</html>

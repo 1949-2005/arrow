@@ -1,6 +1,9 @@
 # File map
 
 - `engine.js` — core: pending downloads (probe with `probe.duplicate`, `confirm()`), the run queue, dynamic segmentation, resume, retries, stall watchdog, global and per-download speed limits, duplicates (number / replace / resume), named queues and their scheduler tick (`queues()`, `startQueue()`, `stopQueue()`, retries, when done), editable categories (`settings.types`, `CATEGORIES` as the default), per-download description, when done, last try and the Download complete flag, the one power countdown (all downloads, a download, a queue), `state.json` persistence and migrations, `view()` for the native app
+- `remote.js` — phone access: a second HTTP server on the local network (port 9615, `FASTDL_REMOTE_PORT`), only when settings.remote.enabled; pairing by a one-time secret in a QR link's #fragment, device tokens (state.json keeps their SHA-256), Host must be an IP address; the phone's API (state, add, pause/resume/remove, one-time file tickets) and its page (`remote/`)
+- `qr.js` — QR codes (byte mode, level M, best mask) for the pairing link
+- `remote/` — the phone's page (`index.html`, one file: pairing, the download list, add, Save to iPhone, the Shortcut steps) and its `manifest.webmanifest`; `__NAME__` is brand.json's name, filled in when served
 - `log.js` — `log.txt` next to `state.json` (the native app's `Log` in `Core.cs` writes the same file and format): one line per entry, trimmed to its newest half past 1 MB; `catchCrashes()` logs uncaught errors, saves the state and exits 1 (`FASTDL_CRASH` makes one, for tests)
 - `hls.js` — HLS (.m3u8): best-variant pick and its separate sound track (X), AES-128 decryption, parallel segment fetch written in order, ffmpeg join of video and sound
 - `ytdlp.js` — YouTube and the other video sites (`SITES`, `videoSite()`) via yt-dlp + ffmpeg: URL check, format list with real sizes (`listFormats`, cached 15 min), format key / quality → args, tool lookup, progress parsing, pause (process-tree kill), temp folder `.fastdl\<id>`
@@ -34,9 +37,10 @@
   - `Updater.cs` — updates from GitHub Releases (brand.json's `repo`): the latest release's GlideSetup.exe checked against its .sha256 and run `--quiet --quit-app --start`, off the UI thread; `GLIDE_UPDATES_URL` (tests); `--check-update` prints the result
   - `DropTarget.cs` — IDM's drop target: a 64 px tile on top of every window (no activation, not in Alt+Tab), links dropped on it go to the main window's Drop(); the logo and the total speed; dragged by any point, its place in ui.json; double-click opens the main window
   - `Toasts.cs` — Windows notifications through WinRT (Windows' own .winmd files, build.js REFS): an AppUserModelID registered for the user, Download complete with Open and Show in folder, clicks back through Activated; false when Windows refuses or the user turned notifications off (the caller shows a tray balloon); `--check-notification`
+  - `PhoneDialog.cs` — Pair an iPhone: the QR code of the pairing link, drawn from the engine's grid; watches /api/remote and closes once the phone has paired
   - `TrayButton.cs` — the progress window's Minimize to tray button: a small owned layered window over the title bar, left of minimize (DWMWA_CAPTION_BUTTON_BOUNDS), drawn like the caption glyphs with per-pixel alpha; follows its owner, hides while it is hidden or minimized
   - `AddLinksDialog.cs` — Add links: batch ranges, Quality for YouTube links, Save as, Start later, POST /api/add per link
-  - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Sites, Categories, Queues); Sites: a row per site (host, connections, limit), up to six; General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
+  - `OptionsDialog.cs` — Options: a page navigation (General, Downloads, Sites, iPhone, Categories, Queues); Sites: a row per site (host, connections, limit), up to six; General and Downloads validated inline, Save sends only what changed (POST /api/settings); Categories: `CategoryTable`, Add / Edit… through the category editor, Remove (custom ones, asks first, POST {types}); Queues: Open Scheduler (saves, closes Options, opens the Scheduler)
   - `Tests.cs` — console test of `Core.cs` with the old `ui.test.js`'s cases, the list's columns, sorting and status texts, the IDM-parity helpers, emoji detection (`HasEmoji`), file icon extensions (`IconExt`), the SVG icon parser (`ParseSvg`), plus an `/api/state` round trip
   - `build.js` — `compileApp()` (winexe with name, version, icon, manifest), `compileSetup()` (the installer) and `compileTests()` through `csc.exe`
   - `app.manifest` — asInvoker, Windows 10/11, DPI-aware, visual styles
@@ -52,6 +56,8 @@
 - `extension.test.js` — extension logic (background.js, `pickMedia`, `playerData`/`optionsFromPlayer` against `formatOptions`, popup, content.js helpers) with fake `chrome` and `fetch`, plus manifest/syntax checks and its name against `brand.json`
 - `sites.test.js` — per-site settings: hosts cleaned, matched with their subdomains (the longest entry wins), saved, and a new download taking its site's limit
 - `proxy.test.js` — the proxy setting's rule, the variables the engine needs for it, yt-dlp's `--proxy`, and a real engine restarting with the proxy when it changes
+- `remote.test.js` — phone access against a real engine: off by default, pairing once, tokens, IP-only hosts, add / pause / save a file by ticket, a removed phone, rate limiting, off
+- `qr.test.js` — QR codes read back by a reader written from the standard (format bits, Reed-Solomon syndromes, the text)
 - `log.test.js` — log line format, trimming, an unwritable file, and a real engine crash (`FASTDL_CRASH`) landing in `log.txt`
 - `ytdlp.test.js` — YouTube URLs, format list and sizes, args, progress, pause/resume, errors, using the fake yt-dlp
 - `fixtures/fake-ytdlp.mjs` — stand-in for yt-dlp in tests (prints the FDL* lines, writes files, answers `-J`)

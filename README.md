@@ -284,6 +284,18 @@ Options has four pages.
 
 Paste a video page from Vimeo, Dailymotion, X/Twitter, TikTok, Instagram, Facebook, Reddit, Twitch, SoundCloud, Bilibili or Streamable and Glide downloads it like a YouTube video: through yt-dlp, with the same format list in Download File Info and the same Quality in Add links. Private videos that need a login don't work (Glide never passes your browser's cookies to yt-dlp).
 
+## On your iPhone
+
+Your iPhone can send links to Glide, follow your downloads and save finished files, over your home Wi-Fi. The downloads run on the PC.
+
+1. On the PC: **Options › iPhone**, tick **Let my iPhone use Glide on this Wi-Fi**. If Windows asks about its firewall, allow Glide on private networks.
+2. Click **Pair an iPhone…** and scan the QR code with the iPhone's camera. Tap the link that appears.
+3. On the iPhone, in Safari: **Share › Add to Home Screen**. Glide now opens like an app.
+
+On the iPhone you can paste a link (with a quality choice for YouTube and other video sites), pause, resume or remove downloads, and **Save to iPhone** a finished file. The page also explains how to make a Shortcut, so **Download with Glide** shows up in the Share menu of Safari, YouTube and other apps.
+
+Only phones you paired can use Glide, and only on your network. Remove a phone in **Options › iPhone**, or untick the box to turn it all off. The PC must be on, with Glide running.
+
 ## Drop target
 
 **⋯ › Show drop target** puts a small Glide tile on top of every window, like IDM's. Drag a link (or several) from your browser onto it to download them. It shows the total speed while something downloads. Drag it anywhere: it stays there next time. Double-click it to open Glide, right-click it to hide it.

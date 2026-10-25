@@ -11,7 +11,7 @@ namespace Glide
 {
     public class OptionsDialog : Dialog
     {
-        public const string General = "general", Downloads = "downloads", Sites = "sites", Categories = "categories", Queues = "queues";
+        public const string General = "general", Downloads = "downloads", Sites = "sites", Phone = "phone", Categories = "categories", Queues = "queues";
         readonly Api api; // null in GLIDE_SHOTS
         Settings settings; // the engine's, again after each category change
         readonly Dictionary<string, object> before; // General and Downloads as the dialog opened
@@ -45,6 +45,22 @@ namespace Glide
         readonly Caption siteHead = Label("Site"), connHead = Label("Connections"), limitHead = Label("Limit (KB/s)");
         readonly FlatButton addSite = new FlatButton("Add site", Glyph.Add, ButtonKind.Secondary);
         string sitesBefore;
+
+        // iPhone: phone access (remote.js), applied at once like Categories; the paired phones, at most MaxPhones listed
+        const int MaxPhones = 6;
+        readonly FlatCheck phoneOn = new FlatCheck("Let my iPhone use " + Program.Name + " on this Wi-Fi");
+        readonly Caption phoneState = new Caption(Theme.Body, () => Theme.Muted) { MaxLines = 3 };
+        readonly Caption phoneNote = new Caption(Theme.Small, () => Theme.Muted)
+        {
+            MaxLines = 6,
+            Text = "Your iPhone can send links to " + Program.Name + ", follow downloads and save finished files. Only phones you pair can, and only on this network. "
+                + "Windows may ask once to let " + Program.Name + " through its firewall: allow it on private networks.",
+        };
+        readonly FlatButton pairPhone = new FlatButton("Pair an iPhone…", '\0', ButtonKind.Primary);
+        readonly Caption phonesHead = Label("Paired phones");
+        readonly List<Control[]> phoneRows = new List<Control[]>();
+        RemoteInfo phone = new RemoteInfo();
+        bool phoneFilling;
 
         // Categories
         readonly CategoryTable table = new CategoryTable();
@@ -113,6 +129,7 @@ namespace Glide
             nav.Add(General, "General", '\0', null);
             nav.Add(Downloads, "Downloads", '\0', null);
             nav.Add(Sites, "Sites", '\0', null);
+            nav.Add(Phone, "iPhone", '\0', null);
             nav.Add(Categories, "Categories", '\0', null);
             nav.Add(Queues, "Queues", '\0', null);
             Page(General, startup, clipboard, showComplete, dupLabel, duplicates, themeLabel, theme);
@@ -121,6 +138,15 @@ namespace Glide
             foreach (var x in s.Sites.Take(MaxSites)) AddSiteRow(x);
             sitesBefore = Json.Serialize(SitesBody());
             addSite.Click += (o, e) => { AddSiteRow(new Site { Host = "" }); siteRows.Last().Host.Box.Focus(); };
+            Page(Phone, phoneOn, phoneState, phoneNote, pairPhone, phonesHead);
+            phoneOn.CheckedChanged += (o, e) => { if (!phoneFilling) AskPhone("/api/remote", new Dictionary<string, object> { { "enabled", phoneOn.Checked } }); };
+            pairPhone.Click += (o, e) => PairPhone();
+            if (api != null) AskPhone("/api/remote", null);
+            else FillPhone(new RemoteInfo // GLIDE_SHOTS
+            {
+                Enabled = true, Listening = true, Port = 9615, Addresses = new List<string> { "192.168.1.23" },
+                Devices = new List<RemoteDevice> { new RemoteDevice { Id = "a", Name = "iPhone", Added = DateTimeOffset.Now.AddDays(-2).ToUnixTimeMilliseconds() } },
+            });
             Page(Categories, table, add, edit, remove, note);
             Page(Queues, queuesText, openScheduler);
             Add(error);
@@ -144,6 +170,73 @@ namespace Glide
         }
 
         void Page(string page, params Control[] cs) { foreach (var c in cs) { pageOf[c] = page; Add(c); } }
+
+        // ---- iPhone
+
+        void AskPhone(string path, object body)
+        {
+            if (api == null) return;
+            var a = api;
+            object answer = null;
+            phoneOn.Enabled = pairPhone.Enabled = false;
+            Dialogs.Call(this, () => answer = a.Post(path, body), err =>
+            {
+                if (err != null) { ShowError(err); FillPhone(phone); }
+                else FillPhone(RemoteInfo.From(answer as IDictionary<string, object>));
+            });
+        }
+
+        void FillPhone(RemoteInfo info)
+        {
+            phone = info;
+            phoneFilling = true;
+            phoneOn.Checked = info.Enabled;
+            phoneFilling = false;
+            phoneOn.Enabled = !busy;
+            pairPhone.Enabled = !busy && info.Enabled && info.Listening;
+            phoneState.Fore = () => info.Enabled && !info.Listening ? Theme.Err : Theme.Muted;
+            phoneState.Text = !info.Enabled ? "Off."
+                : !info.Listening ? Program.Name + " couldn't open port " + info.Port + ": another program uses it."
+                : info.Addresses.Count == 0 ? "On, but this PC isn't on a local network."
+                : "On, at http://" + info.Addresses[0] + ":" + info.Port;
+            foreach (var row in phoneRows) foreach (var c in row) { pageOf.Remove(c); Body.Controls.Remove(c); c.Dispose(); }
+            phoneRows.Clear();
+            var now = DateTime.Now;
+            foreach (var d in info.Devices.Take(MaxPhones))
+            {
+                var id = d.Id;
+                var name = new Caption(Theme.Body, () => Theme.Text) { Text = d.Name + " · paired " + Core.DateLabel(d.Added, now) };
+                var drop = new FlatButton("", Glyph.Delete, ButtonKind.Ghost) { Svg = "delete", AccessibleName = "Remove " + d.Name };
+                drop.Click += (o, e) =>
+                {
+                    if (Dialogs.Confirm(this, "Remove phone", "Remove " + d.Name + "? It can't use " + Program.Name + " any more until you pair it again.", "Remove", true))
+                        AskPhone("/api/remote/remove", new Dictionary<string, object> { { "id", id } });
+                };
+                Page(Phone, name, drop);
+                name.Visible = drop.Visible = nav.Selected == Phone;
+                phoneRows.Add(new Control[] { name, drop });
+            }
+            phonesHead.Text = info.Devices.Count == 0 ? "Paired phones: none yet" : "Paired phones";
+            Relayout();
+        }
+
+        void PairPhone()
+        {
+            if (api == null) return;
+            var a = api;
+            object answer = null;
+            pairPhone.Enabled = false;
+            Dialogs.Call(this, () => answer = a.Post("/api/remote/pair", null), err =>
+            {
+                pairPhone.Enabled = true;
+                if (err != null) { ShowError(err); return; }
+                var o = answer as IDictionary<string, object>;
+                var grid = RemoteInfo.Grid(o == null ? null : o["qr"]);
+                if (grid == null) { ShowError("The QR code didn't come through. Try again."); return; }
+                using (var d = new PhoneDialog(a, phone.Devices.Count, grid, o.Str("url"))) d.ShowDialog(this);
+                AskPhone("/api/remote", null);
+            });
+        }
 
         // ---- Sites
 
@@ -288,7 +381,7 @@ namespace Glide
         void Lock(bool on)
         {
             busy = on;
-            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, proxyOn, proxy, add, edit, remove, openScheduler, save, addSite }.Concat(siteRows.SelectMany(r => new Control[] { r.Host, r.Conn, r.Limit, r.Remove }))) c.Enabled = !on;
+            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, proxyOn, proxy, add, edit, remove, openScheduler, save, addSite, phoneOn, pairPhone }.Concat(siteRows.SelectMany(r => new Control[] { r.Host, r.Conn, r.Limit, r.Remove }))) c.Enabled = !on;
             if (!on) Enable();
         }
 
@@ -413,6 +506,26 @@ namespace Glide
                 }
                 addSite.Bounds = new Rectangle(x, y + Theme.Px(4), Math.Max(Theme.Px(96), addSite.PreferredWidth), row);
                 y = addSite.Bottom;
+            }
+            else if (page == Phone)
+            {
+                phoneOn.Width = Math.Min(w, phoneOn.PreferredWidth);
+                phoneOn.Location = new Point(x, y);
+                y = phoneOn.Bottom + Theme.Px(4);
+                phoneState.Bounds = new Rectangle(x + Theme.Px(28), y, w - Theme.Px(28), phoneState.HeightFor(w - Theme.Px(28)));
+                y = phoneState.Bottom + Theme.Px(10);
+                phoneNote.Bounds = new Rectangle(x, y, w, phoneNote.HeightFor(w));
+                y = phoneNote.Bottom + Theme.Px(14);
+                pairPhone.Bounds = new Rectangle(x, y, Math.Max(Theme.Px(140), pairPhone.PreferredWidth), row);
+                y += row + Theme.Px(20);
+                phonesHead.Bounds = new Rectangle(x, y, w, phonesHead.Height);
+                y += phonesHead.Height + Theme.Px(6);
+                foreach (var r in phoneRows)
+                {
+                    r[1].Bounds = new Rectangle(x + w - Theme.Px(32), y, Theme.Px(32), row);
+                    r[0].Bounds = new Rectangle(x, y, w - Theme.Px(40), row);
+                    y += row + Theme.Px(4);
+                }
             }
             else if (page == Categories) y = CategoriesLayout(x, w);
             else

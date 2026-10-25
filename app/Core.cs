@@ -132,6 +132,43 @@ namespace Glide
         }
     }
 
+    // Phone access (POST /api/remote): on or off, listening, its port, this PC's local addresses, the paired phones
+    public class RemoteDevice
+    {
+        public string Id, Name;
+        public long Added, Seen;
+    }
+
+    public class RemoteInfo
+    {
+        public bool Enabled, Listening;
+        public int Port;
+        public List<string> Addresses = new List<string>();
+        public List<RemoteDevice> Devices = new List<RemoteDevice>();
+
+        public static RemoteInfo From(IDictionary<string, object> o)
+        {
+            var r = new RemoteInfo();
+            if (o == null) return r;
+            r.Enabled = o.Bool("enabled") ?? false;
+            r.Listening = o.Bool("listening") ?? false;
+            r.Port = o.Int("port") ?? 0;
+            r.Addresses = o.Strings("addresses") ?? new List<string>();
+            r.Devices = (o.List("devices") ?? new List<object>()).OfType<IDictionary<string, object>>()
+                .Select(d => new RemoteDevice { Id = d.Str("id") ?? "", Name = d.Str("name") ?? "Phone", Added = d.Long("added") ?? 0, Seen = d.Long("seen") ?? 0 }).ToList();
+            return r;
+        }
+
+        // POST /api/remote/pair's qr: rows of booleans (dark modules); null when it isn't a square grid
+        public static bool[][] Grid(object qr)
+        {
+            var rows = qr as System.Collections.IEnumerable;
+            if (rows == null) return null;
+            var grid = rows.Cast<object>().Select(r => (r as System.Collections.IEnumerable ?? new object[0]).Cast<object>().Select(v => v is bool && (bool)v).ToArray()).ToArray();
+            return grid.Length >= 21 && grid.All(r => r.Length == grid.Length) ? grid : null;
+        }
+    }
+
     // A site's own settings: Connections and LimitKB, 0 for the usual ones
     public class Site
     {

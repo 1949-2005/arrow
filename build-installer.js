@@ -129,7 +129,7 @@ export async function stage(staging) {
   const { version } = JSON.parse(readFileSync(path.join(here, 'package.json'), 'utf8'));
   // the logo's render script is for building, not for the installed app
   const copy = (from, to = from) => fs.cp(path.join(here, from), path.join(staging, to), { recursive: true, filter: f => !f.endsWith('.ps1') });
-  for (const f of [...engineFiles(), 'package.json', 'brand.json', 'LICENSE', 'assets', 'extension']) await copy(f); // package.json: "type": "module"
+  for (const f of [...engineFiles(), 'package.json', 'brand.json', 'LICENSE', 'assets', 'extension', 'remote']) await copy(f); // package.json: "type": "module"; remote: the phone's page
   const license = nodeLicense();
   await fs.mkdir(path.join(staging, 'licenses'));
   await fs.copyFile(license, path.join(staging, 'licenses', 'node-LICENSE.txt'));

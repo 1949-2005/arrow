@@ -18,7 +18,7 @@ const win = { skip: process.platform !== 'win32' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 test('the engine files are desktop.js and what it imports, followed through', () => {
-  assert.deepEqual(engineFiles(), ['desktop.js', 'engine.js', 'hls.js', 'log.js', 'server.js', 'ytdlp.js']);
+  assert.deepEqual(engineFiles(), ['desktop.js', 'engine.js', 'hls.js', 'log.js', 'qr.js', 'remote.js', 'server.js', 'ytdlp.js']);
 });
 
 test('zipFolder writes a zip that unpacks to the same files', async () => {
@@ -97,7 +97,7 @@ test('install: files, tools through winget, shortcuts, Settings > Apps; the engi
   const r = run(setup, ['--quiet']);
   assert.equal(r.status, 0, r.stderr);
   for (const f of [NAME + '.exe', NAME + ' Engine.exe', 'Uninstall ' + NAME + '.exe', ...engineFiles(), 'package.json', 'brand.json', 'assets/logo.ico',
-    'assets/types/video.svg', 'assets/icons/active.svg', 'extension/manifest.json', 'extension/icons/icon-128.png', 'LICENSE', 'README.txt', 'licenses/node-LICENSE.txt'])
+    'assets/types/video.svg', 'assets/icons/active.svg', 'extension/manifest.json', 'extension/icons/icon-128.png', 'remote/index.html', 'LICENSE', 'README.txt', 'licenses/node-LICENSE.txt'])
     assert.ok(existsSync(path.join(dir, f)), f);
   const all = readdirSync(dir, { recursive: true }).map(f => f.replaceAll('\\', '/'));
   assert.deepEqual(all.filter(f => /\.test\.js$|^app\/|^fixtures|^docs|^\.scratch|state\.json|installed\.json|\.cs$/.test(f)), []);
