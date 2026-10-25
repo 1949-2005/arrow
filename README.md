@@ -273,13 +273,17 @@ Options has four pages.
 - No sites other than YouTube that send audio and video separately (DASH).
 - No DRM-protected video.
 - No torrents and no FTP.
-- No proxy settings.
+- Proxies: HTTP and HTTPS proxies only (no SOCKS).
 - `Arrow.exe` and `Arrow Engine.exe` are not signed. If Windows Smart App Control is on, it may block Arrow.
 - If Arrow stops in a wrong way (for example from Task Manager), its icon can stay next to the clock until you move the mouse over it.
 - Clipboard monitoring only offers links that end in a file type of a category (Video, Music, Programs, Documents, Compressed, or your own).
 - Queues start at their time and sleep and shut down only happen while the app runs. Shut down does not force apps to close: an app with unsaved work can stop it.
 - HLS video without a separate sound track is saved as .ts (or .mp4). Most players (VLC, MPC-HC) can play it. ffmpeg can convert it.
 - The extension logic is tested with fake browser parts, but it has not yet been tried in a real browser.
+
+## Proxy
+
+**Options › Downloads › Use a proxy**, then its address, like `http://proxy.example.com:8080` (or `https://`, with `user:password@` before the host if it needs one). Every download, YouTube included, goes through it. Saving restarts Arrow's engine for a moment to take the new setting; running downloads stop and you resume them.
 
 ## Updates
 

@@ -80,6 +80,7 @@ export function ytdlpArgs(d, settings, ffmpeg) {
     '--ffmpeg-location', ffmpeg, '-P', d.tmpDir, '-o', 'media.%(ext)s',
     ...formatArgs(d),
     ...(kb < Infinity ? ['--limit-rate', `${kb}K`] : []),
+    ...(settings.proxy ? ['--proxy', settings.proxy] : []),
     // fragments at once (a recording YouTube is still processing comes in pieces); --limit-rate holds per fragment, so one while limited
     '-N', String(kb < Infinity ? 1 : settings.connections || 1),
     // --print implies --quiet, which would hide the progress lines
@@ -113,7 +114,7 @@ async function readFormats(mgr, id) {
   try {
     // skip=hls,dash: the list only offers https formats, so the stream manifests are not fetched (about 0.6 s less)
     ({ stdout: out } = await run(cmd[0], [...cmd.slice(1), '-J', '--no-playlist', '--ignore-config', '--no-warnings', '--extractor-args', 'youtube:skip=hls,dash',
-      '--', `https://www.youtube.com/watch?v=${id}`],
+      ...(mgr.settings?.proxy ? ['--proxy', mgr.settings.proxy] : []), '--', `https://www.youtube.com/watch?v=${id}`],
       { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }));
   } catch (e) {
     const line = /^ERROR:.*$/m.exec(e.stderr ?? '')?.[0];

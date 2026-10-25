@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Manager } from './engine.js';
-import { here, brand, exe, port as PORT, startupDir, powershell, shortcut } from './desktop.js';
+import { here, brand, exe, port as PORT, startupDir, powershell, shortcut, proxyEnv, respawn } from './desktop.js';
 import { log, catchCrashes } from './log.js';
 
 const stateFile = process.env.FASTDL_STATE || path.join(here, 'state.json');
@@ -74,7 +74,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/state') {
       if (!origin) appSeen = Date.now();
       const v = mgr.view();
-      return send(res, 200, { ...v, open: opens, settings: { ...v.settings, startup: existsSync(startupLink) } });
+      // proxyActive: this process runs with settings.proxy (it restarts to take a new one)
+      return send(res, 200, { ...v, open: opens, proxyActive: process.env.NODE_USE_ENV_PROXY === '1', settings: { ...v.settings, startup: existsSync(startupLink) } });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
     const body = await readJson(req);
@@ -94,7 +95,15 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/settings') {
       mgr.update(body);
       if (body.startup != null && !!body.startup !== existsSync(startupLink)) await setStartup(!!body.startup);
-      return send(res, 200, mgr.settings);
+      send(res, 200, mgr.settings);
+      // a new proxy needs a new process (Node reads it at start): this one stops listening, starts the next and ends
+      const env = body.proxy != null && proxyEnv(mgr.settings.proxy);
+      if (env) {
+        log(logFile, 'engine', 'restarting for the proxy setting');
+        server.close();
+        setTimeout(() => { respawn(env); quit(); }, 200);
+      }
+      return;
     }
     if (url === '/api/action' && body.op === 'folder') {
       const d = mgr.list.find(x => x.id === body.id);

@@ -2,7 +2,7 @@
 // The native app (<name>.exe, app/) starts it when the engine does not answer, and shows the windows and the tray icon.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -35,10 +35,33 @@ export const shortcut = (link, target, args = '') => powershell('$s = (New-Objec
   { FDL_LINK: link, FDL_TARGET: target, FDL_ARGS: args, FDL_DIR: path.dirname(target) });
 
 // Errors are thrown: the engine exe shows them in a message box (it has no console).
+// The proxy (settings.proxy) is Node's own: NODE_USE_ENV_PROXY with HTTP(S)_PROXY, read once when the process starts.
+// The variables this process needs for proxy ('' = none), or null when it already runs with them.
+export function proxyEnv(proxy, env = process.env) {
+  const want = proxy ? { NODE_USE_ENV_PROXY: '1', HTTP_PROXY: proxy, HTTPS_PROXY: proxy, NO_PROXY: '127.0.0.1,localhost,::1' }
+    : { NODE_USE_ENV_PROXY: undefined, HTTP_PROXY: undefined, HTTPS_PROXY: undefined, NO_PROXY: undefined };
+  const has = k => env[k] ?? env[k.toLowerCase()];
+  return Object.entries(want).every(([k, v]) => (has(k) || undefined) === v) ? null : want;
+}
+
+export const stateFile = () => process.env.FASTDL_STATE || path.join(here, 'state.json');
+function savedProxy() {
+  try { return JSON.parse(readFileSync(stateFile(), 'utf8')).settings?.proxy || ''; } catch { return ''; }
+}
+
+// This process again with env (the proxy's variables), detached: it outlives this one, which then ends
+export function respawn(env) {
+  const next = { ...process.env };
+  for (const [k, v] of Object.entries(env)) { delete next[k]; delete next[k.toLowerCase()]; if (v !== undefined) next[k] = v; }
+  spawn(process.execPath, process.argv.slice(1), { env: next, detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+
 export async function start() {
   const ping = await fetch(url + '/api/ping', { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(e => e);
   if (ping?.app === 'fastdl') process.exit(0); // already running
   if (ping?.cause?.code !== 'ECONNREFUSED') throw new Error(`Port ${port} is used by another program, so ${brand.name} cannot start.`);
+  const env = proxyEnv(savedProxy());
+  if (env) { respawn(env); process.exit(0); } // not listening yet: the new one finds the port free
   await import('./server.js');
 }
 

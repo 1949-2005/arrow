@@ -12,6 +12,17 @@ const UA = 'Mozilla/5.0 (compatible; FastDL/1.0)';
 const HEADERS_ALLOWED = ['cookie', 'referer', 'user-agent'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || 0));
+
+// settings.proxy: '' (none) or http(s)://[user:pass@]host:port, as typed; anything else is null (refused)
+export function cleanProxy(v) {
+  const s = String(v ?? '').trim();
+  if (s === '') return '';
+  try {
+    const u = new URL(s);
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || !u.port || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
+    return s.replace(/\/$/, '');
+  } catch { return null; }
+}
 const describe = t => String(t ?? '').replace(/\p{Cc}/gu, '').trim().slice(0, 300).trim() || null;
 const DUPLICATES = ['ask', 'number', 'replace', 'resume'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -105,7 +116,7 @@ class Limiter {
 }
 
 export class Manager {
-  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, folders: {}, types: structuredClone(CATEGORIES), duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
+  settings = { dir: path.join(os.homedir(), 'Downloads'), connections: 8, maxActive: 3, speedLimitKB: 0, speedLimitOn: false, categories: true, clipboard: false, proxy: '', folders: {}, types: structuredClone(CATEGORIES), duplicates: 'ask', showComplete: true, queues: [queueFields({ id: MAIN, name: MAIN_NAME })] };
   list = [];
   running = new Map();
   // Running queues, never saved: id → {tries: download id → retries used this run, waiting: download id → retry time, worked}
@@ -166,6 +177,8 @@ export class Manager {
     t.duplicates = DUPLICATES.includes(dup) ? dup : 'ask';
     if (s.categories != null) t.categories = !!s.categories;
     if (s.clipboard != null) t.clipboard = !!s.clipboard;
+    if (s.proxy != null) { const p = cleanProxy(s.proxy); if (p == null) throw new Error('The proxy must look like http://host:port'); t.proxy = p; }
+    t.proxy = cleanProxy(t.proxy) ?? ''; // a loaded state.json
     // A rename is a custom name replaced by a new one at the same place in the order: its remembered folder follows.
     const before = isObject(t.types) ? t.types : {}, was = Object.keys(before);
     t.types = cleanTypes(s.types, before);

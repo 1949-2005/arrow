@@ -30,7 +30,8 @@ namespace Arrow
         readonly Caption dirLabel = Label("Save to folder"), connLabel = Label("Connections per download"), activeLabel = Label("Downloads at the same time");
         readonly TextField dir = new TextField('\0', ""), conn = new TextField('\0', ""), active = new TextField('\0', ""), limit = new TextField('\0', "");
         readonly FlatButton browse = new FlatButton("Browse…", '\0', ButtonKind.Secondary);
-        readonly FlatCheck sort = new FlatCheck("Sort into category folders"), limitOn = new FlatCheck("Limit all downloads to");
+        readonly FlatCheck sort = new FlatCheck("Sort into category folders"), limitOn = new FlatCheck("Limit all downloads to"), proxyOn = new FlatCheck("Use a proxy");
+        readonly TextField proxy = new TextField('\0', "http://host:port");
         readonly Caption connHint = Hint("1–32"), activeHint = Hint("1–20"), kbs = Hint("KB/s");
         // Categories
         readonly CategoryTable table = new CategoryTable();
@@ -78,6 +79,8 @@ namespace Arrow
             active.Text = s.MaxActive.ToString();
             limitOn.Checked = s.SpeedLimitOn && s.SpeedLimitKB > 0;
             limit.Text = (s.SpeedLimitKB > 0 ? s.SpeedLimitKB : 500).ToString(); // what checking the box limits to when none was set
+            proxyOn.Checked = !string.IsNullOrEmpty(s.Proxy);
+            proxy.Text = s.Proxy ?? "";
             before = Values();
             dir.Box.AccessibleName = "Save to folder";
             conn.Box.AccessibleName = "Connections per download, 1 to 32";
@@ -87,6 +90,10 @@ namespace Arrow
             // typing a limit turns it on
             limit.Box.TextChanged += (o, e) => { if (limit.Box.Focused && !limitOn.Checked) limitOn.Checked = true; else Check(false); };
             limitOn.CheckedChanged += (o, e) => Check(false);
+            proxy.Box.AccessibleName = "Proxy address, like http://host:port";
+            // typing an address turns it on
+            proxy.Box.TextChanged += (o, e) => { if (proxy.Box.Focused && !proxyOn.Checked) proxyOn.Checked = true; else Check(false); };
+            proxyOn.CheckedChanged += (o, e) => Check(false);
 
             nav.TabIndex = 0;
             Add(nav);
@@ -95,7 +102,7 @@ namespace Arrow
             nav.Add(Categories, "Categories", '\0', null);
             nav.Add(Queues, "Queues", '\0', null);
             Page(General, startup, clipboard, showComplete, dupLabel, duplicates, themeLabel, theme);
-            Page(Downloads, dirLabel, dir, browse, sort, connLabel, conn, connHint, activeLabel, active, activeHint, limitOn, limit, kbs);
+            Page(Downloads, dirLabel, dir, browse, sort, connLabel, conn, connHint, activeLabel, active, activeHint, limitOn, limit, kbs, proxyOn, proxy);
             Page(Categories, table, add, edit, remove, note);
             Page(Queues, queuesText, openScheduler);
             Add(error);
@@ -142,6 +149,7 @@ namespace Arrow
                 { "maxActive", Core.WholeNumber(active.Text, 1, 20) ?? 0 },
                 { "speedLimitOn", limitOn.Checked },
                 { "speedLimitKB", limitOn.Checked && kb != null ? kb.Value : limitKB },
+                { "proxy", proxyOn.Checked ? proxy.Text.Trim() : "" },
             };
         }
 
@@ -159,6 +167,7 @@ namespace Arrow
             check(conn, Core.WholeNumber(conn.Text, 1, 32) != null, "Connections per download must be a whole number from 1 to 32.");
             check(active, Core.WholeNumber(active.Text, 1, 20) != null, "Downloads at the same time must be a whole number from 1 to 20.");
             check(limit, !limitOn.Checked || Core.WholeNumber(limit.Text, 1, 10000000) != null, "The speed limit must be a whole number of KB/s from 1 to 10 000 000.");
+            check(proxy, !proxyOn.Checked || Core.IsProxy(proxy.Text), "The proxy must look like http://host:port (or https://, with user:password@ if it needs one).");
             if (all || problems.Count == 0 || error.Text != "") ShowError(problems.FirstOrDefault());
             return problems.Count == 0;
         }
@@ -210,7 +219,7 @@ namespace Arrow
         void Lock(bool on)
         {
             busy = on;
-            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, add, edit, remove, openScheduler, save }) c.Enabled = !on;
+            foreach (var c in new Control[] { startup, clipboard, showComplete, duplicates, theme, dir, browse, sort, conn, active, limitOn, limit, proxyOn, proxy, add, edit, remove, openScheduler, save }) c.Enabled = !on;
             if (!on) Enable();
         }
 
@@ -310,6 +319,10 @@ namespace Arrow
                 limitOn.Location = new Point(x, y + (row - limitOn.Height) / 2);
                 limit.Bounds = new Rectangle(limitOn.Right + gap, y, Theme.Px(88), row);
                 kbs.Bounds = new Rectangle(limit.Right + gap, y, Theme.Measure(kbs.Text, kbs.Font).Width + 1, row);
+                y += row + gap;
+                proxyOn.Width = Math.Max(proxyOn.PreferredWidth, limitOn.Width);
+                proxyOn.Location = new Point(x, y + (row - proxyOn.Height) / 2);
+                proxy.Bounds = new Rectangle(proxyOn.Right + gap, y, Math.Min(Theme.Px(260), x + w - proxyOn.Right - gap), row);
                 y += row;
             }
             else if (page == Categories) y = CategoriesLayout(x, w);

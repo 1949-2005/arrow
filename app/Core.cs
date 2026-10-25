@@ -97,7 +97,7 @@ namespace Arrow
 
     public class Settings
     {
-        public string Dir, Duplicates;
+        public string Dir, Duplicates, Proxy;
         public int Connections, MaxActive, SpeedLimitKB;
         public bool Categories, Clipboard, Startup, SpeedLimitOn, ShowComplete;
         public Dictionary<string, string> Folders = new Dictionary<string, string>(); // "Remember this folder for <Category>"
@@ -120,6 +120,7 @@ namespace Arrow
                 ShowComplete = o.Bool("showComplete") ?? true,
                 Categories = o.Bool("categories") ?? false,
                 Clipboard = o.Bool("clipboard") ?? false,
+                Proxy = o.Str("proxy") ?? "",
                 Startup = o.Bool("startup") ?? false,
                 Folders = f == null ? new Dictionary<string, string>() : f.Keys.Where(k => !string.IsNullOrEmpty(f[k] as string)).ToDictionary(k => k, k => (string)f[k]),
                 Types = t == null ? new Dictionary<string, List<string>>() : t.Keys.ToDictionary(k => k, k => t.Strings(k)),
@@ -697,6 +698,9 @@ namespace Arrow
         }
 
         // A folder with a drive or a network share, like C:\Downloads or \\server\share
+        // engine.js cleanProxy's rule: http(s)://[user:pass@]host:port, nothing after the port
+        public static bool IsProxy(string s) { return Regex.IsMatch((s ?? "").Trim(), @"^https?://([^@/\s]+@)?[^:/@\s]+:\d{1,5}/?$", RegexOptions.IgnoreCase); }
+
         public static bool IsFullPath(string path) { return Regex.IsMatch((path ?? "").Trim(), @"^([A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)"); }
 
         // ---- duplicates (spec "Duplicates"): what a pending download with probe.duplicate does

@@ -547,6 +547,8 @@ namespace Arrow
             Eq(Core.Sha256Of(hash + "  ArrowSetup.exe\n"), new string('a', 64), "checksum file");
             Eq(Core.Sha256Of("nope  ArrowSetup.exe"), null, "bad checksum file");
             Eq(Core.SetupArgs(true, false), "--quiet --quit-arrow --start --no-startup", "setup args keep the shortcuts as they are");
+            Ok(Core.IsProxy("http://10.0.0.1:8080") && Core.IsProxy(" https://u:p@proxy.example.com:3128/ "), "proxy addresses");
+            Ok(!Core.IsProxy("proxy:8080") && !Core.IsProxy("socks5://h:1080") && !Core.IsProxy("http://h") && !Core.IsProxy("http://h:80/path"), "not proxy addresses");
 
             // log.txt
             var logFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arrow-log-" + Guid.NewGuid().ToString("N") + ".txt");
