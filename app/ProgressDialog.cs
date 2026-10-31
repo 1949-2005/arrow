@@ -317,7 +317,9 @@ namespace Glide
             Mode(done ? "done" : "run");
             var short_ = Core.ShortName(d);
             var fraction = Core.Fraction(d, true);
-            Text = done ? "Download complete" : Math.Floor(fraction * 100) + "% · " + short_;
+            // U+200E (left-to-right mark) first: Windows lays out the title by its first letter, and with an Arabic or
+            // Hebrew name the percent would jump to the end
+            Text = done ? "Download complete" : "‎" + Math.Floor(fraction * 100) + "% · " + short_;
             tile.Category = Core.Category(d, categories);
             tile.File = string.IsNullOrEmpty(d.File) ? short_ : d.File;
             tile.Complete = done;
