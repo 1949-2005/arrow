@@ -50,6 +50,9 @@ namespace Glide
             urlText.Font = Theme.Body;
             url.Box.TextChanged += (o, e) => url.Invalid = false;
             pageUrl = Core.RefreshPage(d);
+            // a video's Address is its page already (yt-dlp finds a fresh file link each run): not shown twice
+            Uri addr;
+            if (pageUrl != null && Uri.TryCreate(d.Url ?? "", UriKind.Absolute, out addr) && addr.AbsoluteUri == pageUrl) pageUrl = null;
             page.Text = pageUrl ?? "";
             page.AccessibleName = "Web page this file came from: " + page.Text;
             pageLabel.Visible = page.Visible = pageUrl != null;

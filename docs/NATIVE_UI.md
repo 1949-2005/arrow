@@ -326,7 +326,8 @@ errors show inline or in an Error dialog.
   Core.PropertiesStatus, e.g. "Paused · 30% of 500 MB"); Address: an editable field, labeled "Address (change it if
   the link expired)", while the download is paused, failed or in a queue and not YouTube, else read-only
   selectable text → op 'url'; "Web page this file came from" (as IDM's "web page from which this file was obtained": the
-  tab's page, else the Referer, http(s) only; underlined, a click opens it in the browser; hidden when unknown);
+  tab's page, else the Referer, http(s) only; underlined, a click opens it in the browser; hidden when unknown or the
+  same as the Address, as a video's: its Address is its page, yt-dlp finding a fresh file link each run);
   Description (editable, 300 characters) → op 'describe'; facts Saved to, Referer (when
   known), Added, Last try, Queue ("Not in a queue" when none). Footer: Show in folder (left), Cancel, Save (primary;
   sends only what changed). It replaces the old Change link dialog.
