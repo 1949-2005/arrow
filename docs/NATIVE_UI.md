@@ -291,13 +291,12 @@ errors show inline or in an Error dialog.
     "When this download is done" + a Picker 180 wide: Nothing / Open the file / Sleep / Shut down → op 'whenDone'.
     Polls don't overwrite a change on its way.
   Footer: Pause/Resume and Cancel ("Cancel this download? The partial file is deleted."). Window title "45% · name".
-  - Minimize to system tray: its own button left of the title bar's minimize (`TrayButton`), the tray icon's three chevrons
+  - Minimize to system tray: its own button left of the title bar's close (`TrayButton`; the window has no minimize or maximize), the tray icon's three chevrons
     side by side, apart and stepping down like stairs, in its grey and bold rounded strokes, still (the download may not have started yet); dimmer while the window
     is inactive, Windows' hover and press tints; tooltip "Minimize to tray"). Windows has no API for an extra caption
     button, so it is a small owned layered window (no activation, not in Alt+Tab) one caption button wide, placed from
     DWMWA_CAPTION_BUTTON_BOUNDS and moved with the window. It shows only while the download runs (not failed,
-    Download complete or removed) and the window is shown and not minimized. Minimize (maximize shows greyed, as in
-    IDM) goes to the taskbar as usual. To the tray: the window
+    Download complete or removed) and the window is shown. To the tray: the window
     hides (it keeps updating) and the download gets
     its own tray icon, IDM's running arrows: three chevrons down the square, no logo (drawn as shapes, so they read at 16 px), in grey of the taskbar's shade (`SystemUsesLightTheme`:
     #3B3C3D on a light taskbar, #D8D8DC on a dark one). While it downloads the lit chevron moves down every 330 ms;

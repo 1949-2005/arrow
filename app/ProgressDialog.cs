@@ -1,7 +1,7 @@
 // The progress window (docs/NATIVE_UI.md "Dialogs", the behavior of the old progress.html), styled like the inspector:
 // running (percent, segments, speed graph, facts, the Connections and Options disclosures, Pause/Resume and Cancel),
 // Download complete (Saved to, File size, Address, "Don't show this window again", Open with…, Open folder, Close, Open)
-// or removed. While it runs, a Minimize to tray button left of the title bar's minimize hides it behind its own tray icon (three running grey arrows).
+// or removed. While it runs, a Minimize to tray button left of the title bar's close hides it behind its own tray icon (three running grey arrows).
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -41,7 +41,7 @@ namespace Glide
         readonly FlatButton close = new FlatButton("Close", '\0', ButtonKind.Secondary);
         readonly FlatButton open = new FlatButton("Open", '\0', ButtonKind.Primary);
         NotifyIcon trayIcon; // this download's own icon while the window is in the tray
-        TrayButton trayButton; // Minimize to tray, left of the title bar's minimize
+        TrayButton trayButton; // Minimize to tray, left of the title bar's close
         string trayTip;
         Download d;
         string mode;
@@ -53,7 +53,6 @@ namespace Glide
             this.api = api;
             Id = id;
             ShowInTaskbar = !Offscreen;
-            MinimizeBox = true; // to the taskbar; the tray has its own button left of it (TrayButton); maximize shows greyed, as in IDM
             for (var i = 0; i < 7; i++) facts.Add(new FactRow());
             facts[1].ValueColor = () => statusErr ? Theme.Err : Theme.Text;
             foreach (var c in new Control[] { tile, title, name, big, sub, bar, graph }) Add(c);
@@ -245,7 +244,7 @@ namespace Glide
             return title.Substring(0, lo).TrimEnd() + "…";
         }
 
-        // The title bar's Minimize to tray button, while the download runs; minimize itself goes to the taskbar
+        // The title bar's Minimize to tray button, while the download runs (no minimize: the tray is where it goes)
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);

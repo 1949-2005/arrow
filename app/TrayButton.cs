@@ -1,6 +1,5 @@
 // The progress window's Minimize to tray button: the tray icon's three arrows side by side, left of the title bar's
-// minimize. Windows
-// lets no app add a caption button, so this is a small owned layered window over the title bar, drawn with per-pixel
+// close (the window has no minimize). Windows lets no app add a caption button, so this is a small owned layered window over the title bar, drawn with per-pixel
 // alpha so the bar's own color shows through. It follows its owner and hides while the owner is hidden or minimized.
 using System;
 using System.Drawing;
@@ -57,7 +56,10 @@ namespace Glide
         [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
         [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT r);
 
-        // One caption button's width left of the minimize, minimize, maximize, close being DWMWA_CAPTION_BUTTON_BOUNDS
+        // One caption button's width, from DWMWA_CAPTION_BUTTON_BOUNDS: close alone, or minimize, maximize and close
+        static int ButtonWidth(Form owner, RECT b) { return (b.R - b.L) / (owner.MinimizeBox || owner.MaximizeBox ? 3 : 1); }
+
+        // Just left of the caption buttons
         void Place()
         {
             if (IsDisposed || owner.IsDisposed) return;
@@ -67,7 +69,7 @@ namespace Glide
             if (!show) { if (Visible) Hide(); return; }
             GetWindowRect(owner.Handle, out w);
             DwmGetWindowAttribute(owner.Handle, 5, out b, Marshal.SizeOf(typeof(RECT)));
-            var bw = (b.R - b.L) / 3;
+            var bw = ButtonWidth(owner, b);
             Bounds = new Rectangle(w.L + b.L - bw, w.T + b.T, bw, b.B - b.T);
             if (!Visible) Show();
             Draw();
@@ -82,7 +84,7 @@ namespace Glide
                 || DwmGetWindowAttribute(owner.Handle, 5, out b, Marshal.SizeOf(typeof(RECT))) != 0 || b.R <= b.L) return 0;
             var border = owner.PointToScreen(Point.Empty).X - w.L;
             var start = border + Theme.Px(8) + SystemInformation.SmallIconSize.Width + Theme.Px(8); // the caption icon, then the title
-            return Math.Max(0, b.L - (b.R - b.L) / 3 - start - Theme.Px(10));
+            return Math.Max(0, b.L - ButtonWidth(owner, b) - start - Theme.Px(10));
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Draw(); base.OnMouseEnter(e); }
