@@ -7,7 +7,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Manager } from './engine.js';
-import { ytdlpArgs, youtubeId, formatOptions, findYtdlp } from './ytdlp.js';
+import { ytdlpArgs, youtubeId, formatOptions, findYtdlp, FORMAT_KEY } from './ytdlp.js';
 
 // Stands in for googlevideo.com: answers the one-byte range request for formats that have no exact filesize
 const ranges = [];
@@ -93,6 +93,21 @@ test('YouTube links are normalized; channels and playlists are refused', () => {
   assert.equal(m.add({ url: 'https://example.com/a.bin', scheduled: true, quality: 'zzz' }).kind, 'http', 'quality is ignored for other sites');
 });
 
+test('format list of a Twitch VOD: one stream with its sound per quality, sized by bitrate × length', async () => {
+  // yt-dlp -J of twitch.tv/videos/2914179424 (5 h 33 min), trimmed
+  const hls = (id, h, fps, tbr, v = 'avc1.640020') => ({ format_id: id, protocol: 'm3u8_native', ext: 'mp4', url: 'https://x/' + id + '.m3u8', vcodec: v, acodec: 'mp4a.40.2', height: h, fps, tbr });
+  const info = { duration: 20010, formats: [
+    { format_id: 'sb0', protocol: 'mhtml', ext: 'mhtml', url: 'https://x/sb', vcodec: 'none', acodec: 'none', height: 124 },
+    { ...hls('Audio_Only', undefined, null, 215.959), vcodec: 'none' },
+    hls('360p', 360, 30, 757.739), hls('480p', 480, 30, 1269.084), hls('720p60', 720, 60, 3853.711), hls('1080p60', 1080, 60, 7930.483),
+  ] };
+  const options = await formatOptions(info, mgr);
+  assert.deepEqual(options.map(o => [o.key, o.label, o.tag ?? '', o.approx ?? false]), [
+    ['mp4:1080p60', '1080p60', 'HD', true], ['mp4:720p60', '720p60', 'HD', true], ['mp4:480p', '480p', '', true], ['mp4:360p', '360p', '', true], ['mp3', 'MP3', '', false]]);
+  assert.equal(options[0].size, Math.round(7930.483 * 125 * 20010)); // about 19.8 GB, as IDM's 7744 kbps estimate
+  for (const o of options) assert.match(o.key, FORMAT_KEY);
+});
+
 test('format keys and legacy qualities → yt-dlp arguments', () => {
   const run = (quality, speedLimitKB = 0, format, limitKB, speedLimitOn = true) => ytdlpArgs({ quality, format, limitKB, tmpDir: 'T', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }, { speedLimitKB, speedLimitOn }, 'F');
   const has = (args, ...seq) => assert.ok(args.some((_, i) => seq.every((s, j) => args[i + j] === s)), `${seq.join(' ')} in ${args.join(' ')}`);
@@ -107,7 +122,8 @@ test('format keys and legacy qualities → yt-dlp arguments', () => {
   const m4a = run('mp3', 0, 'm4a:140-drc');
   has(m4a, '-f', '140-drc');
   assert.ok(!m4a.includes('-x') && !m4a.includes('--merge-output-format') && !m4a.includes('-S'));
-  for (const bad of ['bv*+ba', 'mp4:137', 'mp4:137+140/b', 'mkv:1+2', 'm4a:140 -x', 'mp3:1']) assert.throws(() => run('best', 0, bad), /unknown format/, bad);
+  has(run('best', 0, 'mp4:720p60'), '-f', '720p60', '--remux-video', 'mp4'); // one stream with its sound (Twitch's HLS)
+  for (const bad of ['bv*+ba', 'mp4:137+', 'mp4:137+140/b', 'mkv:1+2', 'm4a:140 -x', 'mp3:1']) assert.throws(() => run('best', 0, bad), /unknown format/, bad);
   const base = run('best');
   has(base, '--no-playlist', '--match-filter', '!is_live', '--newline', '--no-colors', '--ffmpeg-location', 'F', '-P', 'T', '-o', 'media.%(ext)s');
   assert.equal(base.at(-1), 'https://www.youtube.com/watch?v=jNQXAC9IVRw');

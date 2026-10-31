@@ -10,7 +10,8 @@ import { markOfTheWeb, sanitize } from './engine.js';
 export const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
 // A format key names exactly what gets downloaded: mp4:137+140, webm:248+251, m4a:140, mp3.
 // The ids are yt-dlp format_ids ("140", "140-drc"); keys are also checked against the video's list before use.
-export const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+\+[\w-]+|m4a:[\w-]+|mp3)$/;
+// mp4:720p60 is one stream that carries its sound (Twitch and other HLS sites).
+export const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+(?:\+[\w-]+)?|m4a:[\w-]+|mp3)$/;
 const MP3_KBPS = 192; // constant bitrate, so the MP3's size is known up front: duration × 24000 bytes
 const FORMATS_MS = 15 * 60000;
 const run = promisify(execFile);
@@ -77,7 +78,7 @@ function formatArgs(d) {
   if (d.format != null && !FORMAT_KEY.test(d.format)) throw new Error(`unknown format "${d.format}"`);
   const [kind, ids] = (d.format ?? '').split(':');
   if (kind === 'mp3' || (!d.format && d.quality === 'mp3')) return ['-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', MP3_KBPS + 'K'];
-  if (kind === 'mp4' || kind === 'webm') return ['-f', ids, '--merge-output-format', kind];
+  if (kind === 'mp4' || kind === 'webm') return ['-f', ids, ...(ids.includes('+') ? ['--merge-output-format', kind] : ['--remux-video', kind])];
   if (kind === 'm4a') return ['-f', ids];
   const q = d.quality ?? 'best';
   // at equal resolution prefer H.264: AV1/VP9 inside MP4 doesn't play in every player
@@ -183,8 +184,21 @@ export async function formatOptions(info, mgr) {
         ...(tag(h) && { tag: tag(h) }), ...approx(v, a), size: sized.get(v) + sized.get(a) });
     }
   }
+  // No separate video and sound (Twitch, and other HLS sites): each quality is one stream with its sound. Its size is
+  // yt-dlp's, else its bitrate × the length, shown as approximate.
+  const muxed = [];
+  if (!options.length) {
+    const est = f => f.filesize > 0 ? f.filesize : f.filesize_approx > 0 ? f.filesize_approx : f.tbr > 0 && info.duration > 0 ? Math.round(f.tbr * 125 * info.duration) : 0;
+    muxed.push(...(info.formats ?? []).filter(f => ['https', 'm3u8_native', 'm3u8'].includes(f.protocol) && f.url && /^[\w-]+$/.test(f.format_id ?? '')
+      && f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none' && p(f) >= 144 && est(f) > 0));
+    for (const h of [...new Set(muxed.map(p))].sort((x, y) => y - x)) {
+      const v = muxed.filter(f => p(f) === h).sort((x, y) => (x.tbr ?? 0) - (y.tbr ?? 0)).at(-1);
+      options.push({ key: `mp4:${v.format_id}`, group: 'MP4', label: `${h}p${v.fps >= 50 ? '60' : ''}`,
+        ...(tag(h) && { tag: tag(h) }), ...(!(v.filesize > 0) && { approx: true }), size: est(v) });
+    }
+  }
   if (m4a) options.push({ key: `m4a:${m4a.format_id}`, group: 'Audio', label: 'M4A', ...approx(m4a), size: sized.get(m4a) });
-  if (audio.length && info.duration > 0) options.push({ key: 'mp3', group: 'Audio', label: 'MP3', size: Math.round(info.duration * MP3_KBPS * 1000 / 8) });
+  if ((audio.length || muxed.length) && info.duration > 0) options.push({ key: 'mp3', group: 'Audio', label: 'MP3', size: Math.round(info.duration * MP3_KBPS * 1000 / 8) });
   return options;
 }
 

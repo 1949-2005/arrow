@@ -67,7 +67,7 @@ chrome.tabs.onRemoved.addListener(forget);
 // The video button (content.js). Only our own content scripts can send this, but the frame may be hostile,
 // so every field is checked before it reaches the app.
 const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
-const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+\+[\w-]+|m4a:[\w-]+|mp3)$/; // the app checks it against the video's list too
+const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+(?:\+[\w-]+)?|m4a:[\w-]+|mp3)$/; // the app checks it against the video's list too
 const isStr = (x, max = 8192) => typeof x === 'string' && x.length <= max;
 const httpUrl = x => isStr(x) && /^https?:\/\//i.test(x) && URL.canParse(x);
 

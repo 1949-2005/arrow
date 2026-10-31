@@ -52,7 +52,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 await import('./extension/background.js');
-const { isYouTubeVideo, send, pickMedia, optionsFromPlayer, playerData } = await import('./extension/common.js');
+const { isYouTubeVideo, isVideoPage, send, pickMedia, optionsFromPlayer, playerData } = await import('./extension/common.js');
 
 function reset(mode = 'up') {
   calls.length = requests.length = 0;
@@ -396,6 +396,24 @@ test('popup "Show download button on videos" defaults on and saves to overlay', 
   assert.equal(els['#overlay'].checked, false);
 });
 
+test('isVideoPage: one video on the other yt-dlp sites, not their channels, lives or feeds; every one is in ytdlp.js SITES', async () => {
+  const { videoSite } = await import('./ytdlp.js');
+  const yes = ['https://www.twitch.tv/videos/2914179424', 'https://www.twitch.tv/kourial/clip/Funny-Clip-abc', 'https://clips.twitch.tv/FunnyClip',
+    'https://vimeo.com/76979871', 'https://www.dailymotion.com/video/x8abcd', 'https://x.com/user/status/1234567890', 'https://twitter.com/u/status/1/video/1',
+    'https://www.tiktok.com/@some.one/video/7300000000000000000', 'https://www.instagram.com/reel/Cabc-12/', 'https://streamable.com/abc12',
+    'https://www.reddit.com/r/videos/comments/abc123/title/', 'https://www.bilibili.com/video/BV1xx411c7mD'];
+  for (const u of yes) {
+    assert.ok(isVideoPage(u), u);
+    assert.ok(videoSite(new URL(u)), u + ' is a yt-dlp site for the app');
+  }
+  for (const u of ['https://www.twitch.tv/kourial', 'https://www.twitch.tv/directory', 'https://vimeo.com/channels/staffpicks', 'https://x.com/home',
+    'https://www.tiktok.com/foryou', 'https://example.com/videos/1', 'ftp://twitch.tv/videos/1', 'not a url'])
+    assert.ok(!isVideoPage(u), u);
+  const vod = 'https://www.twitch.tv/videos/2914179424';
+  assert.deepEqual(pickMedia({ pageUrl: vod, src: 'blob:https://www.twitch.tv/1', title: 'T', media: [{ url: 'https://usher.ttvnw.net/vod/1.m3u8', type: 'HLS stream' }] }),
+    { url: vod, quality: undefined, format: undefined, title: 'T' }, 'the page, not the stream it plays');
+});
+
 test('pickMedia: YouTube page, http src, then the grabbed HLS or biggest video, else an error', () => {
   const yt = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', page = 'https://x.com/watch/1';
   // YouTube: the page, with the picked format and the title passed through (the app names the file from yt-dlp's title)
@@ -469,7 +487,7 @@ test('video button message: other senders and bad fields are refused', async () 
   for (const bad of [
     { pageUrl: 'file:///C:/x.html' }, { pageUrl: 'javascript:alert(1)' }, { pageUrl: 42 }, { pageUrl: undefined },
     { src: 42 }, { src: undefined }, { title: { x: 1 } }, { title: 'x'.repeat(1001) }, { quality: 'best"; rm' }, { quality: 720 },
-    { format: 'bv*+ba/b' }, { format: 'mp4:137' }, { format: 137 }, { format: 'mp3 --exec x' },
+    { format: 'bv*+ba/b' }, { format: 'mp4:137+' }, { format: 137 }, { format: 'mp3 --exec x' },
   ]) assert.deepEqual(await videoMsg(vmsg(bad)), { error: 'Bad request.' }, JSON.stringify(bad));
   assert.equal(requests.length, 0);
 });

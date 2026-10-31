@@ -16,6 +16,27 @@ export function youTubeId(url) {
 }
 export const isYouTubeVideo = url => !!youTubeId(url);
 
+// One video's page on the other sites the app lists with yt-dlp (ytdlp.js SITES): a Twitch VOD or clip, a Vimeo,
+// Dailymotion, X post, TikTok, Instagram post or reel, Streamable, Reddit post or Bilibili video. The app then offers
+// that video's qualities, as IDM's list, instead of the one stream the page happens to play. Channel and live pages
+// stay with the grabbed stream (yt-dlp refuses live streams).
+const VIDEO_PAGES = [
+  [/(^|\.)twitch\.tv$/, /^\/(videos\/\d+|[\w-]+\/clip\/[\w-]+)\/?$/],
+  [/^clips\.twitch\.tv$/, /^\/[\w-]+\/?$/],
+  [/(^|\.)vimeo\.com$/, /^\/\d+\/?$/],
+  [/(^|\.)dailymotion\.com$/, /^\/video\/\w+\/?$/],
+  [/(^|\.)(x|twitter)\.com$/, /^\/\w+\/status\/\d+(\/video\/\d+)?\/?$/],
+  [/(^|\.)tiktok\.com$/, /^\/@[\w.-]+\/video\/\d+\/?$/],
+  [/(^|\.)instagram\.com$/, /^\/(p|reel|reels)\/[\w-]+\/?$/],
+  [/(^|\.)streamable\.com$/, /^\/\w+\/?$/],
+  [/(^|\.)reddit\.com$/, /^\/r\/\w+\/comments\/\w+/],
+  [/(^|\.)bilibili\.com$/, /^\/video\/\w+\/?$/],
+];
+export function isVideoPage(url) {
+  const u = parse(url);
+  return !!u && /^https?:$/.test(u.protocol) && VIDEO_PAGES.some(([host, p]) => host.test(u.hostname.toLowerCase()) && p.test(u.pathname));
+}
+
 const isYouTubeHost = h => h === 'youtu.be' || h === 'youtube.com' || h.endsWith('.youtube.com');
 
 // Hands a link to the app with the browser's cookies and referrer, so logged-in downloads work.
@@ -45,8 +66,9 @@ const isHttp = url => /^https?:$/.test(parse(url)?.protocol ?? '');
 // What the video button downloads. `media` is the tab's list from the grabber ({url, type, size}).
 // blob: and MSE players have no usable src, so the grabber's HLS playlist or biggest video file stands in.
 // On YouTube, format is the key picked in the video button's format list, title the video's title from that list.
+// A video page of the other yt-dlp sites goes as the page too: the Download File Info window then lists its qualities.
 export function pickMedia({ pageUrl, src, title, quality, format, media = [] }) {
-  if (isYouTubeVideo(pageUrl)) return { url: pageUrl, quality, format, title };
+  if (isYouTubeVideo(pageUrl) || isVideoPage(pageUrl)) return { url: pageUrl, quality, format, title };
   if (isHttp(src)) return { url: src, referrer: pageUrl, title };
   const ok = media.filter(m => isHttp(m.url));
   const found = ok.find(m => m.type === 'HLS stream')
