@@ -398,7 +398,7 @@ test('popup "Show download button on videos" defaults on and saves to overlay', 
 
 test('isVideoPage: one video on the other yt-dlp sites, not their channels, lives or feeds; every one is in ytdlp.js SITES', async () => {
   const { videoSite } = await import('./ytdlp.js');
-  const yes = ['https://www.twitch.tv/videos/2914179424', 'https://www.twitch.tv/kourial/clip/Funny-Clip-abc', 'https://clips.twitch.tv/FunnyClip',
+  const yes = ['https://www.twitch.tv/videos/2914179424', 'https://www.twitch.tv/kourial/clip/Funny-Clip-abc', 'https://clips.twitch.tv/FunnyClip', 'https://kick.com/kourial/videos/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b', 'https://kick.com/kourial/clips/clip_01HABCDEF',
     'https://vimeo.com/76979871', 'https://www.dailymotion.com/video/x8abcd', 'https://x.com/user/status/1234567890', 'https://twitter.com/u/status/1/video/1',
     'https://www.tiktok.com/@some.one/video/7300000000000000000', 'https://www.instagram.com/reel/Cabc-12/', 'https://streamable.com/abc12',
     'https://www.reddit.com/r/videos/comments/abc123/title/', 'https://www.bilibili.com/video/BV1xx411c7mD'];
@@ -406,7 +406,7 @@ test('isVideoPage: one video on the other yt-dlp sites, not their channels, live
     assert.ok(isVideoPage(u), u);
     assert.ok(videoSite(new URL(u)), u + ' is a yt-dlp site for the app');
   }
-  for (const u of ['https://www.twitch.tv/kourial', 'https://www.twitch.tv/directory', 'https://vimeo.com/channels/staffpicks', 'https://x.com/home',
+  for (const u of ['https://www.twitch.tv/kourial', 'https://www.twitch.tv/directory', 'https://kick.com/kourial', 'https://kick.com/browse', 'https://vimeo.com/channels/staffpicks', 'https://x.com/home',
     'https://www.tiktok.com/foryou', 'https://example.com/videos/1', 'ftp://twitch.tv/videos/1', 'not a url'])
     assert.ok(!isVideoPage(u), u);
   const vod = 'https://www.twitch.tv/videos/2914179424';
@@ -492,7 +492,7 @@ test('video button message: other senders and bad fields are refused', async () 
   assert.equal(requests.length, 0);
 });
 
-test('formats message: YouTube pages only, proxied to /api/formats, one request per page', async () => {
+test('formats message: a YouTube page, proxied to /api/formats, one request per page', async () => {
   reset();
   const yt = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
   const msg = (pageUrl, sender) => videoMsg({ type: 'formats', pageUrl }, sender);
@@ -500,7 +500,8 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
   assert.deepEqual(await msg(yt), LIST);
   const asked = requests.filter(r => r.url.endsWith('/api/formats'));
   assert.deepEqual(asked.map(r => [r.url, r.method, r.body]), [['http://127.0.0.1:9614/api/formats', 'POST', { url: yt }]], 'cached per page');
-  for (const bad of ['https://x.com/v', 'https://www.youtube.com/@channel', 'javascript:alert(1)', 42]) assert.deepEqual(await msg(bad), { error: 'Bad request.' }, String(bad));
+  for (const bad of ['javascript:alert(1)', 42]) assert.deepEqual(await msg(bad), { error: 'Bad request.' }, String(bad));
+  assert.deepEqual(await videoMsg({ type: 'formats', pageUrl: yt, src: 7 }), { error: 'Bad request.' });
   assert.equal(await msg(yt, { id: 'other-ext', tab: { id: 5 } }), undefined);
   assert.equal(await msg(yt, { id: 'ext-id' }), undefined);
 
@@ -511,6 +512,24 @@ test('formats message: YouTube pages only, proxied to /api/formats, one request 
   assert.deepEqual(await msg(other), { error: 'Glide is not running.' });
   reset();
   assert.deepEqual(await msg(other), LIST);
+});
+
+test('formats message on other sites: what the button would send, with qualities for a video page or an HLS stream', async () => {
+  reset();
+  const msg = (pageUrl, src = '') => videoMsg({ type: 'formats', pageUrl, src });
+  const vod = 'https://www.twitch.tv/videos/2914179424', live = 'https://kick.com/kourial', hls = 'https://cdn.kick.com/master.m3u8';
+  assert.deepEqual(await msg(vod), LIST, 'a Twitch VOD page: yt-dlp\'s list');
+  session.tab5 = [{ url: hls, type: 'HLS stream', size: 0 }];
+  assert.deepEqual(await msg(live, 'blob:https://kick.com/1'), LIST, 'a Kick live: the grabbed stream\'s qualities');
+  assert.deepEqual(requests.filter(r => r.url.endsWith('/api/formats')).map(r => r.body), [{ url: vod }, { url: hls, referrer: live }]);
+  assert.deepEqual(await msg('https://example.com/watch', 'https://example.com/v.mp4'), { title: '', options: [] }, 'one plain file: no list, the button sends it');
+  delete session.tab5;
+  assert.deepEqual(await msg('https://example.com/watch'), { error: 'No video found yet. Play it for a few seconds, then try again.' });
+  // the pick goes with the stream
+  session.tab5 = [{ url: hls, type: 'HLS stream', size: 0 }];
+  assert.deepEqual(await videoMsg({ type: 'video', src: 'blob:https://kick.com/1', pageUrl: live, title: 'Kourial', format: 'ts:7930483' }), { ok: true });
+  const { body } = requests.filter(r => r.url.endsWith('/api/add')).at(-1);
+  assert.deepEqual([body.url, body.format, body.headers.referer, body.confirm], [hls, 'ts:7930483', live, true]);
 });
 
 test('formats message: answers at once from YouTube\'s player in the page, still warms the app\'s list; else the app\'s list', async () => {
@@ -612,18 +631,19 @@ test('content.js send: null instead of an error once the extension reloaded (sen
   assert.doesNotMatch(contentSrc, /await chrome\.runtime\.sendMessage/, 'every message goes through send()');
 });
 
-test('content.js: other sites send on one trusted click; YouTube opens the format list; picks send format and title', () => {
+test('content.js: one trusted click opens the format list (other sites: sent at once when there is no list); picks send format and title', () => {
   // \s+: git may check out CRLF
-  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy \|\| dragged\) return;\s+closeHelp\(\);\s+if \(!target\) grab\(\);/);
+  assert.match(contentSrc, /if \(!e\.isTrusted \|\| busy \|\| dragged\) return;\s+closeHelp\(\);\s+if \(menu\.hidden\) openMenu\(\);/);
   assert.match(contentSrc, /if \(e\.isTrusted\) onPick\(\);/, 'menu rows: trusted clicks only');
   assert.match(contentSrc, /if \(!e\.isTrusted\) return;\s+e\.stopPropagation\(\);/, 'menu keys: trusted only');
-  assert.match(contentSrc, /\{ type: 'formats', pageUrl \}/);
+  assert.match(contentSrc, /\{ type: 'formats', pageUrl, \.\.\.\(other && \{ src: video\?\.currentSrc \?\? '' \}\) \}/);
+  assert.match(contentSrc, /if \(other && res && !res\.error && !res\.options\?\.length\) \{ closeMenu\(\); grab\(\); return; \}/, 'one plain file: sent at once');
   // the list starts when the panel shows on the page's own player, or on a preview when the pointer reaches the button,
   // once per video, and a dead extension can't break the panel
   assert.match(contentSrc, /if \(!url \|\| prefetched\.has\(url\)\) return;[^\n]*\s+prefetched\.add\(url\);\s+send\(\{ type: 'formats', pageUrl: url \}\);/);
   assert.match(contentSrc, /if \(targetOwn\) prefetch\(target\);/);
   assert.match(contentSrc, /btn\.addEventListener\('pointerenter', \(\) => prefetch\(target\)\);/);
-  assert.match(contentSrc, /const n = \+\+asked, pageUrl = target;/);
+  assert.match(contentSrc, /const n = \+\+asked, other = !target, pageUrl = target \?\? location\.href;/);
   assert.match(contentSrc, /grab\(\{ pageUrl, title: res\.title \|\| undefined, format: o\.key \}\)/);
   assert.match(contentSrc, /\{ type: 'video', src: video\?\.currentSrc \?\? '', pageUrl: pick\.pageUrl \?\? location\.href, title: pick\.title \?\? document\.title, \.\.\.\(pick\.format && \{ format: pick\.format \}\) \}/);
   assert.match(contentSrc, /'Download anyway'/);

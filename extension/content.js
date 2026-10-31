@@ -1,7 +1,8 @@
 // IDM-style download panel over web video players: "Download this video", ? (what this panel is) and × (hide it on
 // this video). Runs in every frame (embedded players live in iframes). One click sends it; the app's Download File Info
-// window asks the rest. On YouTube a click first shows the video's formats with their real sizes (the app's /api/formats,
-// through background.js); the picked one opens the Download File Info window with that format.
+// window asks the rest. A click first shows the video's formats with their sizes (the app's /api/formats, through
+// background.js): YouTube's, a Twitch or Kick video page's, or an HLS stream's qualities on any other site, as IDM lists
+// them; the picked one opens the Download File Info window with that format. One plain file has no list: sent at once.
 // The panel can be dragged; a double-click on its edge puts it back, as in IDM.
 // Content scripts can't be ES modules, so the helpers below are plain functions; extension.test.js runs them in Node.
 // An update injects this file again into open tabs (background.js onInstalled). A tab that already runs the new version gets
@@ -36,10 +37,12 @@ function ytWatchUrl(href) {
 var isYouTubePage = href => !!ytWatchUrl(href);
 
 // The format list's groups, in the app's order: [{title, items}], empty groups left out.
-var GROUPS = [['MP4', 'Video · MP4'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
+var GROUPS = [['MP4', 'Video · MP4'], ['TS', 'Video · TS'], ['WEBM', 'Video · WEBM'], ['Audio', 'Audio']];
 var menuGroups = options => GROUPS.map(([g, title]) => ({ title, items: options.filter(o => o.group === g) })).filter(g => g.items.length);
 // As confirm.html size(), so the list and the window show the same number
 var sizeText = (n, approx) => (approx ? '~' : '') + (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB'); // ~: approximate (a recording YouTube is still processing)
+// A row's size, as IDM: "~3.8 GB", or a live stream's bitrate ("7930 kbps") when its length isn't known
+var sz = o => o.size != null ? sizeText(o.size, o.approx) : o.kbps ? o.kbps + ' kbps' : '';
 // Up/Down through n items, wrapping; from nothing focused (-1) Down goes to the first, Up to the last.
 var step = (i, n, key) => i < 0 ? (key === 'ArrowUp' ? n - 1 : 0) : (i + (key === 'ArrowUp' ? n - 1 : 1)) % n;
 // The file the app will save for a format key: engine.js sanitize(title + extOf(key)), ported (no imports in a classic script).
@@ -184,8 +187,7 @@ function main() {
     btn.addEventListener('click', e => {
       if (!e.isTrusted || busy || dragged) return;
       closeHelp();
-      if (!target) grab();
-      else if (menu.hidden) openMenu();
+      if (menu.hidden) openMenu();
       else closeMenu();
     });
     helpBtn.addEventListener('click', e => {
@@ -270,15 +272,18 @@ function main() {
   };
 
   // The format list under the panel. pageUrl and title are kept from the moment it opened: YouTube changes pages without reloading.
+  // Other sites (no YouTube target): the qualities of what the button sends, as IDM lists them (a Twitch or Kick video
+  // page through yt-dlp, an HLS stream's playlist); one plain file has none, and goes at once.
   async function openMenu() {
-    const n = ++asked, pageUrl = target;
+    const n = ++asked, other = !target, pageUrl = target ?? location.href;
     menu.setAttribute('aria-label', 'Choose a format');
     menu.replaceChildren(h('div', { class: 'note' }, h('span', { class: 'spin' }), 'Getting formats…'));
     menu.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
     live.textContent = 'Getting formats…';
-    const res = await send({ type: 'formats', pageUrl });
+    const res = await send({ type: 'formats', pageUrl, ...(other && { src: video?.currentSrc ?? '' }) });
     if (n !== asked || !menu) return; // closed or opened again meanwhile
+    if (other && res && !res.error && !res.options?.length) { closeMenu(); grab(); return; }
     const pick = o => { closeMenu(); grab({ pageUrl, title: res.title || undefined, format: o.key }); };
     const groups = menuGroups(res?.options ?? []);
     if (groups.length) {
@@ -288,10 +293,10 @@ function main() {
       const h3 = g => h('h3', { 'aria-hidden': 'true' }, ...[...new Set(g.items.map(o => o.key.split(':')[0].toUpperCase()))].map(f => h('span', { class: 'fmtchip' }, f)), g.title.split(' · ')[0]);
       const item = o => {
         const name = fileName(title, o.key);
-        const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sizeText(o.size, o.approx))),
+        const b = row([h('div', { class: 'line' }, h('span', { class: 'q' }, o.label), o.tag ? h('span', { class: 'tag' }, o.tag) : null, h('span', { class: 'sz' }, sz(o))),
           h('div', { class: 'name', dir: 'auto' }, name)], () => pick(o));
         b.classList.add('fmt');
-        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sizeText(o.size, o.approx)}, ${name}`); // one name for screen readers: format, size, file
+        b.setAttribute('aria-label', `${o.label}${o.tag ? ' ' + o.tag : ''}, ${sz(o)}, ${name}`); // one name for screen readers: format, size, file
         return b;
       };
       menu.setAttribute('aria-label', `Choose a format for ${title}`);

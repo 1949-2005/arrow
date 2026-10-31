@@ -17,12 +17,13 @@ export function youTubeId(url) {
 export const isYouTubeVideo = url => !!youTubeId(url);
 
 // One video's page on the other sites the app lists with yt-dlp (ytdlp.js SITES): a Twitch VOD or clip, a Vimeo,
-// Dailymotion, X post, TikTok, Instagram post or reel, Streamable, Reddit post or Bilibili video. The app then offers
+// Dailymotion, X post, TikTok, Instagram post or reel, Streamable, Reddit post or Bilibili video, a Kick VOD or clip. The app then offers
 // that video's qualities, as IDM's list, instead of the one stream the page happens to play. Channel and live pages
 // stay with the grabbed stream (yt-dlp refuses live streams).
 const VIDEO_PAGES = [
   [/(^|\.)twitch\.tv$/, /^\/(videos\/\d+|[\w-]+\/clip\/[\w-]+)\/?$/],
   [/^clips\.twitch\.tv$/, /^\/[\w-]+\/?$/],
+  [/(^|\.)kick\.com$/, /^\/[\w-]+\/(videos\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}|clips\/clip_[\w-]+)\/?$/],
   [/(^|\.)vimeo\.com$/, /^\/\d+\/?$/],
   [/(^|\.)dailymotion\.com$/, /^\/video\/\w+\/?$/],
   [/(^|\.)(x|twitter)\.com$/, /^\/\w+\/status\/\d+(\/video\/\d+)?\/?$/],
@@ -73,7 +74,8 @@ export function pickMedia({ pageUrl, src, title, quality, format, media = [] }) 
   const ok = media.filter(m => isHttp(m.url));
   const found = ok.find(m => m.type === 'HLS stream')
     ?? ok.filter(m => /^video\//.test(m.type)).sort((a, b) => b.size - a.size)[0];
-  return found ? { url: found.url, referrer: pageUrl, title }
+  // an HLS stream keeps the quality picked in the video button's list (its key names the playlist's BANDWIDTH)
+  return found ? { url: found.url, referrer: pageUrl, title, ...(format && found.type === 'HLS stream' && { format }) }
     : { error: 'No video found yet. Play it for a few seconds, then try again.' };
 }
 

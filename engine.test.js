@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Manager, sanitize, CATEGORIES } from './engine.js';
-import { parsePlaylist, soundTemps } from './hls.js';
+import { parsePlaylist, soundTemps, hlsOptions } from './hls.js';
 import { ffmpegExe } from './ytdlp.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -267,6 +267,50 @@ test('HLS: a segment that goes silent mid-body is cut off and retried', async ()
   } finally {
     mgr.stallMs = 30000;
   }
+});
+
+test('HLS master playlist: its qualities as MP4 and TS, best first, sized by bitrate × length', async () => {
+  const options = await hlsOptions(mgr, { url: base + '/master.m3u8', headers: {} }, AbortSignal.timeout(5000));
+  assert.deepEqual(options.map(o => o.key), ['mp4:900', 'ts:900', 'mp4:100', 'ts:100']);
+  assert.equal(options[0].size, Math.round(900 / 8 * 4 * parts.length)); // the best one's #EXTINF: 4 s per segment
+  assert.ok(options.every(o => o.approx));
+  assert.deepEqual(await hlsOptions(mgr, { url: base + '/hi/index.m3u8', headers: {} }, AbortSignal.timeout(5000)), [], 'a media playlist has no choice');
+  // without ffmpeg the probe offers TS only; with it, MP4 first. The pick goes into the name and is checked on Start.
+  const p = mgr.add({ url: base + '/master.m3u8', confirm: true });
+  await until(() => p.probe);
+  assert.deepEqual(p.probe.options.map(o => o.key), ffmpeg ? ['mp4:900', 'ts:900', 'mp4:100', 'ts:100'] : ['ts:900', 'ts:100']);
+  await assert.rejects(mgr.confirm(p.id, { action: 'start', path: path.join(dir, 'q', 'x.ts'), format: 'ts:555' }), /unknown format/);
+  await mgr.confirm(p.id, { action: 'start', path: path.join(dir, 'q', 'Picked.mp4'), format: 'ts:900' });
+  assert.equal(p.name, 'Picked.ts', 'the extension follows the pick');
+  assert.equal(sha(await finished(p)), sha(Buffer.concat(parts)), 'the 900 quality');
+  // the extension's video button: the same list through formats(), and its pick on add
+  assert.deepEqual((await mgr.formats(base + '/master.m3u8', 'https://kick.com/kourial')).options.map(o => o.key),
+    ffmpeg ? ['mp4:900', 'ts:900', 'mp4:100', 'ts:100'] : ['ts:900', 'ts:100']);
+  assert.throws(() => mgr.add({ url: base + '/master.m3u8', format: 'mp4:137+140', confirm: true }), /unknown format/);
+  const q = mgr.add({ url: base + '/master.m3u8', format: 'ts:900', confirm: true });
+  await until(() => q.probe);
+  assert.equal(q.format, 'ts:900');
+  assert.equal(q.probe.format, 'ts:900', 'the window shows the pick');
+  await mgr.confirm(q.id, { action: 'cancel' });
+});
+
+test('HLS: the MP4 choice of a TS stream comes out as an MP4 (ffmpeg rewraps it)', { skip: !ffmpeg && 'needs ffmpeg' }, async () => {
+  const folder = path.join(dir, 'gen', 'muxed');
+  mkdirSync(folder, { recursive: true });
+  execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=10:duration=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3',
+    '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '10', '-c:a', 'aac', '-b:a', '64k', '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod',
+    '-var_stream_map', 'v:0,a:0', '-master_pl_name', 'master.m3u8', '-hls_segment_filename', '%v/seg%d.ts', '%v/index.m3u8'], { cwd: folder });
+  const p = mgr.add({ url: `${base}/gen/muxed/master.m3u8`, confirm: true });
+  await until(() => p.probe);
+  assert.equal(p.probe.options[0].group, 'MP4');
+  assert.equal(p.probe.options[0].label, '90p');
+  assert.equal(p.probe.name, 'master.mp4');
+  const file = path.join(dir, 'q', 'Rewrapped.mp4');
+  await mgr.confirm(p.id, { action: 'start', path: file, format: p.probe.options[0].key });
+  await finished(p);
+  assert.match(ffprobe('-show_entries', 'format=format_name', '-of', 'csv=p=0', file), /mp4/);
+  assert.deepEqual(streams(file), ['video', 'audio']);
+  assert.ok(!existsSync(p.tmp) && !existsSync(soundTemps(p)[1]), 'temp files are gone');
 });
 
 test("HLS: the chosen quality's separate sound track is found (its group's default)", async () => {

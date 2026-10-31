@@ -304,7 +304,7 @@ namespace Glide
     public static class Core
     {
         static readonly Dictionary<string, string> Label = new Dictionary<string, string> { { "queued", "Queued" }, { "downloading", "Downloading" }, { "paused", "Paused" }, { "done", "Complete" }, { "scheduled", "Scheduled" }, { "removed", "Removing" } };
-        static readonly Dictionary<string, string> PhaseText = new Dictionary<string, string> { { "video", "Downloading video" }, { "audio", "Downloading audio" }, { "merging", "Merging" }, { "converting", "Converting to MP3" }, { "updating", "Updating yt-dlp" } };
+        static readonly Dictionary<string, string> PhaseText = new Dictionary<string, string> { { "video", "Downloading video" }, { "audio", "Downloading audio" }, { "merging", "Merging" }, { "converting", "Converting to MP3" }, { "converting-mp4", "Converting to MP4" }, { "updating", "Updating yt-dlp" } };
         static readonly Dictionary<string, string> HeadingText = new Dictionary<string, string> { { "queued", "Queued" }, { "scheduled", "Scheduled" }, { "error", "Error" }, { "done", "Download complete" }, { "pending", "Waiting" }, { "removed", "Removing" } };
         // [A-Za-z0-9_] and [0-9]: .NET's \w and \d also match non-ASCII letters and digits, JavaScript's do not
         static readonly Regex Ext = new Regex(@"\.([A-Za-z0-9_]+)$");
@@ -699,11 +699,11 @@ namespace Glide
         public static string FormatExt(string key) { return key == "best" ? ".mp4" : "." + key.Split(':')[0]; }
         public static string FormatCategory(string key) { return AudioKey.IsMatch(key) ? "Music" : "Video"; }
 
-        // Download File Info's Format list: [key, text] grouped MP4, WEBM, Audio; the legacy choices when the list failed
+        // Download File Info's Format list: [key, text] grouped MP4, TS (an HLS stream's qualities), WEBM, Audio; the legacy choices when the list failed
         public static List<string[]> FormatChoices(Probe p)
         {
             if (p.Options == null || p.Options.Count == 0) return new List<string[]> { new[] { "best", "MP4 · best quality" }, new[] { "mp3", "MP3 · audio" } };
-            return new[] { "MP4", "WEBM", "Audio" }.SelectMany(g => p.Options.Where(o => o.Group == g)).Select(o => new[] { o.Key, FormatText(o) }).ToList();
+            return new[] { "MP4", "TS", "WEBM", "Audio" }.SelectMany(g => p.Options.Where(o => o.Group == g)).Select(o => new[] { o.Key, FormatText(o) }).ToList();
         }
 
         // Add links' Quality for YouTube links (engine.js QUALITIES)

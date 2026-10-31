@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { downloadHls, parsePlaylist, soundTemps } from './hls.js';
-import { downloadVideo, youtubeId, videoSite, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf } from './ytdlp.js';
+import { downloadHls, parsePlaylist, soundTemps, hlsOptions, HLS_KEY } from './hls.js';
+import { downloadVideo, youtubeId, videoSite, removeTmp, QUALITIES, FORMAT_KEY, listFormats, extOf, ffmpegExe } from './ytdlp.js';
 
 const MIN_SPLIT = 512 * 1024; // a connection is only split off when each half keeps at least this much
 // Honest name on purpose: some servers drop clients that claim to be Chrome but don't look like it.
@@ -239,6 +239,8 @@ export class Manager {
     const video = !!yt || !!videoSite(u); // through yt-dlp: YouTube, and the other video sites' pages
     if (video && !QUALITIES.includes(quality = String(quality ?? 'best'))) throw new Error(`unknown quality "${quality}" (use ${QUALITIES.join(', ')})`);
     if (video && format != null && !FORMAT_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`);
+    const hls = !video && /\.m3u8$/i.test(u.pathname);
+    if (hls && format != null && !HLS_KEY.test(format = String(format))) throw new Error(`unknown format "${format}"`); // picked in the video button's list
     const q = scheduled && !confirm ? String(queue ?? MAIN) : null;
     if (q && !this.queue(q)) throw new Error('queue not found');
     const d = {
@@ -250,9 +252,9 @@ export class Manager {
         .map(([k, v]) => [k.toLowerCase(), v])
         .filter(([k, v]) => HEADERS_ALLOWED.includes(k) && typeof v === 'string')),
       cookieHost: u.hostname,
-      kind: video ? 'video' : /\.m3u8$/i.test(u.pathname) ? 'hls' : 'http',
+      kind: video ? 'video' : hls ? 'hls' : 'http',
       ...(video && { quality }),
-      ...(video && format != null && { format }),
+      ...((video || hls) && format != null && { format }),
       status: confirm ? 'pending' : q ? 'scheduled' : 'queued',
       queue: q,
       added: Date.now(),
@@ -290,7 +292,7 @@ export class Manager {
     const catOf = n => typeOf(this.settings.types, n);
     if (d.kind === 'video') {
       // Until yt-dlp's list is in, the window shows "Getting formats…" with the tab title ("(3) Title - YouTube") as the name.
-      const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+[-|]\s+(YouTube|Vimeo|TikTok|Instagram|Facebook|Reddit|Twitch|Dailymotion|SoundCloud|X)$/i, '') || 'video';
+      const tab = (d.title ?? '').replace(/^\(\d+\)\s*/, '').replace(/\s+[-|]\s+(YouTube|Vimeo|TikTok|Instagram|Facebook|Reddit|Twitch|Kick|Dailymotion|SoundCloud|X)$/i, '') || 'video';
       name = sanitize(tab + extOf(d.format, d.quality));
       if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, listing: true, ...dup() };
       try {
@@ -308,8 +310,20 @@ export class Manager {
     } else if (d.kind === 'hls') {
       let ext = '.ts'; // MP4 pieces, or a separate sound track that ffmpeg joins (X), give an .mp4
       try {
-        const { map, audio } = await parsePlaylist(this, d, AbortSignal.timeout(15000));
+        const signal = AbortSignal.timeout(15000);
+        const options = await hlsOptions(this, d, signal); // a master playlist: its qualities, as TS and MP4 files
+        const { map, audio } = await parsePlaylist(this, d, signal);
         if (map || audio) ext = '.mp4';
+        if (options.length) {
+          let ffmpeg = true;
+          try { ffmpegExe(); } catch { ffmpeg = false; }
+          // MP4 pieces or a separate sound: an MP4 whatever is picked; else TS, and MP4 when ffmpeg can rewrap it
+          const offered = options.filter(o => o.group === 'MP4' ? ffmpeg || map || audio : !map && !audio);
+          const pick = offered.find(o => o.key === d.format) ?? offered[0]; // the video button's pick, else the best
+          if (pick?.group === 'MP4') ext = '.mp4';
+          size = pick?.size ?? null;
+          list = { options: offered, format: pick?.key ?? null };
+        }
       } catch (e) {
         error = e.cause?.message || e.message;
       }
@@ -335,11 +349,18 @@ export class Manager {
       else res?.body?.cancel().catch(() => {});
       name = this.baseName(d, found);
     }
-    if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...(d.kind === 'video' && { options: [], format: null, ...list }), ...dup() };
+    if (d.status === 'pending') d.probe = { name, category: catOf(name), size, type, error, ...((d.kind === 'video' || list) && { options: [], format: null, ...list }), ...dup() };
   }
 
-  formats(url) {
-    return listFormats(this, url);
+  // A video page's formats (yt-dlp), or an HLS master playlist's qualities (the video button on any other site; its page
+  // as the referrer, as the stream's own requests have). MP4 needs ffmpeg to rewrap the TS: without it, TS only.
+  async formats(url, referrer) {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol) || youtubeId(u) || videoSite(u) || !/\.m3u8$/i.test(u.pathname)) return listFormats(this, url);
+    const d = { url: u.href, headers: typeof referrer === 'string' && /^https?:\/\//i.test(referrer) ? { referer: referrer } : {}, cookieHost: u.hostname };
+    let options = await hlsOptions(this, d, AbortSignal.timeout(15000));
+    try { ffmpegExe(); } catch { options = options.filter(o => o.group === 'TS'); }
+    return { title: '', options };
   }
 
   // The probe's held response, closed: Cancel, Later, remove, a new address, expiry, quit
@@ -371,7 +392,11 @@ export class Manager {
     const p = String(file ?? '').trim();
     // a drive or a network share, and a file name after the last separator
     if (!/^([a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/])/i.test(p) || /[\\/]$/.test(p)) throw new Error('Save As needs a full path with a file name, like C:\\Downloads\\file.zip');
-    if (video && format != null) {
+    if (d.kind === 'hls' && format != null) { // a quality of the master playlist, from the probe's list
+      format = String(format);
+      if (!HLS_KEY.test(format) || !d.probe?.options?.some(o => o.key === format)) throw new Error(`unknown format "${format}"`);
+      d.format = format;
+    } else if (video && format != null) {
       format = String(format);
       if (!FORMAT_KEY.test(format) || !(await this.formats(d.url)).options.some(o => o.key === format)) throw new Error(`unknown format "${format}"`);
       if (d.status !== 'pending' || !this.list.includes(d)) throw new Error(gone); // answered or cancelled meanwhile
@@ -382,6 +407,7 @@ export class Manager {
     }
     let name = sanitize(path.basename(p));
     if (video) name = name.slice(0, name.length - path.extname(name).length) + extOf(d.format, d.quality);
+    else if (d.kind === 'hls' && d.format) name = name.slice(0, name.length - path.extname(name).length) + '.' + d.format.split(':')[0];
     const dir = path.dirname(p);
     try { mkdirSync(dir, { recursive: true }); } catch (e) { throw new Error('Could not create the folder: ' + e.message); }
     const old = replace != null && this.duplicate(d, replace);

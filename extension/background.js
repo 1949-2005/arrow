@@ -67,16 +67,18 @@ chrome.tabs.onRemoved.addListener(forget);
 // The video button (content.js). Only our own content scripts can send this, but the frame may be hostile,
 // so every field is checked before it reaches the app.
 const QUALITIES = ['best', '1080', '720', '480', 'mp3'];
-const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+(?:\+[\w-]+)?|m4a:[\w-]+|mp3)$/; // the app checks it against the video's list too
+// ytdlp.js FORMAT_KEY, and hls.js HLS_KEY (ts:<bandwidth>); the app checks it against the video's list too
+const FORMAT_KEY = /^(?:(?:mp4|webm):[\w-]+(?:\+[\w-]+)?|m4a:[\w-]+|mp3|ts:\d+)$/;
 const isStr = (x, max = 8192) => typeof x === 'string' && x.length <= max;
 const httpUrl = x => isStr(x) && /^https?:\/\//i.test(x) && URL.canParse(x);
 
-// The video button's format list (YouTube), from the app's POST /api/formats; one request per page while this worker lives.
+// The video button's format list, from the app's POST /api/formats: a YouTube or other yt-dlp site's page, or an HLS
+// stream's qualities (referrer: its page). One request per URL while this worker lives.
 const formatLists = new Map();
-function formats(url) {
+function formats(url, referrer) {
   let list = formatLists.get(url);
   if (!list) {
-    list = fetch(APP + '/api/formats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) })
+    list = fetch(APP + '/api/formats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, ...(referrer && { referrer }) }) })
       .then(r => r.json())
       .then(j => Array.isArray(j?.options) ? { title: String(j.title ?? ''), options: j.options } : { error: String(j?.error || 'Glide could not list the formats.') },
         () => ({ error: 'Glide is not running.' }));
@@ -89,7 +91,19 @@ function formats(url) {
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!['video', 'formats'].includes(msg?.type) || sender.id !== chrome.runtime.id || !sender.tab) return;
   if (msg.type === 'formats') {
-    if (!httpUrl(msg.pageUrl) || !isYouTubeVideo(msg.pageUrl)) return reply({ error: 'Bad request.' });
+    if (!httpUrl(msg.pageUrl) || (msg.src !== undefined && !isStr(msg.src))) return reply({ error: 'Bad request.' });
+    if (!isYouTubeVideo(msg.pageUrl)) {
+      // another site: what the button would send (pickMedia), with its qualities when that is a video page or an HLS
+      // stream; options [] when it is one plain file, which the button then sends at once
+      const k = 'tab' + sender.tab.id;
+      chain.then(() => chrome.storage.session.get(k)).then(got => {
+        const pick = pickMedia({ pageUrl: msg.pageUrl, src: msg.src ?? '', title: '', media: got[k] ?? [] });
+        if (pick.error) return pick;
+        if (pick.url === msg.pageUrl) return formats(pick.url);
+        return /\.m3u8$/i.test(new URL(pick.url).pathname) ? formats(pick.url, msg.pageUrl) : { title: '', options: [] };
+      }).catch(() => ({ error: 'Glide is not running.' })).then(reply);
+      return true; // reply comes later
+    }
     const app = formats(msg.pageUrl); // also warms the app's list for its Download File Info window
     // YouTube's own player in the page already has the formats: at once, instead of yt-dlp's 3 s; the app's list is the fallback
     Promise.resolve().then(() => chrome.scripting.executeScript({

@@ -39,20 +39,30 @@ function parseMedia(body, url) {
   return { segs, map };
 }
 
+// A master playlist's qualities, best first: { bw, uri, group, height, fps }
+function variants(body) {
+  const lines = body.split(/\r?\n/);
+  const list = [];
+  lines.forEach((line, i) => {
+    if (!line.startsWith('#EXT-X-STREAM-INF')) return;
+    const uri = lines.slice(i + 1).find(x => x.trim() && !x.startsWith('#'))?.trim();
+    const a = attrs(line);
+    const [w, h] = (a.RESOLUTION ?? '').split('x').map(Number);
+    if (uri) list.push({ bw: Number(a.BANDWIDTH) || 0, uri, group: a.AUDIO, height: Math.min(w || h, h) || null, fps: Number(a['FRAME-RATE']) || null });
+  });
+  return list.sort((x, y) => y.bw - x.bw);
+}
+
+// The quality a format key picked ("mp4:7930483": its BANDWIDTH), else the best
+export const pickVariant = (list, format) => list.find(v => format && v.bw === Number(format.split(':')[1])) ?? list[0];
+
 // audio: the chosen quality's sound when it is a separate track (X serves video and sound apart), else null.
 export async function parsePlaylist(mgr, d, signal) {
   let { body, url } = await fetchText(mgr, d, d.url, signal);
   let audio = null;
-  if (body.includes('#EXT-X-STREAM-INF')) { // master playlist: take the highest quality
+  if (body.includes('#EXT-X-STREAM-INF')) { // master playlist: the quality picked in Download File Info, else the highest
     const lines = body.split(/\r?\n/);
-    let best;
-    lines.forEach((line, i) => {
-      if (!line.startsWith('#EXT-X-STREAM-INF')) return;
-      const uri = lines.slice(i + 1).find(x => x.trim() && !x.startsWith('#'))?.trim();
-      const a = attrs(line);
-      const bw = Number(a.BANDWIDTH) || 0;
-      if (uri && (!best || bw > best.bw)) best = { bw, uri, group: a.AUDIO };
-    });
+    const best = pickVariant(variants(body), d.format);
     if (!best) throw new Error('playlist has no streams');
     // its AUDIO group's default track, else the group's first; a track without a URI is inside the video already
     const tracks = lines.filter(l => l.startsWith('#EXT-X-MEDIA:')).map(attrs)
@@ -65,6 +75,47 @@ export async function parsePlaylist(mgr, d, signal) {
     ({ body, url } = await fetchText(mgr, d, new URL(best.uri, url).href, signal));
   }
   return { ...parseMedia(body, url), audio };
+}
+
+// A master playlist's choice for Download File Info, as IDM lists one: each quality as a TS file and as an MP4 file
+// (ffmpeg rewraps the TS, without re-encoding). Keys "ts:<BANDWIDTH>" / "mp4:<BANDWIDTH>". Sizes are BANDWIDTH × the
+// length (the best quality's playlist: its #EXTINF), so approximate; null for a live stream. [] for a media playlist.
+export async function hlsOptions(mgr, d, signal) {
+  const { body, url } = await fetchText(mgr, d, d.url, signal);
+  if (!body.includes('#EXT-X-STREAM-INF')) return [];
+  const list = variants(body);
+  if (!list.length) return [];
+  let seconds = null;
+  try {
+    const media = (await fetchText(mgr, d, new URL(list[0].uri, url).href, signal)).body;
+    if (media.includes('#EXT-X-ENDLIST')) seconds = [...media.matchAll(/^#EXTINF:([\d.]+)/gm)].reduce((n, m) => n + Number(m[1]), 0);
+  } catch { } // sizes stay unknown
+  const tag = h => h >= 720 && h <= 1080 ? 'HD' : h === 1440 ? '2K' : h === 2160 ? '4K' : null;
+  const seen = new Set();
+  const options = [];
+  for (const v of list) {
+    const label = v.height ? `${v.height}p${v.fps >= 50 ? '60' : ''}` : `${Math.round(v.bw / 1000)} kbps`;
+    if (seen.has(label)) continue; // the same quality again (another CDN, codec): its best bitrate only
+    seen.add(label);
+    const size = seconds && v.bw ? Math.round(v.bw / 8 * seconds) : null;
+    for (const group of ['MP4', 'TS'])
+      options.push({ key: `${group.toLowerCase()}:${v.bw}`, group, label, ...(tag(v.height) && { tag: tag(v.height) }), approx: true, size, kbps: Math.round(v.bw / 1000) });
+  }
+  return options;
+}
+export const HLS_KEY = /^(?:ts|mp4):\d+$/;
+
+// ffmpeg puts a downloaded TS into an MP4, without re-encoding (the MP4 choice of a TS stream).
+async function remux(ffmpeg, src, out, signal) {
+  let err = '';
+  const code = await new Promise(resolve => {
+    const proc = spawn(ffmpeg, ['-y', '-v', 'error', '-i', src, '-map', '0', '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', out],
+      { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, signal });
+    proc.stderr.on('data', c => { err += c; });
+    proc.on('error', e => { if (e.name !== 'AbortError') { err ||= e.message; resolve(null); } }).on('close', resolve);
+  });
+  if (signal.aborted) return;
+  if (code !== 0) throw new Error(`ffmpeg could not make the MP4: ${err.trim().split(/\r?\n/)[0] || `exit code ${code}`}`);
 }
 
 // ffmpeg copies the video and its sound into one file, without re-encoding.
@@ -87,8 +138,9 @@ export async function downloadHls(d, ctl, mgr) {
   const signal = ctl.ac.signal;
   delete d.phase;
   const { segs, map, audio } = await parsePlaylist(mgr, d, signal);
-  const ffmpeg = audio && ffmpegExe(); // before anything downloads: without it the sound can't be joined
-  mgr.assignName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + (map || audio ? '.mp4' : '.ts'));
+  const rewrap = !map && !audio && /^mp4:/.test(d.format ?? ''); // the MP4 choice of a TS stream
+  const ffmpeg = (audio || rewrap) && ffmpegExe(); // before anything downloads: without it the sound can't be joined
+  mgr.assignName(d, (path.posix.basename(new URL(d.url).pathname, '.m3u8') || 'video') + (map || audio || rewrap ? '.mp4' : '.ts'));
   const [soundTmp, joined] = soundTemps(d);
   const tracks = [{ segs, map, tmp: d.tmp }, ...(audio ? [{ ...audio, tmp: soundTmp }] : [])];
   const total = tracks.reduce((n, t) => n + t.segs.length, 0);
@@ -176,6 +228,13 @@ export async function downloadHls(d, ctl, mgr) {
     if (signal.aborted) return;
     await fs.rename(joined, d.file);
     await Promise.all([d.tmp, soundTmp].map(f => fs.rm(f, { force: true })));
+    delete d.phase;
+  } else if (rewrap) {
+    d.phase = 'converting-mp4';
+    await remux(ffmpeg, d.tmp, joined, signal);
+    if (signal.aborted) return;
+    await fs.rename(joined, d.file);
+    await fs.rm(d.tmp, { force: true });
     delete d.phase;
   } else await fs.rename(d.tmp, d.file);
   d.size = (await fs.stat(d.file)).size;

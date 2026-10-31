@@ -211,7 +211,8 @@ namespace Glide
             var key = Key();
             return d == null || d.Probe == null || d.Probe.Options == null ? null : d.Probe.Options.FirstOrDefault(o => o.Key == key);
         }
-        bool YouTube { get { return d != null && d.Kind == "video"; } }
+        // A video with a Format row: yt-dlp's sites, and an HLS stream whose master playlist lists qualities
+        bool YouTube { get { return d != null && (d.Kind == "video" || d.Kind == "hls" && d.Probe != null && d.Probe.Options != null && d.Probe.Options.Count > 0); } }
         bool Spinning { get { return YouTube && listing && !gone; } }
 
         // Every poll: the download (null when it is gone) and the settings

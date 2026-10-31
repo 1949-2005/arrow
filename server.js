@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/add' && body.confirm && Date.now() - appSeen > 5000) return send(res, 503, { error: `${brand.name} is not open. Start it from the Start menu.` });
     if (url === '/api/add') return send(res, 200, { id: mgr.add(body).id });
     // The video button's format list: YouTube single-video links only (youtubeId())
-    if (url === '/api/formats') return send(res, 200, await mgr.formats(String(body.url ?? '')));
+    if (url === '/api/formats') return send(res, 200, await mgr.formats(String(body.url ?? ''), body.referrer));
     // The Download File Info window
     if (url === '/api/confirm') { await mgr.confirm(body.id, body); return send(res, 200, { ok: true }); }
     // The native app shows its window when `open` in /api/state rises

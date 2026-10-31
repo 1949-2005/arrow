@@ -26,7 +26,7 @@ export const extOf = (format, quality) => '.' + (format ?? (quality === 'mp3' ? 
 
 // Other sites yt-dlp downloads from (with www., m. and the like in front): their pages' video, as YouTube's
 export const SITES = ['vimeo.com', 'dailymotion.com', 'x.com', 'twitter.com', 'tiktok.com', 'instagram.com', 'facebook.com', 'fb.watch',
-  'reddit.com', 'twitch.tv', 'soundcloud.com', 'bilibili.com', 'streamable.com'];
+  'reddit.com', 'twitch.tv', 'kick.com', 'soundcloud.com', 'bilibili.com', 'streamable.com'];
 
 // A page link of one of SITES → its site, null for anything else (YouTube included: youtubeId() has its rules)
 export function videoSite(u) {
