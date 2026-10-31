@@ -544,6 +544,10 @@ namespace Glide
             var remote = RemoteInfo.From(Json.Parse("{\"enabled\":true,\"listening\":true,\"port\":9615,\"addresses\":[\"192.168.1.23\"],\"publicNetwork\":\"Ethernet\",\"devices\":[{\"id\":\"a\",\"name\":\"iPhone\",\"added\":1700000000000,\"seen\":1700000600000}]}") as IDictionary<string, object>);
             Eq(remote.Enabled + " " + remote.Port + " " + L(remote.Addresses) + " " + remote.Devices[0].Name + " " + remote.Devices[0].Added, "True 9615 192.168.1.23 iPhone 1700000000000", "remote info");
             Eq(remote.PublicNetwork, "Ethernet", "remote info: a public network");
+            Ok(Core.CanRedownload(new Download { Status = "done" }) && !Core.CanRedownload(new Download { Status = "downloading" }) && !Core.CanRedownload(new Download { Status = "pending" }), "redownload: not while it runs or waits");
+            Eq(Core.RefreshPage(new Download { Referer = "https://www.youtube.com/watch?v=x" }), "https://www.youtube.com/watch?v=x", "refresh page: the referrer");
+            Eq(Core.RefreshPage(new Download { Referer = "javascript:alert(1)" }), null, "refresh page: http(s) only");
+            Eq(Core.RefreshPage(new Download()), null, "refresh page: none");
             Eq(RemoteInfo.From(null).Devices.Count, 0, "remote info: none");
             Eq(RemoteInfo.From(null).PublicNetwork, null, "remote info: no public network");
             var grid = RemoteInfo.Grid(Json.Parse("[" + string.Join(",", Enumerable.Repeat("[" + string.Join(",", Enumerable.Repeat("true", 21)) + "]", 21)) + "]"));

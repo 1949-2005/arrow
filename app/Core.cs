@@ -606,6 +606,14 @@ namespace Glide
         }
 
         public static bool CanResume(Download d) { return d.Status == "paused" || d.Status == "error" || d.Status == "scheduled"; }
+        // Redownload (IDM): from the start, its file deleted; not while it runs or waits for its window
+        public static bool CanRedownload(Download d) { return d.Status == "done" || d.Status == "paused" || d.Status == "error" || d.Status == "scheduled"; }
+        // Refresh download address opens the page the file came from: only an http(s) referrer, never another scheme
+        public static string RefreshPage(Download d)
+        {
+            Uri u;
+            return d.Referer != null && Uri.TryCreate(d.Referer, UriKind.Absolute, out u) && (u.Scheme == "http" || u.Scheme == "https") ? u.AbsoluteUri : null;
+        }
         public static bool CanStop(Download d) { return d.Status == "downloading" || d.Status == "queued" || d.Status == "scheduled"; }
         public static bool CanPause(Download d) { return CanStop(d); }
         public static bool IsYouTube(string url) { return url != null && YouTube.IsMatch(url); }

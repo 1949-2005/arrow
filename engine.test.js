@@ -35,6 +35,7 @@ const held = []; // /held.bin requests: {range, closed}
 
 const server = http.createServer(async (req, res) => {
   let u = req.url;
+  if (/^\/file\.bin\?token=/.test(u)) u = '/file.bin'; // a signed link, as CDNs hand out (Refresh download address)
   if (u === '/busy.bin' && !busyOnce) { busyOnce = true; res.writeHead(429, { 'retry-after': '0' }); return res.end(); }
   if (u === '/busy.bin') u = '/file.bin';
   if (u === '/slowstart.bin') { // a server slow to answer at all: every split-off request waits 1.2 s for its headers
@@ -242,6 +243,31 @@ test('server without range support still downloads, on one connection', async ()
   const d = mgr.add({ url: base + '/norange.bin' });
   assert.equal(sha(await finished(d)), sha(data));
   assert.equal(d.resumable, false);
+});
+
+test('Redownload: from the start into the same file; Refresh download address: the next browser download of that file brings its link', async () => {
+  const d = mgr.add({ url: base + '/file.bin' });
+  const first = sha(await finished(d)), file = d.file;
+  await fs.writeFile(file, 'changed by hand');
+  await mgr.act(d.id, 'restart');
+  assert.ok(['queued', 'downloading'].includes(d.status), d.status);
+  assert.equal(sha(await finished(d)), first, 'downloaded again, whole');
+  assert.equal(d.file, file, 'the same name, not " (1)"');
+  await assert.rejects(mgr.act(d.id, 'refresh'), /only unfinished downloads/);
+
+  const e = mgr.add({ url: base + '/file.bin?token=expired', scheduled: true, headers: { referer: 'https://site.example/page' } });
+  await mgr.act(e.id, 'refresh');
+  const other = mgr.add({ url: base + '/norange.bin', confirm: true });
+  assert.notEqual(other, e, 'another file: a new download');
+  await mgr.confirm(other.id, { action: 'cancel' });
+  const again = mgr.add({ url: base + '/file.bin?token=fresh', confirm: true, headers: { referer: 'https://site.example/page' } });
+  assert.equal(again, e, 'no new download, no window');
+  assert.equal(e.url, base + '/file.bin?token=fresh');
+  assert.equal(e.refreshing, undefined);
+  assert.equal(e.status, 'scheduled', 'waiting in its queue still: a paused or failed one resumes');
+  await mgr.act(e.id, 'resume');
+  assert.equal(sha(await finished(e)), first);
+  await assert.rejects(mgr.act(mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', scheduled: true }).id, 'refresh'), /keep their link/);
 });
 
 test('HLS: picks best quality, decrypts AES-128, joins segments, files it under Video', async () => {

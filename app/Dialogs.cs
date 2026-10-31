@@ -509,10 +509,12 @@ namespace Glide
         }
 
         public static void Error(IWin32Window owner, string text) { Modal(ErrorDialog(text), owner); }
+        // A note with OK, under its own title
+        public static void Info(IWin32Window owner, string title, string text) { Modal(ErrorDialog(text, title), owner); }
 
-        static Dialog ErrorDialog(string text)
+        static Dialog ErrorDialog(string text, string title = null)
         {
-            var f = new Dialog(Program.Name, 420);
+            var f = new Dialog(title ?? Program.Name, 420);
             f.BodyHeight(f.Paragraph(new Caption(Theme.Body, () => Theme.Text) { Text = text }, Dialog.Pad) + Dialog.Pad);
             var ok = Dialog.Button("OK", ButtonKind.Primary, DialogResult.OK);
             f.Buttons(new FlatButton[0], new[] { ok });

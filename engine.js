@@ -260,6 +260,21 @@ export class Manager {
       added: Date.now(),
       description: describe(description),
     };
+    // A download waiting for a new link ("Refresh download address", 10 min) takes this one's, when it is the same file
+    // (the same name in the link) or comes from the same page: it resumes with it, and no Download File Info window opens.
+    const old = !video && this.list.find(x => x.refreshing && Date.now() - x.refreshing < 10 * 60000 && x.kind === d.kind
+      && ((!!nameFromUrl(d.url) && nameFromUrl(x.url) === nameFromUrl(d.url)) || (!!d.headers.referer && x.headers?.referer === d.headers.referer)));
+    if (old) {
+      this.release(old.id);
+      old.url = d.url;
+      old.headers = d.headers;
+      old.cookieHost = d.cookieHost;
+      delete old.refreshing;
+      if (['paused', 'error'].includes(old.status)) old.status = 'queued';
+      this.dirty = true;
+      this.pump();
+      return old;
+    }
     const site = siteFor(this.settings.sites, u.hostname);
     if (site?.limitKB) d.limitKB = site.limitKB; // its own limit, which the progress window shows and can change
     // Without a window to ask (Add links, batches) only 'replace' differs from numbering
@@ -434,7 +449,7 @@ export class Manager {
     const d = this.list.find(x => x.id === id);
     if (!d) throw new Error('download not found');
     const ctl = this.running.get(id);
-    if (['pause', 'url', 'remove', 'removeFile'].includes(op)) this.release(id);
+    if (['pause', 'url', 'refresh', 'restart', 'remove', 'removeFile'].includes(op)) this.release(id);
     if (op === 'pause') {
       if (ctl || ['queued', 'scheduled'].includes(d.status)) d.status = 'paused';
       ctl?.ac.abort();
@@ -446,6 +461,21 @@ export class Manager {
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
       d.url = u.href;
+      delete d.refreshing;
+    } else if (op === 'refresh') { // IDM's "Refresh download address": the next browser download of this file brings its new link (add())
+      if (ctl) throw new Error('pause the download first');
+      if (d.kind === 'video') throw new Error('Video downloads keep their link');
+      if (['pending', 'done', 'removed'].includes(d.status)) throw new Error('only unfinished downloads get a new link');
+      d.refreshing = Date.now();
+    } else if (op === 'restart') { // IDM's "Redownload": from the start, the file and its partial data deleted; link and name stay
+      if (ctl) throw new Error('pause the download first');
+      if (['pending', 'removed'].includes(d.status)) throw new Error('this download is not started yet');
+      if (d.tmp) for (const f of [d.tmp, ...(d.kind === 'hls' ? soundTemps(d) : [])]) await fs.rm(f, { force: true });
+      await removeTmp(d);
+      if (d.status === 'done' && d.file) await fs.rm(d.file, { force: true });
+      for (const k of ['segments', 'hls', 'streams', 'got', 'finished', 'error', 'phase', 'resumable', 'refreshing']) delete d[k];
+      if (d.file && d.kind !== 'video') d.tmp = d.file + '.fdl'; // a finished video's yt-dlp folder went with it
+      d.status = 'queued';
     } else if (op === 'describe') {
       d.description = describe(description);
     } else if (op === 'limit') { // HTTP and HLS read it per chunk, yt-dlp at its next run

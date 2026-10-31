@@ -49,6 +49,7 @@ namespace Glide
         Release update;
         bool autoUpdates = true;
         string skipVersion;
+        string doubleClick = "open"; // ui.json: "open" or "properties" (IDM's On double click)
         int updatePercent = -1;
         // IDM's drop target (DropTarget): ui.json's switch and place; null while hidden
         DropTarget dropTarget;
@@ -172,7 +173,7 @@ namespace Glide
             list.CategoryOf = Cat;
             list.Logo = logoBig;
             list.SelectionChanged += () => { UpdateInspector(); UpdateCommands(); };
-            list.Activated += Open;
+            list.Activated += DoubleClicked;
             list.ToggleRequested += () => Ops(list.Selected.Select(d => Core.CanResume(d) ? new[] { d.Id, "resume" } : Core.CanPause(d) ? new[] { d.Id, "pause" } : null));
             list.MenuRequested += RowMenu;
             list.HeaderClicked += c => { Core.NextSort(c, ref sortColumn, ref sortDesc); RefreshList(); };
@@ -780,7 +781,14 @@ namespace Glide
         void Pause(List<Download> sel) { Ops(sel.Where(d => Core.CanPause(d)).Select(d => new[] { d.Id, "pause" })); }
         void Resume(List<Download> sel) { Ops(sel.Where(d => Core.CanResume(d)).Select(d => new[] { d.Id, "resume" })); }
 
-        // Enter or double-click: a finished file opens, anything else shows its progress window
+        // Enter or double-click in the list: Properties when chosen in "On double-click", else Open
+        void DoubleClicked(Download d)
+        {
+            if (doubleClick == "properties") Properties(d);
+            else Open(d);
+        }
+
+        // A finished file opens, anything else shows its progress window
         void Open(Download d)
         {
             if (d.Status == "done") Ops(new[] { new[] { d.Id, "open" } });
@@ -796,6 +804,34 @@ namespace Glide
         }
 
         void Properties(Download d) { if (d != null && state != null) Dialogs.Properties(api, this, d, state); }
+
+        // IDM's Redownload: from the start, into the same name; the file so far is deleted
+        void Redownload(List<Download> sel)
+        {
+            var l = sel.Where(d => Core.CanRedownload(d)).ToList();
+            if (l.Count == 0) return;
+            var what = l.Count == 1 ? Core.ShortName(l[0]) : l.Count + " downloads";
+            if (!Dialogs.Confirm(this, "Redownload", "Download " + what + " again from the start? What was downloaded so far is deleted.", "Redownload", true)) return;
+            Ops(l.Select(d => new[] { d.Id, "restart" }));
+        }
+
+        // IDM's Refresh download address: the link expired, so its page opens in the browser; the next download of the same
+        // file there (or from the same page) gives this one its new link and it goes on, with no new download
+        void RefreshAddress(Download d)
+        {
+            var page = Core.RefreshPage(d);
+            var name = Core.ShortName(d);
+            Run(() =>
+            {
+                api.Action(d.Id, "refresh", null, null);
+                Ui(() =>
+                {
+                    if (page != null) try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(page) { UseShellExecute = true }); } catch (Exception) { }
+                    Dialogs.Info(this, "Refresh download address", (page != null ? "Its page opens in your browser. " : "Open the page you downloaded it from. ")
+                        + "Start the download of " + name + " there again: " + Program.Name + " gives this download its new link, within 10 minutes, and goes on where it stopped.");
+                });
+            });
+        }
 
         void Remove(List<Download> sel)
         {
@@ -1070,6 +1106,8 @@ namespace Glide
             m.Items.Add(new ToolStripSeparator());
             if (sel.Any(d => d.Status == "downloading" || d.Status == "queued")) Item(m, "Pause", () => Pause(sel), true);
             else Item(m, "Resume", () => Resume(sel), sel.Any(d => Core.CanResume(d)));
+            Item(m, "Redownload", () => Redownload(sel), sel.Any(d => Core.CanRedownload(d)));
+            Item(m, "Refresh download address", () => RefreshAddress(one), one != null && Core.CanChangeUrl(one));
             var add = Item(m, "Add to queue", () => { }, unfinished.Count > 0 && Queues.Count > 0);
             var sub = (ToolStripDropDownMenu)add.DropDown;
             sub.Renderer = Theme.Menus;
@@ -1096,6 +1134,20 @@ namespace Glide
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Progress window", () => Dialogs.Progress(api, this, one.Id), one != null && one.Status != "done");
             Item(m, "Properties…", () => Properties(one), one != null);
+            // IDM's "On double click": what a double-click (and Enter) does to a download
+            var dbl = Item(m, "On double-click", () => { }, true);
+            var dsub = (ToolStripDropDownMenu)dbl.DropDown;
+            dsub.Renderer = Theme.Menus;
+            dsub.ShowImageMargin = false;
+            dsub.ShowCheckMargin = true;
+            dsub.Font = Theme.Menu;
+            foreach (var choice in new[] { new[] { "open", "Open" }, new[] { "properties", "Properties" } })
+            {
+                var key = choice[0];
+                var i = new ToolStripMenuItem(choice[1]) { Checked = doubleClick == key, Padding = dbl.Padding };
+                i.Click += (s, e) => { doubleClick = key; SaveUi(); };
+                dsub.Items.Add(i);
+            }
             m.Items.Add(new ToolStripSeparator());
             Item(m, "Remove…", () => Remove(sel), true);
             m.Show(list, p);
@@ -1222,6 +1274,7 @@ namespace Glide
             int? dx = o.Int("dropX"), dy = o.Int("dropY");
             if (dx != null && dy != null) dropAt = new Point(dx.Value, dy.Value);
             skipVersion = o.Str("skipVersion");
+            doubleClick = o.Str("doubleClick") == "properties" ? "properties" : "open";
             var sort = o.Str("sort");
             sortColumn = Core.Columns.Contains(sort) ? sort : null;
             sortDesc = sortColumn != null && o.Bool("desc") == true;
@@ -1253,7 +1306,7 @@ namespace Glide
                 { "sort", sortColumn }, { "desc", sortDesc }, { "columns", list.Chosen }, { "details", details },
                 { "connections", Dialogs.ConnectionsOpen }, { "progressOptions", Dialogs.OptionsOpen },
                 { "theme", Theme.Mode },
-                { "updates", autoUpdates }, { "skipVersion", skipVersion },
+                { "updates", autoUpdates }, { "skipVersion", skipVersion }, { "doubleClick", doubleClick },
                 { "dropTarget", dropShown }, { "dropX", dropAt.HasValue ? (object)dropAt.Value.X : null }, { "dropY", dropAt.HasValue ? (object)dropAt.Value.Y : null },
             };
             try

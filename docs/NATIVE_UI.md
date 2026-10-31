@@ -194,10 +194,14 @@ order. Its context menu (right-click, the menu key, Shift+F10): Open Scheduler (
 - Hover: hover token. Selected: sel / onSel (glyphs and texts turn onSel). Multi-select with Ctrl and Shift, Ctrl+A.
 - Keys: Up/Down/Home/End/PageUp/PageDown, Enter (open a finished file, else the progress window), Space (pause or
   resume), Delete (Remove dialog), Ctrl+C (copy the links), Ctrl+N (Add links), Ctrl+, (Options).
-- Double-click: finished = open the file; else the progress window. Right-click menu: Open, Open with… (Windows'
-  Open with dialog), Show in folder, Copy link · Resume / Pause, Add to queue ▸ (each queue, checked when the
+- Double-click (and Enter): finished = open the file; else the progress window; or Properties, when chosen in the menu's
+  On double-click ▸ (Open / Properties, checked; ui.json `doubleClick`, as IDM). Right-click menu: Open, Open with… (Windows'
+  Open with dialog), Show in folder, Copy link · Resume / Pause, Redownload (finished, paused, failed or waiting: asks
+  "Download … again from the start? What was downloaded so far is deleted.", danger; engine `restart`), Refresh download
+  address (one paused, failed or waiting non-video download: engine `refresh`, then its Referer page opens in the
+  browser, http(s) only, and a note says to start the download there again within 10 minutes), Add to queue ▸ (each queue, checked when the
   selection is in it), Remove from queue (when in one), Move up / Move down (in a queue section, unfinished rows
-  only) · Progress window, Properties… · Remove….
+  only) · Progress window, Properties…, On double-click ▸ · Remove….
 - Drag links over the window: a full-window overlay (inspector token at 92% alpha, accent dashed border radius 12,
   Download glyph 32, "Drop to download"). Drop: one link = the paste-bar flow, several = Add links dialog.
 - Empty list: centered logo at 64 px (40% alpha), "No downloads yet" (bold), "Paste a link above, drop links here,
