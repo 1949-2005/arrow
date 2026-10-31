@@ -235,7 +235,7 @@ namespace Glide
                 var o = answer as IDictionary<string, object>;
                 var grid = RemoteInfo.Grid(o == null ? null : o["qr"]);
                 if (grid == null) { ShowError("The QR code didn't come through. Try again."); return; }
-                using (var d = new PhoneDialog(a, phone.Devices.Count, grid, o.Str("url"))) d.ShowDialog(this);
+                using (var d = new PhoneDialog(a, phone.Devices.Count, grid, o.Str("url"))) { d.Center(this); d.ShowDialog(this); }
                 AskPhone("/api/remote", null);
             });
         }

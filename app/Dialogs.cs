@@ -155,17 +155,42 @@ namespace Glide
             return c.Bottom;
         }
 
-        // Centered on the owner window, or on the screen when it is hidden or minimized
+        bool centered; // placed by Center() and not moved by the user since: a change of height keeps it centered
+        int placedHeight;
+
+        // Centered on the screen, without the taskbar (its working area): the owner's screen, or the mouse's when the
+        // owner is hidden or minimized. Any resolution, scale or monitor.
         public void Center(IWin32Window owner)
         {
             var c = owner as Control;
             var f = c as Form;
             var shown = c != null && c.Visible && (f == null || f.WindowState != FormWindowState.Minimized);
-            var area = shown ? (f != null ? f.Bounds : c.RectangleToScreen(c.ClientRectangle)) : Screen.PrimaryScreen.WorkingArea;
-            var wa = Screen.FromRectangle(area).WorkingArea;
-            var x = area.X + (area.Width - Width) / 2;
-            var y = area.Y + (area.Height - Height) / 2;
-            Location = new Point(Math.Max(wa.Left, Math.Min(x, wa.Right - Width)), Math.Max(wa.Top, Math.Min(y, wa.Bottom - Height)));
+            var wa = (shown ? Screen.FromControl(c) : Screen.FromPoint(Cursor.Position)).WorkingArea;
+            Location = Clamp(new Point(wa.X + (wa.Width - Width) / 2, wa.Y + (wa.Height - Height) / 2), wa);
+            centered = true;
+            placedHeight = Height;
+        }
+
+        Point Clamp(Point p, Rectangle wa)
+        {
+            return new Point(Math.Max(wa.Left, Math.Min(p.X, wa.Right - Width)), Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - Height)));
+        }
+
+        // Connections, Options and the like change the height: the middle stays where it was
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            if (!centered || Height == placedHeight || WindowState != FormWindowState.Normal) return;
+            var p = new Point(Left, Top - (Height - placedHeight) / 2);
+            placedHeight = Height;
+            Location = Clamp(p, Screen.FromControl(this).WorkingArea);
+        }
+
+        // Moved (or sized) by the user: it stays where they put it
+        protected override void OnResizeEnd(EventArgs e)
+        {
+            base.OnResizeEnd(e);
+            centered = false;
         }
     }
 
@@ -237,7 +262,7 @@ namespace Glide
             if (!progress.TryGetValue(info.Id, out f))
             {
                 f = NewProgress(info.Api, info.Id);
-                f.Location = info.Location;
+                f.Center(info); // taller than Download File Info: centered on its own
             }
             info.Close();
             Front(f);

@@ -249,7 +249,8 @@ All dialogs: inspector token body, padding 20, top token footer 64 high with a t
 (at least 88 wide, 8 apart), radius-8 fields (field + line, accent border when focused, err border when invalid),
 primary button accent/onAccent, secondary buttons transparent with a line border, destructive ones in err text,
 Enter = primary, Esc = Cancel, dark title bar in dark mode, the brand icon, FormBorderStyle FixedDialog, no min/max
-boxes, centered on the main window (or the screen when it is hidden). Engine calls run off the UI thread; their
+boxes, centered on the screen's working area (the main window's screen, or the mouse's when it is hidden), at any
+resolution; a change of height (Connections, Options) keeps the middle in place until the user moves the window. Engine calls run off the UI thread; their
 errors show inline or in an Error dialog.
 - Download File Info (560 wide; one per pending download, appears in front even when Glide is in the tray; same
   rules as confirm.html): header (the Save As name's Windows icon at 32 px, centered in a 48 px slot, "Download File
