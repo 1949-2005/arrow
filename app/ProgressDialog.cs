@@ -230,6 +230,21 @@ namespace Glide
             trayTip = tip;
         }
 
+        // The title, cut with "…" to room pixels in the caption font (room 0: unknown, left whole)
+        static string FitTitle(string title, int room)
+        {
+            Func<string, int> width = s => TextRenderer.MeasureText(s, SystemFonts.CaptionFont, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
+            if (room <= 0 || width(title) <= room) return title;
+            int lo = 0, hi = title.Length;
+            while (lo < hi) // the longest start that still fits with its "…"
+            {
+                var mid = (lo + hi + 1) / 2;
+                if (width(title.Substring(0, mid).TrimEnd() + "…") <= room) lo = mid; else hi = mid - 1;
+            }
+            if (lo > 0 && char.IsHighSurrogate(title[lo - 1])) lo--; // never half a character
+            return title.Substring(0, lo).TrimEnd() + "…";
+        }
+
         // The title bar's Minimize to tray button, while the download runs; minimize itself goes to the taskbar
         protected override void OnShown(EventArgs e)
         {
@@ -319,7 +334,8 @@ namespace Glide
             var fraction = Core.Fraction(d, true);
             // U+200E (left-to-right mark) first: Windows lays out the title by its first letter, and with an Arabic or
             // Hebrew name the percent would jump to the end
-            Text = done ? "Download complete" : "‎" + Math.Floor(fraction * 100) + "% · " + short_;
+            var caption = done ? "Download complete" : "‎" + Math.Floor(fraction * 100) + "% · " + short_;
+            Text = trayButton != null && mode == "run" && !statusErr ? FitTitle(caption, TrayButton.TitleRoom(this)) : caption;
             tile.Category = Core.Category(d, categories);
             tile.File = string.IsNullOrEmpty(d.File) ? short_ : d.File;
             tile.Complete = done;

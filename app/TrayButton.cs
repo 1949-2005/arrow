@@ -73,6 +73,18 @@ namespace Glide
             Draw();
         }
 
+        // The title's room, in pixels, from its start to this button: Windows knows nothing of the button and lays the
+        // title under it, so the owner cuts its title to fit. 0 when the caption buttons can't be read.
+        public static int TitleRoom(Form owner)
+        {
+            RECT w, b;
+            if (!owner.IsHandleCreated || !GetWindowRect(owner.Handle, out w)
+                || DwmGetWindowAttribute(owner.Handle, 5, out b, Marshal.SizeOf(typeof(RECT))) != 0 || b.R <= b.L) return 0;
+            var border = owner.PointToScreen(Point.Empty).X - w.L;
+            var start = border + Theme.Px(8) + SystemInformation.SmallIconSize.Width + Theme.Px(8); // the caption icon, then the title
+            return Math.Max(0, b.L - (b.R - b.L) / 3 - start - Theme.Px(10));
+        }
+
         protected override void OnMouseEnter(EventArgs e) { hover = true; Draw(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = pressed = false; Draw(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { pressed = true; Draw(); } base.OnMouseDown(e); }
