@@ -240,8 +240,9 @@ finds nothing (balloon) or fails (error dialog).
 
 ### Tray
 NotifyIcon with the brand icon, tooltip = the app name + " · 2 active" when something runs. Left click: show and
-activate the main window. Menu: Open <name> (bold, default), Pause all, Speed limit (checked when on; click toggles
-it like the chip), separator, Quit <name>.
+activate the main window. Menu: Open <name>, Pause all, Open downloads folder, Speed limit (checked when on; click toggles
+it like the chip), separator, Quit <name>. This menu and every context menu use Windows' own menu font
+(`SystemFonts.MenuFont`, regular Segoe UI 9 pt), as other apps' menus do, not the semibold body text.
 Balloon when a download finishes ("Download complete", file name; click = show it selected in the main window).
 
 ## Dialogs

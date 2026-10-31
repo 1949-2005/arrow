@@ -44,6 +44,7 @@ namespace Glide
         public static readonly float Scale;
 
         public static Font Body, Bold, Big, Small, SmallBold;
+        public static Font Menu; // context and tray menus: Windows' own menu font (Segoe UI 9 pt), as other apps' menus
         static readonly string IconFamily;
         static readonly Dictionary<int, Font> iconFonts = new Dictionary<int, Font>();
         static readonly bool forced;
@@ -62,6 +63,7 @@ namespace Glide
             Bold = new Font(regular, 10.5f, FontStyle.Bold);
             SmallBold = new Font(regular, 9f, FontStyle.Bold);
             Big = new Font(regular, 18f, FontStyle.Bold);
+            Menu = SystemFonts.MenuFont;
             IconFamily = pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
             var env = (Environment.GetEnvironmentVariable("GLIDE_THEME") ?? "").ToLowerInvariant();
             forced = env == "light" || env == "dark";

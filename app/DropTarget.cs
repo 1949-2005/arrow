@@ -33,7 +33,7 @@ namespace Glide
             var wa = Screen.PrimaryScreen.WorkingArea;
             Location = new Point(wa.Right - Width - Theme.Px(24), wa.Bottom - Height - Theme.Px(24));
             using (var p = Round(new Rectangle(Point.Empty, Size), Theme.Px(14))) Region = new Region(p);
-            var menu = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Body };
+            var menu = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Menu };
             menu.Items.Add("Open " + Program.Name, null, (s, e) => { var h = Opened; if (h != null) h(); });
             menu.Items.Add("Hide drop target", null, (s, e) => { var h = Hidden; if (h != null) h(); });
             ContextMenuStrip = menu;

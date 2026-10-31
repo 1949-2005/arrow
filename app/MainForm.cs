@@ -155,7 +155,7 @@ namespace Glide
             sidebar.Width = Theme.Px(200);
             BuildSidebar();
             // a queue's menu (right-click, the menu key, Shift+F10): the Scheduler on that queue
-            var queueMenu = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Body };
+            var queueMenu = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Menu };
             Item(queueMenu, "Open Scheduler", () => OpenScheduler(sidebar.Selected.Substring(6)), true);
             queueMenu.Opening += (s, e) => e.Cancel = sidebar.Selected == null || !sidebar.Selected.StartsWith("queue:");
             sidebar.ContextMenuStrip = queueMenu;
@@ -997,7 +997,7 @@ namespace Glide
 
         static ContextMenuStrip Menu()
         {
-            var m = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Body };
+            var m = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Menu };
             m.Closed += (s, e) => m.BeginInvoke((MethodInvoker)m.Dispose); // after the clicked item's handler
             return m;
         }
@@ -1019,7 +1019,7 @@ namespace Glide
             sub.Renderer = Theme.Menus;
             sub.ShowImageMargin = false;
             sub.ShowCheckMargin = true;
-            sub.Font = Theme.Body;
+            sub.Font = Theme.Menu;
             for (var i = 0; i < Core.ThemeModes.Length; i++)
             {
                 var mode = Core.ThemeModes[i];
@@ -1044,9 +1044,8 @@ namespace Glide
 
         ContextMenuStrip TrayMenu()
         {
-            var m = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Body };
-            var open = Item(m, "Open " + Program.Name, ShowMain, true);
-            open.Font = Theme.Bold;
+            var m = new ContextMenuStrip { Renderer = Theme.Menus, ShowImageMargin = false, Font = Theme.Menu };
+            Item(m, "Open " + Program.Name, ShowMain, true);
             Item(m, "Pause all", () => Run(() => api.Post("/api/pause-all", null)), true);
             Item(m, "Open downloads folder", OpenDownloadsFolder, true);
             m.ShowCheckMargin = true;
@@ -1076,7 +1075,7 @@ namespace Glide
             sub.Renderer = Theme.Menus;
             sub.ShowImageMargin = false;
             sub.ShowCheckMargin = true;
-            sub.Font = Theme.Body;
+            sub.Font = Theme.Menu;
             foreach (var q in Queues)
             {
                 var id = q.Id;
