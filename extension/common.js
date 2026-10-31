@@ -44,7 +44,8 @@ const isYouTubeHost = h => h === 'youtu.be' || h === 'youtube.com' || h.endsWith
 // The browser's user agent is left out: servers drop clients that claim to be Chrome but aren't.
 // YouTube login cookies never leave the browser: the app does not need them for public videos.
 // confirm: the app keeps it waiting for the Download File Info window. Returns the download's id, or null.
-export async function send({ url, referrer, name, title, quality, format, confirm }) {
+// page: the tab's page it came from (IDM's "web page from which this file was obtained"), which the referrer need not be.
+export async function send({ url, referrer, page, name, title, quality, format, confirm }) {
   const headers = {};
   if (referrer) headers.referer = referrer;
   const host = parse(url)?.hostname ?? '';
@@ -53,7 +54,7 @@ export async function send({ url, referrer, name, title, quality, format, confir
   const res = await fetch(APP + '/api/add', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url, name, title, headers, quality, format, confirm }),
+    body: JSON.stringify({ url, name, title, headers, quality, format, confirm, ...(page && { page }) }),
   }).catch(() => null);
   return res?.ok ? (await res.json().catch(() => null))?.id ?? null : null;
 }

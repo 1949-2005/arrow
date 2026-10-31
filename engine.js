@@ -103,6 +103,11 @@ function nameFromDisposition(h) {
   return /filename\s*=\s*"?([^";]+)"?/i.exec(h)?.[1]?.trim();
 }
 
+// A page link from the extension (untrusted): http(s), at most 8 KB, else null
+export function webPage(p) {
+  try { return typeof p === 'string' && p.length <= 8192 && /^https?:$/.test(new URL(p).protocol) ? new URL(p).href : null; } catch { return null; }
+}
+
 export function nameFromUrl(u) {
   try { return decodeURIComponent(path.posix.basename(new URL(u).pathname)); } catch { return ''; }
 }
@@ -232,7 +237,8 @@ export class Manager {
   // confirm: the extension's downloads wait as 'pending' until the Download File Info window starts them
   // format: a key from formats(); checked against the video's list before yt-dlp gets it (confirm(), downloadVideo())
   // scheduled: into a queue (default the main one) as 'scheduled'
-  add({ url, name, title, headers, scheduled, quality, format, confirm, description, queue }) {
+  // page: the browser tab's page the file came from (Properties; IDM's "web page from which this file was obtained")
+  add({ url, name, title, headers, scheduled, quality, format, confirm, description, queue, page }) {
     const u = new URL(url);
     if (!/^https?:$/.test(u.protocol)) throw new Error('only http and https links are supported');
     const yt = youtubeId(u);
@@ -259,11 +265,13 @@ export class Manager {
       queue: q,
       added: Date.now(),
       description: describe(description),
+      ...(webPage(page) && { page: webPage(page) }),
     };
     // A download waiting for a new link ("Refresh download address", 10 min) takes this one's, when it is the same file
     // (the same name in the link) or comes from the same page: it resumes with it, and no Download File Info window opens.
     const old = !video && this.list.find(x => x.refreshing && Date.now() - x.refreshing < 10 * 60000 && x.kind === d.kind
-      && ((!!nameFromUrl(d.url) && nameFromUrl(x.url) === nameFromUrl(d.url)) || (!!d.headers.referer && x.headers?.referer === d.headers.referer)));
+      && ((!!nameFromUrl(d.url) && nameFromUrl(x.url) === nameFromUrl(d.url)) || (!!d.headers.referer && x.headers?.referer === d.headers.referer)
+        || (!!d.page && x.page === d.page)));
     if (old) {
       this.release(old.id);
       old.url = d.url;
@@ -961,7 +969,7 @@ export class Manager {
         return {
           id: d.id, url: d.url, name: d.name ?? d.title, file: d.file, size: d.size, status: d.status, error: d.error,
           resumable: d.resumable, kind: d.kind, hls: d.hls, title: d.title, phase: d.phase, quality: d.quality, format: d.format, added: d.added, probe: d.probe,
-          referer: d.headers?.referer ?? null, // for Properties; cookies never leave the engine
+          referer: d.headers?.referer ?? null, page: d.page ?? null, // for Properties; cookies never leave the engine
           description: d.description ?? null, limitKB: d.limitKB ?? 0, whenDone: d.whenDone ?? '', lastTry: d.lastTry ?? null, notify: !!d.notify, queue: d.queue ?? null,
           got: d.status === 'done' ? d.size : d.kind === 'hls' ? d.hls?.bytes ?? 0 : d.kind === 'video' ? d.got ?? 0 : (d.segments ?? []).reduce((a, s) => a + s.pos - s.start, 0),
           speed: ctl ? Math.round(ctl.speed) : 0,

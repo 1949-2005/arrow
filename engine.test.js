@@ -268,6 +268,12 @@ test('Redownload: from the start into the same file; Refresh download address: t
   await mgr.act(e.id, 'resume');
   assert.equal(sha(await finished(e)), first);
   await assert.rejects(mgr.act(mgr.add({ url: 'https://youtu.be/jNQXAC9IVRw', scheduled: true }).id, 'refresh'), /keep their link/);
+  // the web page it came from: kept apart from the referrer, http(s) only; the view shows it for Properties
+  const w = mgr.add({ url: base + '/file.bin?token=a', scheduled: true, page: 'https://www.youtube.com/watch?v=jNQXAC9IVRw', headers: { referer: 'https://www.youtube.com/' } });
+  assert.equal(mgr.view().downloads.find(x => x.id === w.id).page, 'https://www.youtube.com/watch?v=jNQXAC9IVRw');
+  assert.equal(mgr.add({ url: base + '/file.bin?token=b', scheduled: true, page: 'javascript:alert(1)' }).page, undefined);
+  await mgr.act(w.id, 'refresh'); // the same page brings the new link, even under another file name
+  assert.equal(mgr.add({ url: base + '/norange.bin', confirm: true, page: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }), w);
 });
 
 test('HLS: picks best quality, decrypts AES-128, joins segments, files it under Video', async () => {

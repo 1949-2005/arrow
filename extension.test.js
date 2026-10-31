@@ -144,7 +144,7 @@ test('download takeover: cancel, erase, then hand to the app with cookies and re
   assert.equal(adds.length, 1);
   assert.equal(adds[0].url, 'http://127.0.0.1:9614/api/add');
   assert.equal(adds[0].method, 'POST');
-  assert.deepEqual(adds[0].body, { url: 'https://cdn.x.com/file.zip', name: 'file.zip', headers: { referer: 'https://x.com/page', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(adds[0].body, { url: 'https://cdn.x.com/file.zip', name: 'file.zip', headers: { referer: 'https://x.com/page', cookie: 'a=1; b=2' }, confirm: true, page: 'https://x.com/' });
   noWindow();
   assert.doesNotMatch(JSON.stringify(requests).toLowerCase(), /user-agent/);
   assert.deepEqual(called('cookies.getAll')[0][1], { url: 'https://cdn.x.com/file.zip' });
@@ -340,7 +340,7 @@ test('popup YouTube button sends the video for the Download File Info window; no
   reset();
   let els = await openPopup('https://www.youtube.com/shorts/dQw4w9WgXcQ');
   await els['#ytdl'].onclick();
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', headers: {}, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', headers: {}, confirm: true, page: 'https://www.youtube.com/shorts/dQw4w9WgXcQ' });
   noWindow();
   assert.equal(els['#ytdl'].textContent, 'Sent ✓');
   assert.equal(els['#ytdl'].disabled, true);
@@ -363,7 +363,7 @@ test('popup media rows send for the Download File Info window too', async () => 
   let els = await openPopup('https://x.com/watch');
   const [li] = els['#media'].children, b = li.children[2];
   await b.onclick();
-  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Tab', headers: { referer: 'https://x.com/watch', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Tab', headers: { referer: 'https://x.com/watch', cookie: 'a=1; b=2' }, confirm: true, page: 'https://x.com/watch' });
   noWindow();
   assert.equal(b.textContent, 'Sent ✓');
 
@@ -455,17 +455,17 @@ test('video button message: sends the picked media with the page as referrer', a
   reset();
   session.tab5 = [{ url: 'https://cdn.x.com/v.mp4', type: 'video/mp4', size: 5e6 }];
   assert.deepEqual(await videoMsg(vmsg()), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' }, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://cdn.x.com/v.mp4', title: 'Clip', headers: { referer: 'https://x.com/p', cookie: 'a=1; b=2' }, confirm: true, page: 'https://x.com/p' });
   noWindow();
 
   reset(); // YouTube without a pick ("Download anyway"): the window opens without a preselected format
   assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Clip', headers: {}, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Clip', headers: {}, confirm: true, page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
   noWindow();
 
   reset(); // a pick in the format list: format and title go to the app, the window opens with them
   assert.deepEqual(await videoMsg(vmsg({ pageUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140' })), { ok: true });
-  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140', headers: {}, confirm: true });
+  assert.deepEqual(requests.at(-1).body, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Me at the zoo', format: 'mp4:160+140', headers: {}, confirm: true, page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
   noWindow();
 
   reset();

@@ -325,7 +325,9 @@ errors show inline or in an Error dialog.
 - Properties (460 wide; from the row menu and the details panel): header (32 px file icon, name, status line
   Core.PropertiesStatus, e.g. "Paused · 30% of 500 MB"); Address: an editable field, labeled "Address (change it if
   the link expired)", while the download is paused, failed or in a queue and not YouTube, else read-only
-  selectable text → op 'url'; Description (editable, 300 characters) → op 'describe'; facts Saved to, Referer (when
+  selectable text → op 'url'; "Web page this file came from" (as IDM's "web page from which this file was obtained": the
+  tab's page, else the Referer, http(s) only; underlined, a click opens it in the browser; hidden when unknown);
+  Description (editable, 300 characters) → op 'describe'; facts Saved to, Referer (when
   known), Added, Last try, Queue ("Not in a queue" when none). Footer: Show in folder (left), Cancel, Save (primary;
   sends only what changed). It replaces the old Change link dialog.
 - Category editor (480 wide; "New category" / "Edit category"; from Download File Info's "+" and Options ›

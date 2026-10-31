@@ -126,6 +126,7 @@ Off by default. When on (settings.remote.enabled), a second server listens on al
 - Finished files get the Mark-of-the-Web (`:Zone.Identifier` stream, `ZoneId=3`, referrer, URL without credentials) on Windows, like browsers do, so SmartScreen and Office Protected View still apply. Write errors are ignored (FAT/exFAT).
 - Cookies come from the extension, are sent only to the host they were captured for, also across redirects, and are dropped from the state once the download is done.
 - Header allowlist: cookie, referer, user-agent. The default User-Agent is honest.
+- `page` on `/api/add`: the tab's page the file came from (the video button: the sender tab's URL; a taken-over browser download: the window's active tab, else the download's referrer; the context menu and popup: the tab), kept apart from the Referer header as IDM does ("the web page from which this file was obtained"). http(s), at most 8 KB, else dropped (`webPage()`). Properties links to it; Refresh download address opens it and matches a new link by it too.
 - File names can't leave the download folder (`sanitize()`).
 
 ## UI (native app)

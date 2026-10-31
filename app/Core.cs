@@ -213,7 +213,7 @@ namespace Glide
     public class Download
     {
         public string Id, Url, Name, File, Status, Error, Kind, Title, Phase, Quality, Format;
-        public string Description, Queue, Referer; // Queue: the id of its queue, null when in none
+        public string Description, Queue, Referer, Page; // Queue: the id of its queue, null when in none; Page: the web page it came from
         public string WhenDone = ""; // '' | 'open' | 'sleep' | 'shutdown'
         public long? Size;
         public bool? Resumable;
@@ -232,7 +232,7 @@ namespace Glide
             {
                 Id = o.Str("id"), Url = o.Str("url"), Name = o.Str("name"), File = o.Str("file"), Status = o.Str("status"), Error = o.Str("error"),
                 Kind = o.Str("kind"), Title = o.Str("title"), Phase = o.Str("phase"), Quality = o.Str("quality"), Format = o.Str("format"),
-                Description = o.Str("description"), Queue = o.Str("queue"), Referer = o.Str("referer"), WhenDone = o.Str("whenDone") ?? "", Notify = o.Bool("notify") ?? false,
+                Description = o.Str("description"), Queue = o.Str("queue"), Referer = o.Str("referer"), Page = o.Str("page"), WhenDone = o.Str("whenDone") ?? "", Notify = o.Bool("notify") ?? false,
                 LastTry = o.Long("lastTry") ?? 0, LimitKB = o.Int("limitKB") ?? 0,
                 Size = o.Long("size"), Resumable = o.Bool("resumable"),
                 Hls = h == null ? null : new HlsInfo { Done = h.Long("done") ?? 0, Bytes = h.Long("bytes") ?? 0, Total = h.Long("total") ?? 0 },
@@ -608,11 +608,16 @@ namespace Glide
         public static bool CanResume(Download d) { return d.Status == "paused" || d.Status == "error" || d.Status == "scheduled"; }
         // Redownload (IDM): from the start, its file deleted; not while it runs or waits for its window
         public static bool CanRedownload(Download d) { return d.Status == "done" || d.Status == "paused" || d.Status == "error" || d.Status == "scheduled"; }
-        // Refresh download address opens the page the file came from: only an http(s) referrer, never another scheme
+        // The web page the file came from (the tab's page), else its Referer: what Properties links to and Refresh download
+        // address opens. http(s) only, never another scheme
         public static string RefreshPage(Download d)
         {
-            Uri u;
-            return d.Referer != null && Uri.TryCreate(d.Referer, UriKind.Absolute, out u) && (u.Scheme == "http" || u.Scheme == "https") ? u.AbsoluteUri : null;
+            foreach (var s in new[] { d.Page, d.Referer })
+            {
+                Uri u;
+                if (s != null && Uri.TryCreate(s, UriKind.Absolute, out u) && (u.Scheme == "http" || u.Scheme == "https")) return u.AbsoluteUri;
+            }
+            return null;
         }
         public static bool CanStop(Download d) { return d.Status == "downloading" || d.Status == "queued" || d.Status == "scheduled"; }
         public static bool CanPause(Download d) { return CanStop(d); }

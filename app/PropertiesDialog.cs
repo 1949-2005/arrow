@@ -20,6 +20,11 @@ namespace Glide
         readonly TextField url = new TextField('\0', "https://");
         readonly TextBox urlText = new TextBox { ReadOnly = true, BorderStyle = BorderStyle.None, AccessibleName = "Address" }; // read-only: selectable, as Download File Info's URL
         readonly TextField desc = new TextField('\0', "Optional, shown in the list");
+        // IDM's "web page from which this file was obtained": the tab's page, not the file's address; a click opens it
+        readonly Caption pageLabel = Label("Web page this file came from");
+        static readonly Font LinkFont = new Font(Theme.Body, FontStyle.Underline);
+        readonly Caption page = new Caption(LinkFont, () => Theme.Text) { MaxLines = 2, Cursor = Cursors.Hand, AccessibleRole = AccessibleRole.Link };
+        readonly string pageUrl;
         readonly List<FactRow> facts = new List<FactRow>();
         readonly Caption error = new Caption(Theme.Small, () => Theme.Err) { MaxLines = 4, Visible = false };
         readonly FlatButton folder = new FlatButton("Show in folder", '\0', ButtonKind.Secondary);
@@ -44,6 +49,11 @@ namespace Glide
             urlText.Visible = !editUrl;
             urlText.Font = Theme.Body;
             url.Box.TextChanged += (o, e) => url.Invalid = false;
+            pageUrl = Core.RefreshPage(d);
+            page.Text = pageUrl ?? "";
+            page.AccessibleName = "Web page this file came from: " + page.Text;
+            pageLabel.Visible = page.Visible = pageUrl != null;
+            page.Click += (o, e) => { try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(pageUrl) { UseShellExecute = true }); } catch (Exception) { } };
             desc.Text = d.Description ?? "";
             desc.Box.MaxLength = 300;
             desc.Box.AccessibleName = "Description";
@@ -60,7 +70,7 @@ namespace Glide
             }
             facts[0].PathValue = true;
             Tips.SetToolTip(facts[0], string.IsNullOrEmpty(d.File) ? facts[0].Value : d.File);
-            foreach (var c in new Control[] { tile, title, sub, urlLabel, url, urlText, descLabel, desc }.Concat(facts).Concat(new Control[] { error })) Add(c);
+            foreach (var c in new Control[] { tile, title, sub, urlLabel, url, urlText, pageLabel, page, descLabel, desc }.Concat(facts).Concat(new Control[] { error })) Add(c);
             folder.Enabled = !string.IsNullOrEmpty(d.File);
             Buttons(new[] { folder }, new[] { cancel, save });
             AcceptButton = save;
@@ -121,6 +131,14 @@ namespace Glide
             url.Bounds = new Rectangle(p, y, w, row);
             urlText.Bounds = new Rectangle(p, y + (row - urlText.PreferredHeight) / 2, w, urlText.PreferredHeight);
             y += row + Theme.Px(12);
+            if (pageUrl != null) // Visible reads false until the window shows
+            {
+                pageLabel.Bounds = new Rectangle(p, y, w, line);
+                y += line + Theme.Px(4);
+                var ph = page.HeightFor(w);
+                page.Bounds = new Rectangle(p, y, w, ph);
+                y += ph + Theme.Px(12);
+            }
             descLabel.Bounds = new Rectangle(p, y, w, line);
             y += line + Theme.Px(4);
             desc.Bounds = new Rectangle(p, y, w, row);

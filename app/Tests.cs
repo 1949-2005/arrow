@@ -548,6 +548,7 @@ namespace Glide
             Eq(Core.RefreshPage(new Download { Referer = "https://www.youtube.com/watch?v=x" }), "https://www.youtube.com/watch?v=x", "refresh page: the referrer");
             Eq(Core.RefreshPage(new Download { Referer = "javascript:alert(1)" }), null, "refresh page: http(s) only");
             Eq(Core.RefreshPage(new Download()), null, "refresh page: none");
+            Eq(Core.RefreshPage(new Download { Page = "https://www.youtube.com/watch?v=x", Referer = "https://www.youtube.com/" }), "https://www.youtube.com/watch?v=x", "the web page before the referrer");
             Eq(RemoteInfo.From(null).Devices.Count, 0, "remote info: none");
             Eq(RemoteInfo.From(null).PublicNetwork, null, "remote info: no public network");
             var grid = RemoteInfo.Grid(Json.Parse("[" + string.Join(",", Enumerable.Repeat("[" + string.Join(",", Enumerable.Repeat("true", 21)) + "]", 21)) + "]"));

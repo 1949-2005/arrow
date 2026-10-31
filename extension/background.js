@@ -10,7 +10,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   }
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => sendConfirm({ url: info.linkUrl || info.srcUrl, referrer: tab?.url }));
+chrome.contextMenus.onClicked.addListener((info, tab) => sendConfirm({ url: info.linkUrl || info.srcUrl, referrer: info.frameUrl || info.pageUrl || tab?.url, page: tab?.url }));
 
 // Take over downloads the browser starts. When the app is closed, the browser keeps the download.
 chrome.downloads.onCreated.addListener(async item => {
@@ -20,7 +20,10 @@ chrome.downloads.onCreated.addListener(async item => {
   if (!intercept || !(await appAlive())) return;
   await chrome.downloads.cancel(item.id);
   await chrome.downloads.erase({ id: item.id });
-  const id = await sendConfirm({ url, referrer: item.referrer, name: item.filename?.split(/[\\/]/).pop() || undefined });
+  // the page: a download carries no tab, so the window's active tab (where the click was), else its referrer
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
+  const page = /^https?:/i.test(tab?.url ?? '') ? tab.url : item.referrer || undefined;
+  const id = await sendConfirm({ url, referrer: item.referrer, page, name: item.filename?.split(/[\\/]/).pop() || undefined });
   if (!id) chrome.downloads.download({ url }); // app refused it: give it back to the browser
 });
 
@@ -125,7 +128,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   chain.then(() => chrome.storage.session.get(k)).then(async got => {
     const pick = pickMedia({ pageUrl, src, title, quality, format, media: got[k] ?? [] });
     if (pick.error) return reply(pick);
-    reply(await sendConfirm(pick) ? { ok: true } : { error: 'Glide is not running.' });
+    reply(await sendConfirm({ ...pick, page: sender.tab.url || pageUrl }) ? { ok: true } : { error: 'Glide is not running.' });
   }).catch(() => reply({ error: 'Glide is not running.' }));
   return true; // reply comes later
 });

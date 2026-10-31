@@ -707,7 +707,7 @@ namespace Glide
                 var photos = new Download
                 {
                     Id = "shot-props", Kind = "http", Status = "paused", Url = "https://downloads.example.com/2026/winter-ep1.mp4", Name = longName, Size = 524288000, Got = 157286400,
-                    File = "C:\\Users\\PC\\Downloads\\Video\\" + longName, Description = "Episode 1", Referer = "https://example.com/gallery",
+                    File = "C:\\Users\\PC\\Downloads\\Video\\" + longName, Description = "Episode 1", Referer = "https://example.com/", Page = "https://example.com/gallery/episode-1",
                     Added = DateTimeOffset.Now.AddDays(-1).ToUnixTimeMilliseconds(), LastTry = DateTimeOffset.Now.AddHours(-2).ToUnixTimeMilliseconds(),
                 };
                 Shot(folder, "properties", new PropertiesDialog(null, photos, state));

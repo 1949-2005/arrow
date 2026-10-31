@@ -22,7 +22,7 @@ if (!$('#yt').hidden) {
   $('#ytdl').onclick = async () => { // type and quality are picked in the Download File Info window
     const b = $('#ytdl');
     b.disabled = true;
-    const ok = !!await sendConfirm({ url: tab.url });
+    const ok = !!await sendConfirm({ url: tab.url, page: tab.url });
     b.textContent = ok ? 'Sent ✓' : 'Failed. Is Glide running?';
     b.disabled = ok;
   };
@@ -43,7 +43,7 @@ for (const m of list) {
   b.textContent = 'Download';
   b.onclick = async () => {
     b.disabled = true;
-    b.textContent = await sendConfirm({ url: m.url, referrer: tab.url, title: tab.title }) ? 'Sent ✓' : 'Failed';
+    b.textContent = await sendConfirm({ url: m.url, referrer: tab.url, page: tab.url, title: tab.title }) ? 'Sent ✓' : 'Failed';
   };
   li.append(label, info, b);
   $('#media').append(li);
