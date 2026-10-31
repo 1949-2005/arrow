@@ -1,5 +1,6 @@
 // The icon Windows shows for a file type (File Explorer, IDM), from the extension alone: SHGFI_USEFILEATTRIBUTES never
-// touches the disk. Cached per extension and size; callers draw their glyph when Draw returns false. The sidebar's Types
+// touches the disk. A finished program (.exe…) gets its own icon from the file instead (DrawFile). Cached per extension
+// (or file) and size; callers draw their glyph when Draw returns false. The sidebar's Types
 // get the user's SVG icons instead (DrawType), filled in the text color; the main window's other icons too (DrawIcon),
 // in their own files' colors.
 using System;
@@ -126,23 +127,48 @@ namespace Glide
             catch (Exception) { return null; }
         }
 
+        // Types whose icon lives in the file itself (a program's own logo), not in the type
+        static readonly HashSet<string> OwnIcon = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".exe", ".ico", ".lnk", ".scr", ".cpl" };
+        static readonly Dictionary<string, Bitmap> files = new Dictionary<string, Bitmap>();
+
+        // A downloaded file's icon, as File Explorer shows it: for a program (.exe…) on disk, its own icon, read once
+        // (Explorer reads it too; nothing runs); else, or while it isn't there yet, the type's (ext). False: none.
+        public static bool DrawFile(Graphics g, string file, string ext, Rectangle r, int px)
+        {
+            Bitmap b = null;
+            if (!string.IsNullOrEmpty(file) && OwnIcon.Contains(ext) && Path.IsPathRooted(file))
+            {
+                var key = file + "|" + Theme.Px(px);
+                lock (files)
+                    if (!files.TryGetValue(key, out b) && File.Exists(file))
+                        files[key] = b = Load(file, Theme.Px(px), false); // null stays cached: the type's icon then
+            }
+            return b != null ? Put(g, b, r) : Draw(g, ext, r, px);
+        }
+
         // Centered in r; false when there is no icon
         public static bool Draw(Graphics g, string ext, Rectangle r, int px)
         {
             var b = Get(ext, px);
+            return b != null && Put(g, b, r);
+        }
+
+        static bool Put(Graphics g, Bitmap b, Rectangle r)
+        {
             if (b == null) return false;
             g.DrawImage(b, new Rectangle(r.X + (r.Width - b.Width) / 2, r.Y + (r.Height - b.Height) / 2, b.Width, b.Height));
             return true;
         }
 
-        static Bitmap Load(string ext, int size)
+        // ext: a type (".zip"); byType false: a file's path, for its own icon
+        static Bitmap Load(string ext, int size, bool byType = true)
         {
             var h = IntPtr.Zero;
             try
             {
                 // the small (16 px) image up to 16 px, else the large one (32 px at 96 DPI), scaled down
                 var flags = SHGFI_ICON | (size <= 16 ? SHGFI_SMALLICON : SHGFI_LARGEICON);
-                h = ExtIcon(ext, flags);
+                h = byType ? ExtIcon(ext, flags) : PathIcon(ext, flags);
                 if (h == IntPtr.Zero) return null;
                 using (var icon = Icon.FromHandle(h))
                 using (var src = icon.ToBitmap())
@@ -160,6 +186,12 @@ namespace Glide
             }
             catch (Exception) { return null; }
             finally { if (h != IntPtr.Zero) DestroyIcon(h); }
+        }
+
+        static IntPtr PathIcon(string path, uint flags)
+        {
+            var info = new SHFILEINFO();
+            return SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf(info), flags) == IntPtr.Zero ? IntPtr.Zero : info.hIcon;
         }
 
         static IntPtr ExtIcon(string ext, uint flags)

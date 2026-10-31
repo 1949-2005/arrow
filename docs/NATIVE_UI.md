@@ -62,7 +62,9 @@ Scheduled E121, Video E714, Music EC4F, Documents E8A5, Programs ECAA, Compresse
 File types show the icon Windows shows for them, as File Explorer and IDM do (`FileIcons.cs`): SHGetFileInfo on the
 extension alone (SHGFI_USEFILEATTRIBUTES, never the disk), the 16 px image up to 16 px, else the 32 px one scaled
 down with high-quality bicubic, cached per extension and size. The extension is the file's own, else its category's
-typical one (.mp4, .mp3, .pdf, .exe, .zip; none = the generic file). Sizes: 24 px in list rows, 32 px (native, crisp)
+typical one (.mp4, .mp3, .pdf, .exe, .zip; none = the generic file). A finished program (.exe, .ico, .lnk, .scr,
+.cpl) shows its own icon instead, read from the file as Explorer does (SHGetFileInfo on its path, cached per file and
+size; nothing runs); while it isn't on disk, the type's icon. Sizes: 24 px in list rows, 32 px (native, crisp)
 in the headers of the details panel, Download File Info, the progress window and Properties. The sidebar's Types at 28 px: the user's SVG icons
 `assets/types/<category>.svg` for Video, Music, Documents, Programs and Compressed, the same on every PC (a typical
 file's icon comes from whatever app opens that type: a .pdf showed the Claude app's logo). `Core.ParseSvg` reads any

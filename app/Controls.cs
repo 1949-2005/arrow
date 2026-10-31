@@ -501,7 +501,7 @@ namespace Glide
             var r = ClientRectangle;
             if (!Complete)
             {
-                if (File == null || !FileIcons.Draw(e.Graphics, Core.IconExt(File, Category), r, 32)) Theme.DrawTile(e.Graphics, r, Category, Surface);
+                if (File == null || !FileIcons.DrawFile(e.Graphics, File, Core.IconExt(File, Category), r, 32)) Theme.DrawTile(e.Graphics, r, Category, Surface);
                 return;
             }
             Theme.Fill(e.Graphics, r, Theme.Px(12) * r.Width / (float)Theme.Px(48), Theme.Tint(Theme.Done, Surface));
@@ -1229,7 +1229,7 @@ namespace Glide
             var cat = CategoryOf(d);
             // Windows' icon for the file type, centered on the name's line; drawn as is on the selection
             var icon = new Rectangle(r.X + pad, lineY + (lineH - Theme.Px(24)) / 2, Theme.Px(24), Theme.Px(24));
-            if (!FileIcons.Draw(g, Core.IconExt(string.IsNullOrEmpty(d.File) ? Core.ShortName(d) : d.File, cat), icon, 24))
+            if (!FileIcons.DrawFile(g, d.Status == "done" ? d.File : null, Core.IconExt(string.IsNullOrEmpty(d.File) ? Core.ShortName(d) : d.File, cat), icon, 24))
                 Theme.DrawGlyph(g, Glyph.Of(cat), icon, sel ? Theme.OnSel : Theme.Category(cat), 16);
             var spans = Spans();
             var now = DateTime.Now;
